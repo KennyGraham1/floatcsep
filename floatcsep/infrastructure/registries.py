@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("floatLogger")
 
-
 class FilepathMixin:
     """
     Small mixin to provide filepath management functionality to Registries that uses files to
@@ -146,7 +145,6 @@ class ModelRegistry(ABC):
 
         elif registry_type == 'hdf5':
             return ModelHDF5Registry(**kwargs)
-
 
 class ModelFileRegistry(ModelRegistry, FilepathMixin):
     def __init__(
@@ -317,7 +315,6 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             "input_cat": self.input_cat,
             "forecasts": self.forecasts,
         }
-
 
 class ModelHDF5Registry(ModelRegistry):
 

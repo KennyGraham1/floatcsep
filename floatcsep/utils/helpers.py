@@ -75,7 +75,9 @@ def parse_csep_func(func):
             floatcsep.utils.helpers,
             floatcsep.utils.accessors,
             floatcsep.utils.readers.HDF5Serializer,
-            floatcsep.utils.readers.ForecastParsers,
+            floatcsep.utils.readers.GriddedForecastParsers,
+            floatcsep.utils.readers.CatalogForecastParsers,
+
         ]
         for module in _target_modules:
             try:

@@ -1,19 +1,173 @@
 import argparse
+import csv
 import logging
 import os.path
 import time
 import xml.etree.ElementTree as eTree
 
+import csep
 import h5py
 import numpy
 import pandas
+import pandas as pd
+from csep.core.catalogs import CSEPCatalog
 from csep.core.regions import QuadtreeGrid2D, CartesianGrid2D
 from csep.models import Polygon
+from csep.utils.time_utils import strptime_to_utc_epoch
 
 log = logging.getLogger(__name__)
 
+class CatalogForecastParsers:
 
-class ForecastParsers:
+    @staticmethod
+    def csv(filename, **kwargs):
+        csep_headers = ['lon', 'lat', 'magnitude', 'time_string', 'depth', 'catalog_id',
+                        'event_id']
+        hermes_headers = ['realization_id', 'magnitude', 'depth', 'latitude', 'longitude',
+                          'time']
+        headers_df = pd.read_csv(filename, nrows=0).columns.str.strip().to_list()
+
+        # CSEP headers
+        if headers_df[:2] == csep_headers[:2]:
+
+            return csep.load_catalog_forecast(filename, **kwargs)
+
+        elif headers_df == hermes_headers:
+            return csep.load_catalog_forecast(filename,
+                                              catalog_loader=CatalogForecastParsers.load_hermes_catalog,
+                                              **kwargs
+                                              )
+        else:
+            raise Exception('Catalog Forecast could not be loaded')
+
+    @staticmethod
+    def load_hermes_catalog(filename, **kwargs):
+        """ Loads hermes synthetic catalogs in csep-ascii format.
+
+        This function can load multiple catalogs stored in a single file. This typically called to
+        load a catalog-based forecast, but could also load a collection of catalogs stored in the same file
+
+        Args:
+            filename (str): filepath or directory of catalog files
+            **kwargs (dict): passed to class constructor
+
+        Return:
+            yields CSEPCatalog class
+        """
+
+        def read_float(val):
+            """Returns val as float or None if unable"""
+            try:
+                val = float(val)
+            except:
+                val = None
+            return val
+
+        def is_header_line(line):
+            if line[0].lower() == 'realization_id':
+                return True
+            else:
+                return False
+
+        def read_catalog_line(line):
+            # convert to correct types
+
+            catalog_id = int(line[0])
+            magnitude = read_float(line[1])
+            depth = read_float(line[2])
+            lat = read_float(line[3])
+            lon = read_float(line[4])
+            # maybe fractional seconds are not included
+            origin_time = line[5]
+            if origin_time:
+                try:
+                    origin_time = strptime_to_utc_epoch(origin_time,
+                                                        format='%Y-%m-%d %H:%M:%S.%f')
+                except ValueError:
+                    origin_time = strptime_to_utc_epoch(origin_time,
+                                                        format='%Y-%m-%d %H:%M:%S')
+
+            event_id = 0
+            # temporary event
+            temp_event = (event_id, origin_time, lat, lon, depth, magnitude)
+            return temp_event, catalog_id
+
+        # handle all catalogs in single file
+        if os.path.isfile(filename):
+            with open(filename, 'r', newline='') as input_file:
+                catalog_reader = csv.reader(input_file, delimiter=',')
+                # csv treats everything as a string convert to correct types
+                events = []
+                # all catalogs should start at zero
+                prev_id = None
+                for line in catalog_reader:
+                    # skip header line on first read if included in file
+                    if prev_id is None:
+                        if is_header_line(line):
+                            continue
+                    # read line and return catalog id
+                    temp_event, catalog_id = read_catalog_line(line)
+                    empty = False
+                    # OK if event_id is empty
+                    if all([val in (None, '') for val in temp_event[1:]]):
+                        empty = True
+                    # first event is when prev_id is none, catalog_id should always start at zero
+                    if prev_id is None:
+                        prev_id = 0
+                        # if the first catalog doesn't start at zero
+                        if catalog_id != prev_id:
+                            if not empty:
+                                events = [temp_event]
+                            else:
+                                events = []
+                            for id in range(catalog_id):
+                                yield CSEPCatalog(data=[], catalog_id=id, **kwargs)
+                            prev_id = catalog_id
+                            continue
+                    # accumulate event if catalog_id is the same as previous event
+                    if catalog_id == prev_id:
+                        if not all([val in (None, '') for val in temp_event]):
+                            events.append(temp_event)
+                        prev_id = catalog_id
+                    # create and yield class if the events are from different catalogs
+                    elif catalog_id == prev_id + 1:
+                        yield CSEPCatalog(data=events, catalog_id=prev_id, **kwargs)
+                        # add event to new event list
+                        if not empty:
+                            events = [temp_event]
+                        else:
+                            events = []
+                        prev_id = catalog_id
+                    # this implies there are empty catalogs, because they are not listed in the ascii file
+                    elif catalog_id > prev_id + 1:
+                        yield CSEPCatalog(data=events, catalog_id=prev_id, **kwargs)
+                        # if prev_id = 0 and catalog_id = 2, then we skipped one catalog. thus, we skip catalog_id - prev_id - 1 catalogs
+                        num_empty_catalogs = catalog_id - prev_id - 1
+                        # first yield empty catalog classes
+                        for id in range(num_empty_catalogs):
+                            yield CSEPCatalog(data=[],
+                                              catalog_id=catalog_id - num_empty_catalogs + id,
+                                              **kwargs)
+                        prev_id = catalog_id
+                        # add event to new event list
+                        if not empty:
+                            events = [temp_event]
+                        else:
+                            events = []
+                    else:
+                        raise ValueError(
+                            "catalog_id should be monotonically increasing and events should be ordered by catalog_id")
+                # yield final catalog, note: since this is just loading catalogs, it has no idea how many should be there
+                cat = CSEPCatalog(data=events, catalog_id=prev_id, **kwargs)
+                yield cat
+
+        elif os.path.isdir(filename):
+            raise NotImplementedError(
+                "reading from directory or batched files not implemented yet!")
+
+
+
+class GriddedForecastParsers:
 
     @staticmethod
     def dat(filename):
@@ -151,7 +305,7 @@ class ForecastParsers:
                 sep = " "
 
         if "tile" in line:
-            rates, region, magnitudes = ForecastParsers.quadtree(filename)
+            rates, region, magnitudes = GriddedForecastParsers.quadtree(filename)
             return rates, region, magnitudes
 
         data = pandas.read_csv(
@@ -308,13 +462,13 @@ def serialize():
     args = parser.parse_args()
 
     if args.format == "quadtree":
-        ForecastParsers.quadtree(args.filename)
+        GriddedForecastParsers.quadtree(args.filename)
     if args.format == "dat":
-        ForecastParsers.dat(args.filename)
+        GriddedForecastParsers.dat(args.filename)
     if args.format == "csep" or args.format == "csv":
-        ForecastParsers.csv(args.filename)
+        GriddedForecastParsers.csv(args.filename)
     if args.format == "xml":
-        ForecastParsers.xml(args.filename)
+        GriddedForecastParsers.xml(args.filename)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from csep.core.forecasts import GriddedForecast, CatalogForecast
 from csep.models import EvaluationResult
 from csep.utils.time_utils import decimal_year
 
-from floatcsep.utils.readers import ForecastParsers
+from floatcsep.utils.readers import GriddedForecastParsers, CatalogForecastParsers
 from floatcsep.infrastructure.registries import ExperimentRegistry, ModelRegistry
 from floatcsep.utils.helpers import str2timewindow, parse_csep_func
 from floatcsep.utils.helpers import timewindow2str
@@ -102,7 +102,7 @@ class CatalogForecastRepository(ForecastRepository):
         self.forecasts = {}
 
     def load_forecast(
-        self, tstring: Union[str, list], region=None
+        self, tstring: Union[str, list], region=None, n_sims=None,
     ) -> Union[CatalogForecast, list[CatalogForecast]]:
         """
         Returns a forecast object or a sequence of them for a set of time window strings.
@@ -110,20 +110,31 @@ class CatalogForecastRepository(ForecastRepository):
         Args:
             tstring (str, list): String representing the time-window
             region (optional): A region, in case the forecast requires to be filtered lazily.
+            n_sims (optional: The number of simulations/synthetic catalogs of the forecast
 
         Returns:
             The CSEP CatalogForecast object or a list of them.
         """
         if isinstance(tstring, str):
-            return self._load_single_forecast(tstring, region)
+            return self._load_single_forecast(tstring, region=region, n_sims=n_sims)
         else:
             return [self._load_single_forecast(t, region) for t in tstring]
 
-    def _load_single_forecast(self, t: str, region=None):
-        fc_path = self.registry.get_forecast_key(t)
-        return csep.load_catalog_forecast(
-            fc_path, region=region, apply_filters=True, filter_spatial=True
-        )
+    def _load_single_forecast(self, tstring: str, region=None, n_sims=None):
+        start_date, end_date = str2timewindow(tstring)
+
+        fc_path = self.registry.get_forecast_key(tstring)
+        f_parser = getattr(CatalogForecastParsers, self.registry.fmt)
+
+        forecast_ = f_parser(fc_path,
+                             start_time=start_date,
+                             end_time=end_date,
+                             n_cat=n_sims,
+                             region=region,
+                             apply_filters=True,
+                             filter_spatial=True,
+                             )
+        return forecast_
 
     def remove(self, tstring: Union[str, Sequence[str]]):
         pass
@@ -190,7 +201,7 @@ class GriddedForecastRepository(ForecastRepository):
         tstring_ = timewindow2str([start_date, end_date])
 
         f_path = self.registry.get_forecast_key(tstring_)
-        f_parser = getattr(ForecastParsers, self.registry.fmt)
+        f_parser = getattr(GriddedForecastParsers, self.registry.fmt)
 
         rates, region, mags = f_parser(f_path)
 

@@ -39,7 +39,6 @@ class TestModelRegistryIntegration(TestCase):
             [datetime(2023, 1, 1), datetime(2023, 1, 2)],
         ]
         self.time_independent_model.stage(time_windows=time_windows)
-        print("a", self.time_independent_model.registry.as_dict())
         self.assertIn("2023-01-01_2023-01-02", self.time_independent_model.registry.forecasts)
 
     def test_time_independent_model_get_forecast(self):
@@ -123,7 +122,7 @@ class TestModelRepositoryIntegration(TestCase):
         name = "mock"
         fname = os.path.join(self._dir, "model.csv")
 
-        with patch("floatcsep.readers.ForecastParsers.csv", forecast_):
+        with patch("floatcsep.readers.GriddedForecastParsers.csv", forecast_):
             model = self.init_model(name, fname)
             model.registry.build_tree([[start, end]])
             forecast = model.get_forecast(timestring)
