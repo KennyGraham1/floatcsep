@@ -202,7 +202,7 @@ class CatalogRepository:
             fmt (str): Output catalog format
         """
         start, end = str2timewindow(tstring)
-        input_cat_name = model.registry.get_input_catalog_key()
+        input_cat_name = model.registry.get_input_catalog_key(tstring)
         sub_cat = self.catalog.filter([f"origin_time < {start.timestamp() * 1000}"])
 
         writer = getattr(CatalogSerializer, fmt)

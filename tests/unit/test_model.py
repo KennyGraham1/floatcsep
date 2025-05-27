@@ -198,14 +198,15 @@ class TestTimeDependentModel(TestModel):
         self.model = TimeDependentModel(
             name=self.name, model_path=self.model_path, func=self.func
         )
-
     def tearDown(self):
         patch.stopall()
 
     def test_init(self):
         # Assertions to check if the components were instantiated correctly
         self.mock_registry_factory.assert_called_once_with(
-            workdir=os.getcwd(), path=self.model_path, fmt='csv'
+            model_name=self.name,
+            workdir=os.getcwd(), path=self.model_path, fmt='csv',
+            args_file='args.txt', input_cat='catalog.csv'
         )  # Ensure the registry is initialized correctly
         self.mock_repository_factory.assert_called_once_with(
             self.mock_registry_instance, model_class="TimeDependentModel"
@@ -233,8 +234,8 @@ class TestTimeDependentModel(TestModel):
             time_windows=["2020-01-01_2020-12-31"],
             model_class="TimeDependentModel",
             prefix=self.model.__dict__.get("prefix", self.name),
-            args_file=self.model.__dict__.get("args_file", None),
-            input_cat=self.model.__dict__.get("input_cat", None),
+            run_mode='sequential',
+            run_dir=''
         )
         self.mock_environment_instance.create_environment.assert_called_once()
 

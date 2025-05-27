@@ -76,6 +76,7 @@ class Experiment:
 
         model_config (str): Path to the models' configuration file
         test_config (str): Path to the evaluations' configuration file
+        run_mode (str): 'sequential' or 'parallel'
         default_test_kwargs (dict): Default values for the testing
          (seed, number of simulations, etc.)
         postprocess (dict): Contains the instruction for postprocessing
@@ -100,6 +101,7 @@ class Experiment:
         postprocess: str = None,
         default_test_kwargs: dict = None,
         rundir: str = "results",
+        run_mode: str = "sequential",
         report_hook: dict = None,
         **kwargs,
     ) -> None:
@@ -127,6 +129,7 @@ class Experiment:
         self.original_config = kwargs.get("original_config", None)
         self.original_run_dir = kwargs.get("original_rundir", None)
         self.run_dir = rundir
+        self.run_mode = run_mode
         self.seed = kwargs.get("seed", None)
         self.time_config = read_time_cfg(time_config, **kwargs)
         self.region_config = read_region_cfg(region_config, **kwargs)
@@ -296,7 +299,7 @@ class Experiment:
         """
         log.info("Staging models")
         for i in self.models:
-            i.stage(self.time_windows)
+            i.stage(self.time_windows, run_mode=self.run_mode, run_dir=self.run_dir)
             self.registry.add_model_registry(i)
 
     def set_tests(self, test_config: Union[str, Dict, List]) -> list:
@@ -377,7 +380,7 @@ class Experiment:
         """
 
         # Set the file path structure
-        self.registry.build_tree(self.time_windows, self.models, self.tests)
+        self.registry.build_tree(self.time_windows, self.models, self.tests, self.run_mode)
 
         log.debug("Pre-run forecast summary")
         log_models_tree(log, self.registry, self.time_windows)

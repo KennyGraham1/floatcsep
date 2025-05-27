@@ -3,7 +3,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime
 from os.path import join, abspath, relpath, normpath, dirname, exists
-from typing import Sequence, Union, TYPE_CHECKING, Any
+from typing import Sequence, Union, TYPE_CHECKING, Any, Optional
 
 from floatcsep.utils.helpers import timewindow2str
 
@@ -149,6 +149,7 @@ class ModelRegistry(ABC):
 class ModelFileRegistry(ModelRegistry, FilepathMixin):
     def __init__(
         self,
+        model_name: str,
         workdir: str,
         path: str,
         database: str = None,
@@ -159,6 +160,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         """
 
         Args:
+            model_name (str): Model's identifier string
             workdir (str): The current working directory of the experiment.
             path (str): The path of the model working directory (or model filepath).
             database (str): The path of the database, in case forecasts are stored therein.
@@ -166,12 +168,17 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             input_cat (str): : The path of the arguments file (only for TimeDependentModel).
         """
 
+        self.model_name = model_name
         self.workdir = workdir
         self.path = path
         self.database = database
         self.args_file = args_file
         self.input_cat = input_cat
+
         self.forecasts = {}
+        self.input_args = {}
+        self.input_cats = {}
+        self.input_store = None
         self._fmt = fmt
 
     @property
@@ -227,7 +234,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         Returns:
            The input catalog registry key from a sequence of key values
         """
-        return self.get_attr("input_cat", *args)
+        return self.get_attr("input_cats", *args)
 
     def get_forecast_key(self, *args: Sequence[str]) -> str:
         """
@@ -253,15 +260,15 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         Returns:
            The argument file's key(s) from a sequence of key values
         """
-        return self.get_attr("args_file", *args)
+        return self.get_attr("input_args", *args)
 
     def build_tree(
         self,
         time_windows: Sequence[Sequence[datetime]] = None,
         model_class: str = "TimeIndependentModel",
         prefix: str = None,
-        args_file: str = None,
-        input_cat: str = None
+        run_mode: str = 'sequential',
+        run_dir: Optional[str] = None
     ) -> None:
         """
         Creates the run directory, and reads the file structure inside.
@@ -270,33 +277,43 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             time_windows (list(str)): List of time windows or strings.
             model_class (str): Model's class name
             prefix (str): prefix of the model forecast filenames if TD
-            args_file (str, bool): input arguments path of the model if TD
-            input_cat (str, bool): input catalog path of the model if TD
-            fmt (str, bool): for time dependent mdoels
-
+            run_mode (str): if run mode is sequential, input data (args and cat) will be
+                dynamically overwritten in 'model/input/`  through time_windows. If 'parallel',
+                input data is dynamically writing anew in
+                'results/{time_window}/input/{model_name}/'.
+            run_dir (str): Where experiment's results are stored.
         """
 
         windows = timewindow2str(time_windows)
-
         if model_class == "TimeIndependentModel":
             fname = self.database if self.database else self.path
             self.forecasts = {win: fname for win in windows}
 
         elif model_class == "TimeDependentModel":
 
-            args = args_file if args_file else join("input", "args.txt")
-            self.args_file = join(self.path, args)
-            input_cat = input_cat if input_cat else join("input", "catalog.csv")
-            self.input_cat = join(self.path, input_cat)
-            # grab names for creating directories
+            # grab names for creating model directories
             subfolders = ["input", "forecasts"]
             dirtree = {folder: self.abs(self.path, folder) for folder in subfolders}
-
-            # create directories if they don't exist
             for _, folder_ in dirtree.items():
                 os.makedirs(folder_, exist_ok=True)
 
-            # set forecast names
+            if run_mode == 'sequential':
+                self.input_args = {
+                    win: join(self.path, 'input', self.args_file) for win in windows
+                }
+                self.input_cats = {
+                    win: join(self.path, 'input', self.input_cat) for win in windows
+                }
+            elif run_mode == 'parallel':
+                self.input_args = {
+                    win: join(run_dir, win,  'input', self.model_name, self.args_file)
+                    for win in windows
+                }
+                self.input_cats = {
+                    win: join(run_dir, win,  'input', self.model_name, self.input_cat)
+                    for win in windows
+                }
+
             self.forecasts = {
                 win: join(dirtree["forecasts"], f"{prefix}_{win}.{self.fmt}") for win in windows
             }
@@ -492,6 +509,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         time_windows: Sequence[Sequence[datetime]],
         models: Sequence["Model"],
         tests: Sequence["Evaluation"],
+        run_mode: str = 'sequential'
     ) -> None:
         """
         Creates the run directory and reads the file structure inside.
@@ -500,6 +518,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
             time_windows: List of time windows, or representing string.
             models: List of models or model names
             tests: List of tests or test names
+            run_mode: 'parallel' or 'sequential'
 
         """
         windows = timewindow2str(time_windows)
@@ -509,6 +528,8 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
 
         run_folder = self.run_dir
         subfolders = ["catalog", "evaluations", "figures"]
+        if run_mode == 'parallel':
+            subfolders.append('input')
         dirtree = {
             win: {folder: self.abs(run_folder, win, folder) for folder in subfolders}
             for win in windows
@@ -518,7 +539,11 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         for tw, tw_folder in dirtree.items():
             for _, folder_ in tw_folder.items():
                 os.makedirs(folder_, exist_ok=True)
-
+                print(folder_)
+                if run_mode == 'parallel' and folder_.endswith('input'):
+                    print('a')
+                    for model in models:
+                        os.makedirs(join(folder_, model), exist_ok=True)
         results = {
             win: {
                 test: {

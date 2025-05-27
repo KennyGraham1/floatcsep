@@ -210,13 +210,14 @@ class TimeIndependentModel(Model):
 
         self.forecast_unit = forecast_unit
         self.store_db = store_db
-        self.registry = ModelRegistry.factory(workdir=kwargs.get("workdir", os.getcwd()),
-                                          path=model_path)
+        self.registry = ModelRegistry.factory(model_name=name,
+                                              workdir=kwargs.get("workdir", os.getcwd()),
+                                              path=model_path)
         self.repository = ForecastRepository.factory(
             self.registry, model_class=self.__class__.__name__, **kwargs
         )
 
-    def stage(self, time_windows: Sequence[Sequence[datetime]] = None) -> None:
+    def stage(self, time_windows: Sequence[Sequence[datetime]] = None, **kwargs) -> None:
         """
         Acquire the forecast data if it is not in the file system. Sets the paths internally
         (or database pointers) to the forecast data.
@@ -298,6 +299,8 @@ class TimeDependentModel(Model):
         model_path: str,
         func: Union[str, Callable] = None,
         func_kwargs: dict = None,
+        args_file: str = "args.txt",
+        input_cat: str = "catalog.csv",
         fmt: str = 'csv',
         **kwargs,
     ) -> None:
@@ -310,6 +313,8 @@ class TimeDependentModel(Model):
             func: A function/command that runs the model.
             func_kwargs: The keyword arguments to run the model. They are usually (over)written
                 into the file `{model_path}/input/{args_file}`
+            args_file: Name of the arguments file that will be used to create forecasts
+            input_cat: Name of the file that will be used as input catalog to create forecasts
             **kwargs: Additional keyword parameters, such as a ``prefix`` (str) for the
                 resulting forecast file paths, ``args_file`` (str) as the path for the model
                 arguments file or ``input_cat`` that indicates where the input catalog will be
@@ -321,9 +326,12 @@ class TimeDependentModel(Model):
         self.func = func
         self.func_kwargs = func_kwargs or {}
 
-        self.registry = ModelRegistry.factory(workdir=kwargs.get("workdir", os.getcwd()),
-                                          path=model_path,
-                                          fmt=fmt)
+        self.registry = ModelRegistry.factory(model_name=name,
+                                              workdir=kwargs.get("workdir", os.getcwd()),
+                                              path=model_path,
+                                              fmt=fmt,
+                                              args_file=args_file,
+                                              input_cat=input_cat)
         self.repository = ForecastRepository.factory(
             self.registry, model_class=self.__class__.__name__, **kwargs
         )
@@ -334,7 +342,7 @@ class TimeDependentModel(Model):
                 self.build, self.name, self.registry.abs(model_path)
             )
 
-    def stage(self, time_windows=None) -> None:
+    def stage(self, time_windows=None, run_mode='sequential', run_dir='') -> None:
         """
         Core method to interface a model with the experiment.
 
@@ -355,8 +363,8 @@ class TimeDependentModel(Model):
             time_windows=time_windows,
             model_class=self.__class__.__name__,
             prefix=self.__dict__.get("prefix", self.name),
-            args_file=self.__dict__.get("args_file", None),
-            input_cat=self.__dict__.get("input_cat", None),
+            run_mode=run_mode,
+            run_dir=run_dir
         )
 
     def get_forecast(
@@ -407,7 +415,7 @@ class TimeDependentModel(Model):
             f"Running {self.name} using {self.environment.__class__.__name__}:"
             f" {timewindow2str([start_date, end_date])}"
         )
-        self.environment.run_command(f"{self.func} {self.registry.get_args_key()}")
+        self.environment.run_command(f"{self.func} {self.registry.get_args_key(tstring)}")
 
     def prepare_args(self, start: datetime, end: datetime, **kwargs) -> None:
         """
@@ -422,7 +430,9 @@ class TimeDependentModel(Model):
             **kwargs: represents additional model arguments (name/value pair)
 
         """
-        filepath = self.registry.get_args_key()
+        window_str = timewindow2str([start, end])
+
+        filepath = self.registry.get_args_key(window_str)
         fmt = os.path.splitext(filepath)[1]
 
         if fmt == ".txt":
@@ -477,8 +487,14 @@ class TimeDependentModel(Model):
                     else:
                         dest[key] = val
 
+            if not os.path.exists(filepath):
+                template_file = os.path.join(self.registry.path,
+                                             'input',
+                                             self.registry.args_file)
+            else:
+                template_file = filepath
 
-            with open(filepath, "r") as file_:
+            with open(template_file, "r") as file_:
                 args = yaml.safe_load(file_)
             args["start_date"] = start.isoformat()
             args["end_date"] = end.isoformat()

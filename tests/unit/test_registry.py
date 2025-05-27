@@ -9,10 +9,16 @@ class TestModelFileRegistry(unittest.TestCase):
 
     def setUp(self):
         self.registry_for_filebased_model = ModelFileRegistry(
-            workdir="/test/workdir", path="/test/workdir/model.txt"
+            model_name='test',
+            workdir="/test/workdir",
+            path="/test/workdir/model.txt"
         )
         self.registry_for_folderbased_model = ModelFileRegistry(
-            workdir="/test/workdir", path="/test/workdir/model"
+            model_name='test',
+            workdir="/test/workdir",
+            path="/test/workdir/model",
+            args_file="args.txt",
+            input_cat="catalog.csv"
         )
 
     def test_call(self):
@@ -83,6 +89,7 @@ class TestModelFileRegistry(unittest.TestCase):
             [datetime(2023, 1, 1), datetime(2023, 1, 2)],
             [datetime(2023, 1, 2), datetime(2023, 1, 3)],
         ]
+        print(self.registry_for_folderbased_model.__dict__)
         self.registry_for_folderbased_model.build_tree(
             time_windows=time_windows, model_class="TimeDependentModel", prefix="forecast"
         )
