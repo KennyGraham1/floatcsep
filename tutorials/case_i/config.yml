@@ -14,6 +14,7 @@ region_config:
   depth_min: 0
   depth_max: 70
 
+run_mode: parallel
 force_rerun: True
 catalog: catalog.csep
 model_config: models.yml

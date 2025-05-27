@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch, PropertyMock, mock_open
 
 from csep.core.forecasts import GriddedForecast
 
-from floatcsep.utils.readers import ForecastParsers
-from floatcsep.infrastructure.registries import ForecastRegistry
+from floatcsep.utils.file_io import GriddedForecastParsers
+from floatcsep.infrastructure.registries import ModelFileRegistry
 from floatcsep.infrastructure.repositories import (
     CatalogForecastRepository,
     GriddedForecastRepository,
@@ -17,17 +17,19 @@ from floatcsep.infrastructure.repositories import (
 class TestCatalogForecastRepository(unittest.TestCase):
 
     def setUp(self):
-        self.registry = MagicMock(spec=ForecastRegistry)
+        self.registry = MagicMock(spec=ModelFileRegistry) #todo: Factory registry
         self.registry.__call__ = MagicMock(return_value="a_duck")
+        self.registry.fmt =  'csv'
 
     @patch("csep.load_catalog_forecast")
     def test_initialization(self, mock_load_catalog_forecast):
         repo = CatalogForecastRepository(self.registry, lazy_load=True)
         self.assertTrue(repo.lazy_load)
 
-    @patch("csep.load_catalog_forecast")
+    @patch("floatcsep.file_io.CatalogForecastParsers.csv")
     def test_load_forecast(self, mock_load_catalog_forecast):
         repo = CatalogForecastRepository(self.registry)
+
         mock_load_catalog_forecast.return_value = "forecatto"
         forecast = repo.load_forecast("2023-01-01_2023-01-02")
         self.assertEqual(forecast, "forecatto")
@@ -36,7 +38,7 @@ class TestCatalogForecastRepository(unittest.TestCase):
         forecasts = repo.load_forecast(["2023-01-01_2023-01-01", "2023-01-02_2023-01-03"])
         self.assertEqual(forecasts, ["forecatto", "forecatto"])
 
-    @patch("csep.load_catalog_forecast")
+    @patch("floatcsep.file_io.CatalogForecastParsers.csv")
     def test_load_single_forecast(self, mock_load_catalog_forecast):
         # Test _load_single_forecast
         repo = CatalogForecastRepository(self.registry)
@@ -48,7 +50,7 @@ class TestCatalogForecastRepository(unittest.TestCase):
 class TestGriddedForecastRepository(unittest.TestCase):
 
     def setUp(self):
-        self.registry = MagicMock(spec=ForecastRegistry)
+        self.registry = MagicMock(spec=ModelFileRegistry) #todo: Factory registry
         self.registry.fmt = "hdf5"
         self.registry.__call__ = MagicMock(return_value="a_duck")
 
@@ -56,7 +58,7 @@ class TestGriddedForecastRepository(unittest.TestCase):
         repo = GriddedForecastRepository(self.registry, lazy_load=False)
         self.assertFalse(repo.lazy_load)
 
-    @patch.object(ForecastParsers, "hdf5")
+    @patch.object(GriddedForecastParsers, "hdf5")
     def test_load_forecast(self, mock_parser):
         # Mock parser return values
         mock_parser.return_value = ("rates", "region", "mags")
@@ -77,7 +79,7 @@ class TestGriddedForecastRepository(unittest.TestCase):
             self.assertEqual(forecasts, ["forecatto", "forecatto"])
             self.assertEqual(mock_method.call_count, 2)
 
-    @patch.object(ForecastParsers, "hdf5")
+    @patch.object(GriddedForecastParsers, "hdf5")
     def test_get_or_load_forecast(self, mock_parser):
         mock_parser.return_value = ("rates", "region", "mags")
         repo = GriddedForecastRepository(self.registry, lazy_load=False)
@@ -98,7 +100,7 @@ class TestGriddedForecastRepository(unittest.TestCase):
     @patch.object(GriddedForecast, "__init__", return_value=None)
     @patch.object(GriddedForecast, "event_count", new_callable=PropertyMock)
     @patch.object(GriddedForecast, "scale")
-    @patch.object(ForecastParsers, "hdf5")
+    @patch.object(GriddedForecastParsers, "hdf5")
     def test_load_single_forecast(self, mock_parser, mock_scale, mock_count, mock_init):
         # Mock parser return values
         mock_count.return_value = 2
@@ -119,7 +121,7 @@ class TestGriddedForecastRepository(unittest.TestCase):
                 end_time=datetime.datetime(2024, 1, 1),
             )
 
-    @patch.object(ForecastParsers, "hdf5")
+    @patch.object(GriddedForecastParsers, "hdf5")
     def test_lazy_load_behavior(self, mock_parser):
         mock_parser.return_value = ("rates", "region", "mags")
         # Test lazy_load behavior
@@ -138,10 +140,10 @@ class TestGriddedForecastRepository(unittest.TestCase):
             self.assertEqual(forecast, "forecatto")
             self.assertNotIn("2023-01-02_2023-01-03", repo.forecasts)
 
-    @patch("floatcsep.infrastructure.registries.ForecastRegistry")
-    def test_equal(self, MockForecastRegistry):
+    @patch("floatcsep.infrastructure.registries.ModelFileRegistry")
+    def test_equal(self, MockModelFileRegistry):
 
-        self.registry = MockForecastRegistry()
+        self.registry = MockModelFileRegistry()
 
         self.repo1 = CatalogForecastRepository(self.registry)
         self.repo2 = CatalogForecastRepository(self.registry)
@@ -160,9 +162,10 @@ class TestGriddedForecastRepository(unittest.TestCase):
 
 class TestResultsRepository(unittest.TestCase):
 
-    @patch("floatcsep.infrastructure.repositories.ExperimentRegistry")
-    def setUp(self, MockRegistry):
-        self.mock_registry = MockRegistry()
+    @patch("floatcsep.infrastructure.repositories.ExperimentRegistry.factory")
+    def setUp(self, mock_registry):
+        self.mock_registry = MagicMock()
+        self.mock_registry.return_value = mock_registry()
         self.results_repo = ResultsRepository(self.mock_registry)
 
     def test_initialization(self):
@@ -191,9 +194,10 @@ class TestResultsRepository(unittest.TestCase):
 
 class TestCatalogRepository(unittest.TestCase):
 
-    @patch("floatcsep.infrastructure.repositories.ExperimentRegistry")
-    def setUp(self, MockRegistry):
-        self.mock_registry = MockRegistry()
+    @patch("floatcsep.infrastructure.repositories.ExperimentRegistry.factory")
+    def setUp(self, mock_registry):
+        self.mock_registry = MagicMock()
+        self.mock_registry.return_value = mock_registry()
         self.catalog_repo = CatalogRepository(self.mock_registry)
 
     def test_initialization(self):
