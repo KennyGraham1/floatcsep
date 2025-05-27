@@ -122,7 +122,7 @@ class TestModelRepositoryIntegration(TestCase):
         name = "mock"
         fname = os.path.join(self._dir, "model.csv")
 
-        with patch("floatcsep.readers.GriddedForecastParsers.csv", forecast_):
+        with patch("floatcsep.file_io.GriddedForecastParsers.csv", forecast_):
             model = self.init_model(name, fname)
             model.registry.build_tree([[start, end]])
             forecast = model.get_forecast(timestring)

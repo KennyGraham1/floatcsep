@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch, PropertyMock, mock_open
 
 from csep.core.forecasts import GriddedForecast
 
-from floatcsep.utils.readers import GriddedForecastParsers
+from floatcsep.utils.file_io import GriddedForecastParsers
 from floatcsep.infrastructure.registries import ModelFileRegistry
 from floatcsep.infrastructure.repositories import (
     CatalogForecastRepository,
@@ -26,7 +26,7 @@ class TestCatalogForecastRepository(unittest.TestCase):
         repo = CatalogForecastRepository(self.registry, lazy_load=True)
         self.assertTrue(repo.lazy_load)
 
-    @patch("floatcsep.readers.CatalogForecastParsers.csv")
+    @patch("floatcsep.file_io.CatalogForecastParsers.csv")
     def test_load_forecast(self, mock_load_catalog_forecast):
         repo = CatalogForecastRepository(self.registry)
 
@@ -38,7 +38,7 @@ class TestCatalogForecastRepository(unittest.TestCase):
         forecasts = repo.load_forecast(["2023-01-01_2023-01-01", "2023-01-02_2023-01-03"])
         self.assertEqual(forecasts, ["forecatto", "forecatto"])
 
-    @patch("floatcsep.readers.CatalogForecastParsers.csv")
+    @patch("floatcsep.file_io.CatalogForecastParsers.csv")
     def test_load_single_forecast(self, mock_load_catalog_forecast):
         # Test _load_single_forecast
         repo = CatalogForecastRepository(self.registry)

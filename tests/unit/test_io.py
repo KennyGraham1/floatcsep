@@ -6,10 +6,10 @@ import numpy
 import csep.utils.datasets
 import pytest
 
-from floatcsep.utils import readers
+from floatcsep.utils import file_io
 
 
-class TestForecastParsers(unittest.TestCase):
+class TestFileForecastParsers(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -25,7 +25,7 @@ class TestForecastParsers(unittest.TestCase):
     def test_parse_csv(self):
         fname = os.path.join(self._dir, "model.csv")
         numpy.seterr(all="ignore")
-        rates, region, mags = readers.GriddedForecastParsers.csv(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.csv(fname)
 
         rts = numpy.array([[1.0, 0.1], [1.0, 0.1], [1.0, 0.1], [1.0, 0.1]])
         orgs = numpy.array([[0.0, 0.0], [0.1, 0], [0.0, 0.1], [0.1, 0.1]])
@@ -39,7 +39,7 @@ class TestForecastParsers(unittest.TestCase):
 
     def test_parse_dat(self):
         fname = csep.utils.datasets.helmstetter_mainshock_fname
-        rates, region, mags = readers.GriddedForecastParsers.dat(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.dat(fname)
         forecast = csep.load_gridded_forecast(fname)
 
         self.assertEqual(forecast.region, region)
@@ -50,7 +50,7 @@ class TestForecastParsers(unittest.TestCase):
         fname = os.path.join(self._dir, "qtree", "TEAM=N10L11.csv")
         numpy.seterr(all="ignore")
 
-        rates, region, mags = readers.GriddedForecastParsers.csv(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.csv(fname)
 
         poly = numpy.array(
             [[-180.0, 66.51326], [-180.0, 79.171335], [-135.0, 79.171335], [-135.0, 66.51326]]
@@ -61,7 +61,7 @@ class TestForecastParsers(unittest.TestCase):
         self.assertEqual(8089, rates.shape[0])
         numpy.testing.assert_allclose(poly, region.polygons[2].points)
 
-        rates2, region2, mags2 = readers.GriddedForecastParsers.quadtree(fname)
+        rates2, region2, mags2 = file_io.GriddedForecastParsers.quadtree(fname)
         numpy.testing.assert_allclose(rates, rates2)
         numpy.testing.assert_allclose(
             [i.points for i in region.polygons], [i.points for i in region2.polygons]
@@ -78,7 +78,7 @@ class TestForecastParsers(unittest.TestCase):
         )
 
         numpy.seterr(all="ignore")
-        rates, region, mags = readers.GriddedForecastParsers.xml(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.xml(fname)
 
         orgs = numpy.array([12.6, 38.3])
         poly = numpy.array([[12.6, 38.3], [12.6, 38.4], [12.7, 38.4], [12.7, 38.3]])
@@ -94,10 +94,10 @@ class TestForecastParsers(unittest.TestCase):
     def test_serialize_hdf5(self):
         numpy.seterr(all="ignore")
         fname = os.path.join(self._dir, "model.csv")
-        rates, region, mags = readers.GriddedForecastParsers.csv(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.csv(fname)
 
         fname_db = os.path.join(self._dir, "model.hdf5")
-        readers.HDF5Serializer.grid2hdf5(rates, region, mags, hdf5_filename=fname_db)
+        file_io.HDF5Serializer.grid2hdf5(rates, region, mags, hdf5_filename=fname_db)
         self.assertTrue(os.path.isfile(fname_db))
         size = os.path.getsize(fname_db)
         self.assertLessEqual(4500, size)
@@ -105,7 +105,7 @@ class TestForecastParsers(unittest.TestCase):
 
     def test_parse_hdf5(self):
         fname = os.path.join(self._dir, "model_h5.hdf5")
-        rates, region, mags = readers.GriddedForecastParsers.hdf5(fname)
+        rates, region, mags = file_io.GriddedForecastParsers.hdf5(fname)
 
         orgs = numpy.array([[0.0, 0.0], [0.1, 0], [0.0, 0.1], [0.1, 0.1]])
         poly_3 = numpy.array([[0.1, 0.1], [0.1, 0.2], [0.2, 0.2], [0.2, 0.1]])
@@ -139,7 +139,7 @@ class TestForecastParsers(unittest.TestCase):
         filename = save(forecast_xml)
 
         try:
-            readers.check_format(filename, fmt="xml")
+            file_io.check_format(filename, fmt="xml")
         except (IndentationError, IndexError, KeyError):
             self.fail("Format check failed")
 
@@ -148,32 +148,32 @@ class TestForecastParsers(unittest.TestCase):
         xml_fail[-3] = "</depthayer>"
         filename = save(xml_fail)
         with pytest.raises(LookupError):
-            readers.check_format(filename, fmt="xml")
+            file_io.check_format(filename, fmt="xml")
 
         xml_fail = copy.deepcopy(forecast_xml)
         xml_fail[4] = "<cell Lat='0.1' Lon='0.1'>"
         filename = save(xml_fail)
         with pytest.raises(KeyError):
-            readers.check_format(filename, fmt="xml")
+            file_io.check_format(filename, fmt="xml")
 
         xml_fail = copy.deepcopy(forecast_xml)
         xml_fail[5] = "<mbin m='5.0'>1.6773966e-008</mbin>"
         filename = save(xml_fail)
         with pytest.raises(LookupError):
-            readers.check_format(filename, fmt="xml")
+            file_io.check_format(filename, fmt="xml")
 
         xml_fail = copy.deepcopy(forecast_xml)
         xml_fail[5] = "<bin a='5.0'>1.6773966e-008</bin>"
         filename = save(xml_fail)
         with pytest.raises(KeyError):
-            readers.check_format(filename, fmt="xml")
+            file_io.check_format(filename, fmt="xml")
 
         xml_fail = copy.deepcopy(forecast_xml)
         xml_fail[2] = ""
         xml_fail[-2] = ""
         filename = save(xml_fail)
         with pytest.raises(IndentationError):
-            readers.check_format(filename)
+            file_io.check_format(filename)
 
     # @classmethod
     # def tearDownClass(cls) -> None:

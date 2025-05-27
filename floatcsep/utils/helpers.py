@@ -33,7 +33,7 @@ from csep.utils.calc import cleaner_range
 
 # floatCSEP libraries
 import floatcsep.utils.accessors
-import floatcsep.utils.readers
+import floatcsep.utils.file_io
 
 _UNITS = ["years", "months", "weeks", "days"]
 _PD_FORMAT = ["YS", "MS", "W", "D"]
@@ -74,9 +74,9 @@ def parse_csep_func(func):
             csep.core.regions,
             floatcsep.utils.helpers,
             floatcsep.utils.accessors,
-            floatcsep.utils.readers.HDF5Serializer,
-            floatcsep.utils.readers.GriddedForecastParsers,
-            floatcsep.utils.readers.CatalogForecastParsers,
+            floatcsep.utils.file_io.HDF5Serializer,
+            floatcsep.utils.file_io.GriddedForecastParsers,
+            floatcsep.utils.file_io.CatalogForecastParsers,
 
         ]
         for module in _target_modules:

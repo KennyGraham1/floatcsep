@@ -11,7 +11,7 @@ from csep.core.forecasts import GriddedForecast, CatalogForecast
 
 from floatcsep.utils.accessors import from_zenodo, from_git
 from floatcsep.infrastructure.environments import EnvironmentFactory
-from floatcsep.utils.readers import GriddedForecastParsers, HDF5Serializer
+from floatcsep.utils.file_io import GriddedForecastParsers, HDF5Serializer
 from floatcsep.infrastructure.registries import ModelRegistry
 from floatcsep.infrastructure.repositories import ForecastRepository
 from floatcsep.utils.helpers import timewindow2str, str2timewindow, parse_nested_dicts

@@ -17,6 +17,27 @@ from csep.utils.time_utils import strptime_to_utc_epoch
 
 log = logging.getLogger(__name__)
 
+class CatalogSerializer:
+
+    @staticmethod
+    def ascii(catalog, filename: str) -> None:
+        catalog.write_ascii(filename=filename)
+
+    @staticmethod
+    def json(catalog, filename: str) -> None:
+        catalog.write_json(filename=filename)
+
+class CatalogParser:
+
+    @staticmethod
+    def ascii(catalog, filename: str) -> None:
+        catalog.write_ascii(filename=filename)
+
+    @staticmethod
+    def json(filename: str) -> None:
+        return CSEPCatalog.load_json(filename=filename)
+
+
 class CatalogForecastParsers:
 
     @staticmethod
@@ -164,7 +185,6 @@ class CatalogForecastParsers:
         elif os.path.isdir(filename):
             raise NotImplementedError(
                 "reading from directory or batched files not implemented yet!")
-
 
 
 class GriddedForecastParsers:

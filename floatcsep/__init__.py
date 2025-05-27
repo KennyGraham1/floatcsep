@@ -2,7 +2,7 @@ from floatcsep import evaluation
 from floatcsep import experiment
 from floatcsep import model
 from floatcsep.infrastructure import engine, environments, registries, repositories, logger
-from floatcsep.utils import readers, accessors, helpers
+from floatcsep.utils import file_io, accessors, helpers
 from floatcsep.postprocess import reporting, plot_handler
 
 from importlib.metadata import version, PackageNotFoundError
