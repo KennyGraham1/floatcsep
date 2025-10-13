@@ -1,4 +1,5 @@
 import os.path
+from pathlib import Path
 from unittest import TestCase
 
 from floatcsep.model import TimeIndependentModel
@@ -54,7 +55,7 @@ class TestTimeIndependentModel(TestModel):
         model = self.init_model(name=name, model_path=fname)
 
         self.assertEqual(name, model.name)
-        self.assertEqual(fname, model.registry.path)
+        self.assertEqual(Path(fname), model.registry.path)
         self.assertEqual(1, model.forecast_unit)
 
     @patch("os.makedirs")
@@ -94,9 +95,9 @@ class TestTimeIndependentModel(TestModel):
         model_b = TimeIndependentModel.from_dict(py_dict)
 
         self.assertEqual(name, model_a.name)
-        self.assertEqual(fname, model_a.registry.path)
-        self.assertEqual("csv", model_a.registry.fmt)
-        self.assertEqual(self._dir, model_a.registry.dir)
+        self.assertEqual(Path(fname), model_a.registry.path)
+        self.assertEqual(".csv", model_a.registry.fmt)
+        self.assertEqual(Path(self._dir), model_a.registry.dir)
 
         # print(model_a.__dict__, model_b.__dict__)
         self.assertEqualModel(model_a, model_b)
@@ -146,13 +147,6 @@ class TestTimeIndependentModel(TestModel):
                 eq = False
         self.assertTrue(eq)
 
-    @patch("os.path.isfile", return_value=False)
-    @patch("floatcsep.model.HDF5Serializer.grid2hdf5")
-    def test_init_db(self, mock_grid2hdf5, mock_isfile):
-        """Test init_db method creates database."""
-        filepath = os.path.join(self._dir, "model.csv")
-        model = self.init_model("mock", filepath)
-        model.init_db(force=True)
 
 
 class TestTimeDependentModel(TestModel):

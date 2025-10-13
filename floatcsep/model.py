@@ -11,7 +11,6 @@ from csep.core.forecasts import GriddedForecast, CatalogForecast
 
 from floatcsep.utils.accessors import from_zenodo, from_git
 from floatcsep.infrastructure.environments import EnvironmentFactory
-from floatcsep.utils.file_io import GriddedForecastParsers, HDF5Serializer
 from floatcsep.infrastructure.registries import ModelRegistry
 from floatcsep.infrastructure.repositories import ForecastRepository
 from floatcsep.utils.helpers import timewindow2str, str2timewindow, parse_nested_dicts
@@ -104,6 +103,11 @@ class Model(ABC):
         elif giturl:
             log.info(f"Retrieving model {self.name} from git url: " f"{giturl}")
             try:
+                print('model.get_source()',
+                      giturl,
+                      self.registry.dir,
+                      self.registry.fmt,
+                      self.registry.path)
                 from_git(
                     giturl,
                     self.registry.dir if self.registry.fmt else self.registry.path,
@@ -118,6 +122,8 @@ class Model(ABC):
         if not os.path.exists(self.registry.dir) or not os.path.exists(
             self.registry.get_attr("path")
         ):
+            print(self.registry.dir)
+            print(self.registry.get_attr("path"))
             raise FileNotFoundError(
                 f"Directory '{self.registry.dir}' or file {self.registry}' do not exist. "
                 f"Please check the specified 'path' matches the repo "
@@ -209,7 +215,6 @@ class TimeIndependentModel(Model):
         super().__init__(name, **kwargs)
 
         self.forecast_unit = forecast_unit
-        self.store_db = store_db
         self.registry = ModelRegistry.factory(model_name=name,
                                               workdir=kwargs.get("workdir", os.getcwd()),
                                               path=model_path)
@@ -230,41 +235,8 @@ class TimeIndependentModel(Model):
             os.makedirs(self.registry.dir, exist_ok=True)
             self.get_source(self.zenodo_id, self.giturl, branch=self.repo_hash)
 
-        if self.store_db:
-            self.init_db()
-
         self.registry.build_tree(time_windows=time_windows, model_class=self.__class__.__name__)
 
-    def init_db(self, dbpath: str = "", force: bool = False) -> None:
-        """
-        Initializes the database if `use_db` is True. If the model source is a file,
-        serializes the forecast into a HDF5 file. If source is a generating function or code,
-        creates an empty DB.
-
-        Args:
-            dbpath (str): Path to drop the HDF5 database. Defaults to same path
-             replaced with an `hdf5` extension
-            force (bool): Forces the serialization even if the DB already
-             exists
-        """
-
-        parser = getattr(GriddedForecastParsers, self.registry.fmt)
-        rates, region, mag = parser(self.registry.get_attr("path"))
-        db_func = HDF5Serializer.grid2hdf5
-
-        if not dbpath:
-            dbpath = self.registry.path.replace(self.registry.fmt, "hdf5")
-            self.registry.database = dbpath
-
-        if not os.path.isfile(self.registry.abs(dbpath)) or force:
-            log.info(f"Serializing model {self.name} into HDF5 format")
-            db_func(
-                rates,
-                region,
-                mag,
-                hdf5_filename=self.registry.abs(dbpath),
-                unit=self.forecast_unit,
-            )
 
     def get_forecast(
         self, tstring: Union[str, list] = None, region=None
@@ -325,7 +297,6 @@ class TimeDependentModel(Model):
 
         self.func = func
         self.func_kwargs = func_kwargs or {}
-
         self.registry = ModelRegistry.factory(model_name=name,
                                               workdir=kwargs.get("workdir", os.getcwd()),
                                               path=model_path,
@@ -352,7 +323,7 @@ class TimeDependentModel(Model):
            and those to be generated, as well as input catalog and arguments file.
 
         """
-        if self.force_stage or not self.registry.file_exists("path"):
+        if self.force_stage or not self.registry.path.exists():
             os.makedirs(self.registry.dir, exist_ok=True)
             self.get_source(self.zenodo_id, self.giturl, branch=self.repo_hash)
 

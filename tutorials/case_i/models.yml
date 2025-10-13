@@ -2,7 +2,7 @@
     giturl: git@github.com:KennyGraham1/STEPModel.git
     repo_hash: floatcsep-interface
     forecast_type: gridded
-    fmt: dat
+#    fmt: dat
     path: models/step
     args_file: step_config.yaml
     build: docker

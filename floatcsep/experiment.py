@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 from os.path import join, abspath, relpath, dirname, isfile, split, exists
+from pathlib import Path
 from typing import Union, List, Dict, Sequence
 
 import numpy
@@ -113,12 +114,12 @@ class Experiment:
         #    Or filter region?
         # Instantiate
 
-        workdir = abspath(kwargs.get("path", os.getcwd()))
+        workdir = Path(kwargs.get("path", os.getcwd())).resolve()
         if kwargs.get("timestamp", False):
-            rundir = os.path.join(
+            rundir = Path(
                 rundir, f"run_{datetime.datetime.utcnow().date().isoformat()}"
             )
-        os.makedirs(os.path.join(workdir, rundir), exist_ok=True)
+        os.makedirs(Path(workdir, rundir), exist_ok=True)
 
         self.name = name if name else "floatingExp"
         self.registry = ExperimentRegistry.factory(workdir=workdir, run_dir=rundir)
@@ -603,8 +604,8 @@ class Experiment:
         dict_walk = {
             "name": self.name,
             "config_file": self.config_file,
-            "path": self.registry.workdir,
-            "run_dir": self.registry.run_dir,
+            "path": self.registry.workdir.resolve().as_posix(),
+            "run_dir": self.registry.run_dir.resolve().as_posix(),
             "time_config": {
                 i: j
                 for i, j in self.time_config.items()
@@ -615,12 +616,12 @@ class Experiment:
                 for i, j in self.region_config.items()
                 if (i not in ("magnitudes", "depths") or extended)
             },
-            "catalog": self.catalog_repo.cat_path,
+            "catalog": self.catalog_repo.cat_path.resolve().as_posix(),
             "models": [i.as_dict() for i in self.models],
             "tests": [i.as_dict() for i in self.tests],
         }
+        print(dict_walk)
         dict_walk.update(extra)
-
         return parse_nested_dicts(dict_walk)
 
     def to_yml(self, filename: str, **kwargs) -> None:

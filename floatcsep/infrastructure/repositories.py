@@ -15,7 +15,12 @@ from csep.utils.time_utils import decimal_year
 
 from floatcsep.utils.file_io import GriddedForecastParsers, CatalogForecastParsers, \
     CatalogSerializer, CatalogParser
-from floatcsep.infrastructure.registries import ExperimentRegistry, ModelRegistry
+from floatcsep.infrastructure.registries import (
+    ExperimentRegistry,
+    ModelRegistry,
+    ExperimentFileRegistry,
+    ModelFileRegistry,
+)
 from floatcsep.utils.helpers import str2timewindow, parse_csep_func
 from floatcsep.utils.helpers import timewindow2str
 
@@ -34,7 +39,7 @@ class CatalogRepository:
     for the model's forecasts to be evaluated against).
     """
 
-    def __init__(self, registry: ExperimentRegistry):
+    def __init__(self, registry: ExperimentFileRegistry):
         """
 
         Args:
@@ -308,7 +313,7 @@ class CatalogForecastRepository(ForecastRepository):
 
     """
 
-    def __init__(self, registry: ModelRegistry, **kwargs):
+    def __init__(self, registry: ModelFileRegistry, **kwargs):
         """
 
         Args:
@@ -343,7 +348,8 @@ class CatalogForecastRepository(ForecastRepository):
         start_date, end_date = str2timewindow(tstring)
 
         fc_path = self.registry.get_forecast_key(tstring)
-        f_parser = getattr(CatalogForecastParsers, self.registry.fmt)
+        fmt = self.registry.fmt
+        f_parser = getattr(CatalogForecastParsers, fmt[1:] if fmt.endswith(".") else fmt)
 
         forecast_ = f_parser(fc_path,
                              start_time=start_date,
@@ -366,7 +372,7 @@ class GriddedForecastRepository(ForecastRepository):
     avoid parsing files repeatedly (Skip for large files).
 
     """
-    def __init__(self, registry: ModelRegistry, **kwargs):
+    def __init__(self, registry: ModelFileRegistry, **kwargs):
         """
 
         Args:
@@ -420,7 +426,8 @@ class GriddedForecastRepository(ForecastRepository):
         tstring_ = timewindow2str([start_date, end_date])
 
         f_path = self.registry.get_forecast_key(tstring_)
-        f_parser = getattr(GriddedForecastParsers, self.registry.fmt)
+        fmt = self.registry.fmt
+        f_parser = getattr(GriddedForecastParsers, fmt[1:] if fmt.startswith(".") else fmt)
 
         rates, region, mags = f_parser(f_path)
 
@@ -531,4 +538,3 @@ class ResultsRepository:
 
         with open(path, "w") as _file:
             json.dump(result.to_dict(), _file, indent=4, cls=NumpyEncoder)
-

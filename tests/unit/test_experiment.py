@@ -1,5 +1,6 @@
 import os.path
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy
@@ -38,10 +39,9 @@ class TestExperiment(TestCase):
 
     def assertEqualExperiment(self, exp_a, exp_b):
         self.assertEqual(exp_a.name, exp_b.name)
-        self.assertEqual(exp_a.registry.workdir, os.getcwd())
-        self.assertEqual(exp_a.registry.workdir, exp_b.registry.workdir)
+        self.assertEqual(exp_a.registry.workdir, Path(os.getcwd()))
+        self.assertEqual(exp_a.registry.workdir, Path(exp_b.registry.workdir))
         self.assertEqual(exp_a.start_date, exp_b.start_date)
-        print(exp_a.time_windows, exp_b.time_windows)
         self.assertEqual(exp_a.time_windows, exp_b.time_windows)
         self.assertEqual(exp_a.exp_class, exp_b.exp_class)
         self.assertEqual(exp_a.region, exp_b.region)
@@ -75,7 +75,7 @@ class TestExperiment(TestCase):
         dict_ = {
             "name": "test",
             "path": os.getcwd(),
-            "run_dir": "results",
+            "run_dir": Path("results").resolve().as_posix(),
             "config_file": None,
             "models": [],
             "tests": [],
@@ -94,7 +94,7 @@ class TestExperiment(TestCase):
                 "depth_min": -2,
                 "depth_max": 70,
             },
-            "catalog": os.path.relpath(_cat, os.getcwd()),
+            "catalog": _cat,
         }
         self.assertEqual(dict_, exp_a.as_dict())
 
@@ -142,8 +142,7 @@ class TestExperiment(TestCase):
         )
         exp.stage_models()
 
-        dbpath = os.path.relpath(os.path.join(_dir, "../artifacts", "models", "model.hdf5"))
-        self.assertEqual(exp.models[0].registry.database, dbpath)
+        self.assertEqual(exp.models[0].registry.path.resolve(), Path(f"{_dir}/../artifacts/models/model.csv").resolve())
 
     def test_set_tests(self):
         test_cfg = os.path.normpath(
