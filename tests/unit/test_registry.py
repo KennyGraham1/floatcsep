@@ -16,6 +16,7 @@ from floatcsep.infrastructure.registries import (
 @dataclass
 class DummyRegistry(FilepathMixin):
     workdir: str
+    path: str
     forecasts: dict = field(default_factory=dict)
     catalogs: dict = field(default_factory=dict)
 
@@ -36,6 +37,7 @@ class TestFilepathMixin(unittest.TestCase):
 
         self.registry = DummyRegistry(
             workdir=self.tmpdir,
+            path=self.tmpdir,
             forecasts={
                 "2020-01-01_2020-01-02": "forecasts/f1.csv",
                 "not_exists": "forecasts/does_not_exist.csv",
@@ -90,15 +92,14 @@ class TestFilepathMixin(unittest.TestCase):
 
     def test_rel_returns_relpath_to_workdir(self):
         r = self.registry.rel("catalogs", "cat1", "eventlist.txt")
-        self.assertEqual(
-            r.resolve(), Path(os.path.relpath(self.eventlist, self.tmpdir)).resolve()
-        )
+        self.assertFalse(r.is_absolute())
+        self.assertEqual((self.tmp_path / r).resolve(), self.eventlist.resolve())
         self.assertFalse(str(r).startswith(str(self.tmpdir)))
 
     def test_rel_dir_returns_rel_directory(self):
         rdir = self.registry.rel_dir("catalogs", "cat1", "eventlist.txt")
-        expected = Path(os.path.relpath(self.eventlist.parent, self.tmpdir))
-        self.assertEqual(rdir.resolve(), expected.resolve())
+        self.assertFalse(rdir.is_absolute())
+        self.assertEqual((self.tmp_path / rdir).resolve(), self.eventlist.parent.resolve())
 
     def test_get_attr_traverses_nested_mapping_and_returns_abs_path(self):
         p = self.registry.get_attr("forecasts", "2020-01-01_2020-01-02")
