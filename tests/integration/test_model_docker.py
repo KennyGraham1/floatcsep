@@ -24,12 +24,15 @@ except Exception:
 
 skip_docker = unittest.skipUnless(DOCKER_AVAILABLE, "Docker is not available")
 
+
 @skip_docker
 class TestModelDockerIntegration(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_path = Path(__file__).resolve().parent.parent / "artifacts" / "models" / "docker_test"
+        cls.base_path = (
+            Path(__file__).resolve().parent.parent / "artifacts" / "models" / "docker_test"
+        )
         cls.client = docker.from_env()
 
     def tearDown(self):
@@ -65,7 +68,6 @@ class TestModelDockerIntegration(unittest.TestCase):
                         path.rmdir()
                     except Exception:
                         pass
-
 
     def _make_model(self, subfolder: str, tag: str):
         model_dir = self.base_path / subfolder

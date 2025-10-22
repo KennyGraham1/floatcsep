@@ -12,9 +12,11 @@ from floatcsep.infrastructure.environments import (
     VenvManager,
     DockerManager,
 )
+
 try:
     import docker
     from docker.errors import ImageNotFound, APIError
+
     DOCKER_SDK_AVAILABLE = True
 except ImportError:
     DOCKER_SDK_AVAILABLE = False
@@ -425,7 +427,7 @@ class TestDockerManagerWithSDK(unittest.TestCase):
                 "USER_UID": str(os.getuid()),
                 "USER_GID": str(os.getgid()),
             },
-            nocache=False
+            nocache=False,
         )
         # success logged only once
         infos = [call_args[0][0] for call_args in mock_log.info.call_args_list]
@@ -446,14 +448,18 @@ class TestDockerManagerWithSDK(unittest.TestCase):
             self.manager.create_environment(force=True)
 
         # remove then build
-        self.mock_client.images.remove.assert_called_once_with(self.manager.image_tag, force=True)
+        self.mock_client.images.remove.assert_called_once_with(
+            self.manager.image_tag, force=True
+        )
         self.mock_client.api.build.assert_called_once()
         infos = [call_args[0][0] for call_args in mock_log.info.call_args_list]
         self.assertEqual(sum("Successfully built" in msg for msg in infos), 1)
 
     def test_create_environment_build_error(self):
         self.manager.env_exists = MagicMock(return_value=False)
-        self.mock_client.api.build.side_effect = APIError("fail", response=None, explanation="err")
+        self.mock_client.api.build.side_effect = APIError(
+            "fail", response=None, explanation="err"
+        )
         with self.assertRaises(APIError):
             self.manager.create_environment(force=False)
 
@@ -468,8 +474,8 @@ class TestDockerManagerWithSDK(unittest.TestCase):
 
         uid, gid = os.getuid(), os.getgid()
         expected_volumes = {
-            os.path.join(self.model_dir, "input"): {'bind': '/app/input', 'mode': 'rw'},
-            os.path.join(self.model_dir, "forecasts"): {'bind': '/app/forecasts', 'mode': 'rw'},
+            os.path.join(self.model_dir, "input"): {"bind": "/app/input", "mode": "rw"},
+            os.path.join(self.model_dir, "forecasts"): {"bind": "/app/forecasts", "mode": "rw"},
         }
         self.mock_client.containers.run.assert_called_once_with(
             self.manager.image_tag,
@@ -496,6 +502,7 @@ class TestDockerManagerWithSDK(unittest.TestCase):
     def test_install_dependencies_noop(self):
         # No exception should be raised
         self.manager.install_dependencies()
+
 
 if __name__ == "__main__":
     unittest.main()

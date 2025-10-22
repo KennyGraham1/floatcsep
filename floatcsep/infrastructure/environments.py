@@ -429,7 +429,7 @@ class DockerManager(EnvironmentManager):
                 rm=True,
                 decode=True,
                 buildargs=build_args,
-                nocache=False # todo: create model arg for --no-cache
+                nocache=False,  # todo: create model arg for --no-cache
             )
 
             # Stream each chunk
@@ -459,15 +459,15 @@ class DockerManager(EnvironmentManager):
         except ImageNotFound:
             return False
 
-    def run_command(self,  command=None) -> None:
+    def run_command(self, command=None) -> None:
         """
         Runs the model’s Docker container with input/ and forecasts/ mounted.
         Streams logs and checks for non-zero exit codes.
         """
         model_root = os.path.abspath(self.model_directory)
         mounts = {
-            os.path.join(model_root, "input"): {'bind': '/app/input', 'mode': 'rw'},
-            os.path.join(model_root, "forecasts"): {'bind': '/app/forecasts', 'mode': 'rw'},
+            os.path.join(model_root, "input"): {"bind": "/app/input", "mode": "rw"},
+            os.path.join(model_root, "forecasts"): {"bind": "/app/forecasts", "mode": "rw"},
         }
 
         uid, gid = os.getuid(), os.getgid()

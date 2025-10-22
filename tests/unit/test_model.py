@@ -1,4 +1,5 @@
 import os.path
+from pathlib import Path
 from unittest import TestCase
 
 from floatcsep.model import TimeIndependentModel
@@ -54,16 +55,15 @@ class TestTimeIndependentModel(TestModel):
         model = self.init_model(name=name, model_path=fname)
 
         self.assertEqual(name, model.name)
-        self.assertEqual(fname, model.registry.path)
+        self.assertEqual(Path(fname), model.registry.path)
         self.assertEqual(1, model.forecast_unit)
 
     @patch("os.makedirs")
     @patch("floatcsep.model.TimeIndependentModel.get_source")
     @patch("floatcsep.infrastructure.registries.ModelFileRegistry.build_tree")
-    def test_stage_creates_directory(self, mock_build_tree, mock_get_source, mock_makedirs):
-        """Test stage method creates directory."""
+    def test_stage(self, mock_build_tree, mock_get_source, mock_makedirs):
         model = self.init_model("mock", "mockfile.csv")
-        model.force_stage = True  # Simulate forcing the staging process
+        model.force_stage = True
         model.stage()
         mock_makedirs.assert_called_once()
         mock_get_source.assert_called_once()
@@ -94,9 +94,9 @@ class TestTimeIndependentModel(TestModel):
         model_b = TimeIndependentModel.from_dict(py_dict)
 
         self.assertEqual(name, model_a.name)
-        self.assertEqual(fname, model_a.registry.path)
-        self.assertEqual("csv", model_a.registry.fmt)
-        self.assertEqual(self._dir, model_a.registry.dir)
+        self.assertEqual(Path(fname), model_a.registry.path)
+        self.assertEqual(".csv", model_a.registry.fmt)
+        self.assertEqual(Path(self._dir), model_a.registry.dir)
 
         # print(model_a.__dict__, model_b.__dict__)
         self.assertEqualModel(model_a, model_b)
@@ -146,14 +146,6 @@ class TestTimeIndependentModel(TestModel):
                 eq = False
         self.assertTrue(eq)
 
-    @patch("os.path.isfile", return_value=False)
-    @patch("floatcsep.model.HDF5Serializer.grid2hdf5")
-    def test_init_db(self, mock_grid2hdf5, mock_isfile):
-        """Test init_db method creates database."""
-        filepath = os.path.join(self._dir, "model.csv")
-        model = self.init_model("mock", filepath)
-        model.init_db(force=True)
-
 
 class TestTimeDependentModel(TestModel):
 
@@ -183,8 +175,9 @@ class TestTimeDependentModel(TestModel):
         self.mock_environment.return_value = self.mock_environment_instance
 
         # Set attributes on the mock objects
-        self.mock_registry_instance.workdir = "/path/to/workdir"
-        self.mock_registry_instance.path = "/path/to/model"
+        self.mock_registry_instance.workdir = Path("/path/to/workdir")
+        self.mock_registry_instance.path = Path("/path/to/model")
+
         self.mock_registry_instance.get_args_key.return_value = (
             "/path/to/args_file.txt"  # Mocking the return of the registry call
         )
@@ -198,6 +191,7 @@ class TestTimeDependentModel(TestModel):
         self.model = TimeDependentModel(
             name=self.name, model_path=self.model_path, func=self.func
         )
+
     def tearDown(self):
         patch.stopall()
 
@@ -205,14 +199,17 @@ class TestTimeDependentModel(TestModel):
         # Assertions to check if the components were instantiated correctly
         self.mock_registry_factory.assert_called_once_with(
             model_name=self.name,
-            workdir=os.getcwd(), path=self.model_path, fmt='csv',
-            args_file='args.txt', input_cat='catalog.csv'
+            workdir=os.getcwd(),
+            path=self.model_path,
+            fmt="csv",
+            args_file="args.txt",
+            input_cat="catalog.csv",
         )  # Ensure the registry is initialized correctly
         self.mock_repository_factory.assert_called_once_with(
             self.mock_registry_instance, model_class="TimeDependentModel"
         )
         self.mock_environment.assert_called_once_with(
-            None, self.name, self.mock_registry_instance.abs(self.model_path)
+            None, self.name, self.mock_registry_instance.path.as_posix()
         )
 
         self.assertEqual(self.model.name, self.name)
@@ -221,23 +218,70 @@ class TestTimeDependentModel(TestModel):
         self.assertEqual(self.model.repository, self.mock_repository_instance)
         self.assertEqual(self.model.environment, self.mock_environment_instance)
 
-    @patch("os.makedirs")
-    def test_stage(self, mk):
-        self.model.force_stage = True  # Force staging to occur
+    @patch("floatcsep.model.TimeDependentModel.get_source")
+    def test_stage(self, mock_get_source):
+        self.model.force_stage = True
 
         self.model.stage(time_windows=["2020-01-01_2020-12-31"])
 
-        self.mock_get_source.assert_called_once_with(
+        mock_get_source.assert_called_once_with(
             self.model.zenodo_id, self.model.giturl, branch=self.model.repo_hash
         )
+
         self.mock_registry_instance.build_tree.assert_called_once_with(
             time_windows=["2020-01-01_2020-12-31"],
             model_class="TimeDependentModel",
             prefix=self.model.__dict__.get("prefix", self.name),
-            run_mode='sequential',
-            run_dir=''
+            run_mode="sequential",
+            run_dir="",
         )
+
         self.mock_environment_instance.create_environment.assert_called_once()
+
+    @patch("pathlib.Path.mkdir")
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("pathlib.Path.is_dir", return_value=True)
+    @patch("floatcsep.model.from_git")
+    @patch("floatcsep.model.from_zenodo")
+    def test_get_source(
+        self,
+        mock_from_zenodo,
+        mock_from_git,
+        mock_is_dir,
+        mock_exists,
+        mock_mkdir,
+    ):
+        self.model.giturl = "https://example.com/repo.git"
+        self.model.repo_hash = "main"
+        self.model.zenodo_id = None
+        self.model.force_stage = False
+
+        self.model.get_source(
+            self.model.zenodo_id, self.model.giturl, branch=self.model.repo_hash
+        )
+
+        mock_from_git.assert_called_once_with(
+            self.model.giturl,
+            self.mock_registry_instance.path.as_posix(),
+            branch=self.model.repo_hash,
+            force=False,
+        )
+        mock_from_zenodo.assert_not_called()
+
+        mock_from_git.reset_mock()
+        mock_from_zenodo.reset_mock()
+
+        self.model.giturl = None
+        self.model.zenodo_id = 12345
+
+        self.model.get_source(self.model.zenodo_id, self.model.giturl)
+
+        mock_from_zenodo.assert_called_once_with(
+            self.model.zenodo_id,
+            self.mock_registry_instance.path.as_posix(),
+            force=True,
+        )
+        mock_from_git.assert_not_called()
 
     def test_get_forecast(self):
         tstring = "2020-01-01_2020-12-31"
@@ -255,7 +299,7 @@ class TestTimeDependentModel(TestModel):
         self.model.create_forecast(tstring, force=True)
 
         self.mock_environment_instance.run_command.assert_called_once_with(
-            f'{self.func} {self.model.registry.get_args_key()}'
+            f"{self.func} {self.model.registry.get_args_key()}"
         )
 
     @patch("builtins.open", new_callable=mock_open)

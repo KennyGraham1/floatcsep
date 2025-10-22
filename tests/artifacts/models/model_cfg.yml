@@ -1,6 +1,5 @@
 - mock:
     path: model.csv
-    store_db: True
 - qtree:
       path: qtree
       zenodo_id: 6289795

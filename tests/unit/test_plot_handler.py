@@ -44,9 +44,7 @@ class TestPlotHandler(unittest.TestCase):
     @patch("matplotlib.pyplot.Figure.savefig")  # Mocking savefig on the Figure object
     @patch("floatcsep.postprocess.plot_handler.parse_plot_config")
     @patch("floatcsep.postprocess.plot_handler.parse_projection")
-    def test_plot_catalogs(
-        self, mock_parse_projection, mock_parse_plot_config, mock_savefig
-    ):
+    def test_plot_catalogs(self, mock_parse_projection, mock_parse_plot_config, mock_savefig):
         # Mock the experiment and its components
         mock_experiment = MagicMock()
         mock_catalog = MagicMock()
@@ -57,9 +55,7 @@ class TestPlotHandler(unittest.TestCase):
         mock_experiment.catalog_repo.get_test_cat = MagicMock(return_value=mock_catalog)
         mock_catalog.plot = mock_plot
         mock_plot.return_value = mock_ax
-        mock_ax.get_figure.return_value = (
-            mock_figure
-        )
+        mock_ax.get_figure.return_value = mock_figure
 
         mock_parse_plot_config.return_value = {"projection": "Mercator"}
         mock_parse_projection.return_value = MagicMock()
@@ -75,9 +71,7 @@ class TestPlotHandler(unittest.TestCase):
             plot_args=mock_parse_plot_config.return_value,
         )
 
-        mock_figure.savefig.assert_called_once_with(
-            "cat.png", dpi=300
-        )
+        mock_figure.savefig.assert_called_once_with("cat.png", dpi=300)
 
         mock_savefig.assert_called()
 
@@ -86,8 +80,14 @@ class TestPlotHandler(unittest.TestCase):
     @patch("os.path.dirname", return_value="dir")
     @patch("importlib.util.spec_from_file_location")
     @patch("importlib.util.module_from_spec")
-    def test_plot_custom(self, mock_module_from_spec, mock_spec_from_file_location,
-                         mock_dirname, mock_realpath, mock_isfile):
+    def test_plot_custom(
+        self,
+        mock_module_from_spec,
+        mock_spec_from_file_location,
+        mock_dirname,
+        mock_realpath,
+        mock_isfile,
+    ):
         mock_experiment = MagicMock()
         mock_spec = MagicMock()
         mock_module = MagicMock()
@@ -101,7 +101,9 @@ class TestPlotHandler(unittest.TestCase):
 
         plot_handler.plot_custom(mock_experiment)
 
-        mock_spec_from_file_location.assert_called_once_with("custom_script", "custom_script.py")
+        mock_spec_from_file_location.assert_called_once_with(
+            "custom_script", "custom_script.py"
+        )
         mock_module_from_spec.assert_called_once_with(mock_spec)
         mock_func.assert_called_once_with(mock_experiment)
 
