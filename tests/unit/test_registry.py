@@ -1,6 +1,6 @@
-import os
 import shutil
 import unittest
+import platform
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -11,6 +11,8 @@ from floatcsep.infrastructure.registries import (
     ExperimentFileRegistry,
     FilepathMixin,
 )
+
+LINUX = platform.system() == "Linux"
 
 
 @dataclass
@@ -90,12 +92,14 @@ class TestFilepathMixin(unittest.TestCase):
         self.assertEqual(d, (self.tmp_path / "catalogs" / "cat1").resolve())
         self.assertTrue(d.is_dir())
 
+    @unittest.skipUnless(LINUX, "Linux-only relative path semantics")
     def test_rel_returns_relpath_to_workdir(self):
         r = self.registry.rel("catalogs", "cat1", "eventlist.txt")
         self.assertFalse(r.is_absolute())
         self.assertEqual((self.tmp_path / r).resolve(), self.eventlist.resolve())
         self.assertFalse(str(r).startswith(str(self.tmpdir)))
 
+    @unittest.skipUnless(LINUX, "Linux-only relative path semantics")
     def test_rel_dir_returns_rel_directory(self):
         rdir = self.registry.rel_dir("catalogs", "cat1", "eventlist.txt")
         self.assertFalse(rdir.is_absolute())
