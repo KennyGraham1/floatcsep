@@ -65,7 +65,7 @@ class FilepathMixin:
             val = val[parsed_arg]
         return self.abs(val)
 
-    def abs(self, *paths: Union[str | Path | Sequence[str | Path]]) -> Path:
+    def abs(self, *paths: Union[str, Path, Sequence[Union[str, Path]]]) -> Path:
         """
         Returns the absolute path of an object, relative to the Registry workdir.
 
@@ -79,7 +79,7 @@ class FilepathMixin:
         _path = Path(self.workdir, *[x for x in paths if x]).resolve()
         return _path
 
-    def abs_dir(self, *paths: Sequence[str | Path]) -> Path:
+    def abs_dir(self, *paths: Sequence[Union[str, Path]]) -> Path:
         """
         Returns the absolute path of the directory containing an item relative to the Registry
         workdir.
@@ -93,7 +93,7 @@ class FilepathMixin:
         _dir = _path.parents[0]
         return _dir
 
-    def rel(self, *paths: Union[Path | str | Sequence[str | Path]]) -> Path:
+    def rel(self, *paths: Union[Path, str, Sequence[Union[str, Path]]]) -> Path:
         """
         Gets the relative path of an item, relative to the Registry workdir
 
@@ -123,7 +123,7 @@ class FilepathMixin:
 
         return Path(relpath(_dir, self.workdir))
 
-    def file_exists(self, *args: Sequence[str | Path]):
+    def file_exists(self, *args: Sequence[Union[str, Path]]):
         """
         Determine is such file exists in the filesystem
 

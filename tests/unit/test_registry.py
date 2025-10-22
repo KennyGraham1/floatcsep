@@ -90,13 +90,15 @@ class TestFilepathMixin(unittest.TestCase):
 
     def test_rel_returns_relpath_to_workdir(self):
         r = self.registry.rel("catalogs", "cat1", "eventlist.txt")
-        self.assertEqual(r, Path(os.path.relpath(self.eventlist, self.tmpdir)))
+        self.assertEqual(
+            r.resolve(), Path(os.path.relpath(self.eventlist, self.tmpdir)).resolve()
+        )
         self.assertFalse(str(r).startswith(str(self.tmpdir)))
 
     def test_rel_dir_returns_rel_directory(self):
         rdir = self.registry.rel_dir("catalogs", "cat1", "eventlist.txt")
         expected = Path(os.path.relpath(self.eventlist.parent, self.tmpdir))
-        self.assertEqual(rdir, expected)
+        self.assertEqual(rdir.resolve(), expected.resolve())
 
     def test_get_attr_traverses_nested_mapping_and_returns_abs_path(self):
         p = self.registry.get_attr("forecasts", "2020-01-01_2020-01-02")

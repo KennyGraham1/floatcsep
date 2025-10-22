@@ -5,6 +5,7 @@ import os
 import sys
 import shutil
 
+
 def from_zenodo(record_id, folder, force=False):
     """
     Download data from a Zenodo repository.
@@ -42,8 +43,7 @@ def from_zenodo(record_id, folder, force=False):
             download_file(url, full_path)
         value, digest = check_hash(full_path, checksum)
         if value != digest:
-            print("Error: Checksum does not match")
-            sys.exit(-1)
+            raise Exception("Error: Checksum does not match")
 
 
 def from_git(url, path, branch=None, depth=1, force=False, **kwargs):
