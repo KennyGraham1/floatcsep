@@ -116,9 +116,7 @@ class Experiment:
 
         workdir = Path(kwargs.get("path", os.getcwd())).resolve()
         if kwargs.get("timestamp", False):
-            rundir = Path(
-                rundir, f"run_{datetime.datetime.utcnow().date().isoformat()}"
-            )
+            rundir = Path(rundir, f"run_{datetime.datetime.utcnow().date().isoformat()}")
         os.makedirs(Path(workdir, rundir), exist_ok=True)
 
         self.name = name if name else "floatingExp"
@@ -360,7 +358,6 @@ class Experiment:
             model (:class:`~floatcsep.model.Model`): Model to give the input
              catalog
         """
-
         self.catalog_repo.set_input_cat(tstring, model)
 
     def set_tasks(self) -> None:
@@ -582,11 +579,14 @@ class Experiment:
         if not exists(target_cat):
             shutil.copy2(self.registry.abs(self.catalog_repo.cat_path), target_cat)
 
-        relative_path = os.path.relpath(
-            self.registry.workdir, os.path.join(self.registry.workdir, self.registry.run_dir)
+        # relative_path = self.registry.rel(self.registry.run_dir)
+        # print(self.registry.workdir.__class__, self.registry.run_dir.__class__)
+        relative_path = Path(
+            os.path.relpath(self.registry.workdir.as_posix(), self.registry.run_dir.as_posix())
         )
         self.registry.workdir = relative_path
-        self.to_yml(repr_config, extended=True)
+
+        self.to_yml(repr_config.as_posix(), extended=True)
 
     def as_dict(self, extra: Sequence = (), extended=False) -> dict:
         """
@@ -604,8 +604,8 @@ class Experiment:
         dict_walk = {
             "name": self.name,
             "config_file": self.config_file,
-            "path": self.registry.workdir.resolve().as_posix(),
-            "run_dir": self.registry.run_dir.resolve().as_posix(),
+            "path": self.registry.workdir.as_posix(),
+            "run_dir": self.registry.rel(self.registry.run_dir).as_posix(),
             "time_config": {
                 i: j
                 for i, j in self.time_config.items()
@@ -616,11 +616,10 @@ class Experiment:
                 for i, j in self.region_config.items()
                 if (i not in ("magnitudes", "depths") or extended)
             },
-            "catalog": self.catalog_repo.cat_path.resolve().as_posix(),
+            "catalog": self.registry.rel(self.catalog_repo.cat_path).as_posix(),
             "models": [i.as_dict() for i in self.models],
             "tests": [i.as_dict() for i in self.tests],
         }
-        print(dict_walk)
         dict_walk.update(extra)
         return parse_nested_dicts(dict_walk)
 
@@ -817,7 +816,9 @@ class ExperimentComparison:
                 results[test.name] = dict.fromkeys(models_orig)
                 for model in models_orig:
                     orig_path = self.original.registry.get_result_key(win_orig[-1], test, model)
-                    repr_path = self.reproduced.registry.get_result_key(win_orig[-1], test, model)
+                    repr_path = self.reproduced.registry.get_result_key(
+                        win_orig[-1], test, model
+                    )
                     results[test.name][model] = {
                         "hash": (self.get_hash(orig_path) == self.get_hash(repr_path)),
                         "byte2byte": filecmp.cmp(orig_path, repr_path),

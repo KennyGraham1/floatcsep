@@ -17,9 +17,9 @@ from floatcsep.infrastructure.repositories import (
 class TestCatalogForecastRepository(unittest.TestCase):
 
     def setUp(self):
-        self.registry = MagicMock(spec=ModelFileRegistry) #todo: Factory registry
+        self.registry = MagicMock(spec=ModelFileRegistry)  # todo: Factory registry
         self.registry.__call__ = MagicMock(return_value="a_duck")
-        self.registry.fmt =  'csv'
+        self.registry.fmt = "csv"
 
     @patch("csep.load_catalog_forecast")
     def test_initialization(self, mock_load_catalog_forecast):
@@ -50,7 +50,7 @@ class TestCatalogForecastRepository(unittest.TestCase):
 class TestGriddedForecastRepository(unittest.TestCase):
 
     def setUp(self):
-        self.registry = MagicMock(spec=ModelFileRegistry) #todo: Factory registry
+        self.registry = MagicMock(spec=ModelFileRegistry)  # todo: Factory registry
         self.registry.fmt = "hdf5"
         self.registry.__call__ = MagicMock(return_value="a_duck")
 

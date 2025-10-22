@@ -19,7 +19,7 @@ def from_zenodo(record_id, folder, force=False):
     Returns:
     """
     # Grab the urls and filenames and checksums
-    r = requests.get(f"https://zenodo.org/api/records/{record_id}", timeout=3)
+    r = requests.get(f"https://zenodo.org/api/records/{record_id}", timeout=30)
     download_urls = [f["links"]["self"] for f in r.json()["files"]]
     filenames = [(f["key"], f["checksum"]) for f in r.json()["files"]]
 
@@ -61,8 +61,7 @@ def from_git(url, path, branch=None, depth=1, force=False, **kwargs):
     Returns:
         the pygit repository
     """
-
-    kwargs.update({"depth": depth})
+    kwargs = dict(kwargs, depth=depth)
     git.refresh()
 
     if os.path.exists(path):
@@ -70,15 +69,13 @@ def from_git(url, path, branch=None, depth=1, force=False, **kwargs):
             shutil.rmtree(path)
         elif os.listdir(path):
             raise ValueError(f"Cannot clone into non-empty directory: {path}")
+
     os.makedirs(path, exist_ok=True)
 
-    try:
-        repo = git.Repo(path)
-    except (git.NoSuchPathError, git.InvalidGitRepositoryError):
-        repo = git.Repo.clone_from(url, path, branch=branch, **kwargs)
-        git_dir = os.path.join(path, ".git")
-        if os.path.isdir(git_dir):
-            shutil.rmtree(git_dir)
+    repo = git.Repo.clone_from(url, path, branch=branch, **kwargs)
+    git_dir = os.path.join(path, ".git")
+    if os.path.isdir(git_dir):
+        shutil.rmtree(git_dir)
 
     return repo
 
@@ -94,10 +91,10 @@ def download_file(url: str, filename: str) -> None:
     progress_bar_length = 72
     block_size = 1024
 
-    r = requests.get(url, timeout=3, stream=True)
+    r = requests.get(url, timeout=30, stream=True)
     total_size = r.headers.get("content-length", False)
     if not total_size:
-        with requests.head(url) as h:
+        with requests.head(url, timeout=30) as h:
             try:
                 total_size = int(h.headers.get("Content-Length", 0))
             except TypeError:

@@ -1,3 +1,4 @@
+import shutil
 import json
 import logging
 import os
@@ -5,7 +6,6 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Callable, Union, Sequence
 
-import git
 import yaml
 from csep.core.forecasts import GriddedForecast, CatalogForecast
 
@@ -73,62 +73,10 @@ class Model(ABC):
         """Creates a forecast based on the model's logic."""
         pass
 
-    def get_source(self, zenodo_id: int = None, giturl: str = None, **kwargs) -> None:
-        """
-        Search, download or clone the model source in the filesystem, zenodo.
-
-        and git, respectively. Identifies if the instance path points to a file
-        or to its parent directory
-
-        Args:
-            zenodo_id (int): Zenodo identifier of the repository. Usually as
-             `https://zenodo.org/record/{zenodo_id}`
-            giturl (str): git remote repository URL from which to clone the
-             source
-            **kwargs: see :func:`~floatcsep.utils.from_zenodo` and
-             :func:`~floatcsep.utils.from_git`
-        """
-
-        if zenodo_id:
-            log.info(f"Retrieving model {self.name} from zenodo id: " f"{zenodo_id}")
-            try:
-                from_zenodo(
-                    zenodo_id,
-                    self.registry.dir if self.registry.fmt else self.registry.path,
-                    force=True,
-                )
-            except (KeyError, TypeError) as msg:
-                raise KeyError(f"Zenodo identifier is not valid: {msg}")
-
-        elif giturl:
-            log.info(f"Retrieving model {self.name} from git url: " f"{giturl}")
-            try:
-                print('model.get_source()',
-                      giturl,
-                      self.registry.dir,
-                      self.registry.fmt,
-                      self.registry.path)
-                from_git(
-                    giturl,
-                    self.registry.dir if self.registry.fmt else self.registry.path,
-                    force=self.force_stage,
-                    **kwargs,
-                )
-            except (git.NoSuchPathError, git.CommandError) as msg:
-                raise git.NoSuchPathError(f"git url was not found {msg}")
-        else:
-            raise FileNotFoundError("Model has no path or identified")
-
-        if not os.path.exists(self.registry.dir) or not os.path.exists(
-            self.registry.get_attr("path")
-        ):
-            print(self.registry.dir)
-            print(self.registry.get_attr("path"))
-            raise FileNotFoundError(
-                f"Directory '{self.registry.dir}' or file {self.registry}' do not exist. "
-                f"Please check the specified 'path' matches the repo "
-                f"structure"
-            )
+    @abstractmethod
+    def get_source(self):
+        """Retrieves the model from a web repository"""
+        pass
 
     def as_dict(self, excluded=("name", "repository", "workdir", "environment")):
         """
@@ -141,7 +89,7 @@ class Model(ABC):
         ]
 
         dict_walk = {i: j for i, j in list_walk if i not in excluded}
-        dict_walk["path"] = dict_walk.pop("registry").path
+        dict_walk["path"] = self.registry.rel(dict_walk.pop("registry").path).as_posix()
 
         return {self.name: parse_nested_dicts(dict_walk)}
 
@@ -215,9 +163,9 @@ class TimeIndependentModel(Model):
         super().__init__(name, **kwargs)
 
         self.forecast_unit = forecast_unit
-        self.registry = ModelRegistry.factory(model_name=name,
-                                              workdir=kwargs.get("workdir", os.getcwd()),
-                                              path=model_path)
+        self.registry = ModelRegistry.factory(
+            model_name=name, workdir=kwargs.get("workdir", os.getcwd()), path=model_path
+        )
         self.repository = ForecastRepository.factory(
             self.registry, model_class=self.__class__.__name__, **kwargs
         )
@@ -233,10 +181,31 @@ class TimeIndependentModel(Model):
 
         if self.force_stage or not self.registry.file_exists("path"):
             os.makedirs(self.registry.dir, exist_ok=True)
-            self.get_source(self.zenodo_id, self.giturl, branch=self.repo_hash)
+            self.get_source()  # now the TI version above
 
         self.registry.build_tree(time_windows=time_windows, model_class=self.__class__.__name__)
 
+    def get_source(self) -> None:
+        """
+        Fetch a single-file forecast into the model directory
+        """
+
+        container = self.registry.dir
+        expected_file = self.registry.path
+
+        os.makedirs(container, exist_ok=True)
+
+        if self.giturl:
+            from_git(self.giturl, str(container), branch=self.repo_hash, force=self.force_stage)
+        elif self.zenodo_id:
+            from_zenodo(self.zenodo_id, str(container), force=True)
+        else:
+            pass
+
+        if not expected_file.exists() or not expected_file.is_file():
+            raise FileNotFoundError(
+                f"Expected TI model file at: {expected_file}\n" f"Fetched into: {container}"
+            )
 
     def get_forecast(
         self, tstring: Union[str, list] = None, region=None
@@ -273,7 +242,7 @@ class TimeDependentModel(Model):
         func_kwargs: dict = None,
         args_file: str = "args.txt",
         input_cat: str = "catalog.csv",
-        fmt: str = 'csv',
+        fmt: str = "csv",
         **kwargs,
     ) -> None:
         """
@@ -297,12 +266,14 @@ class TimeDependentModel(Model):
 
         self.func = func
         self.func_kwargs = func_kwargs or {}
-        self.registry = ModelRegistry.factory(model_name=name,
-                                              workdir=kwargs.get("workdir", os.getcwd()),
-                                              path=model_path,
-                                              fmt=fmt,
-                                              args_file=args_file,
-                                              input_cat=input_cat)
+        self.registry = ModelRegistry.factory(
+            model_name=name,
+            workdir=kwargs.get("workdir", os.getcwd()),
+            path=model_path,
+            fmt=fmt,
+            args_file=args_file,
+            input_cat=input_cat,
+        )
         self.repository = ForecastRepository.factory(
             self.registry, model_class=self.__class__.__name__, **kwargs
         )
@@ -310,10 +281,10 @@ class TimeDependentModel(Model):
         self.force_build = kwargs.get("force_build", False)
         if self.func:
             self.environment = EnvironmentFactory.get_env(
-                self.build, self.name, self.registry.abs(model_path)
+                self.build, self.name, self.registry.path.as_posix()
             )
 
-    def stage(self, time_windows=None, run_mode='sequential', run_dir='') -> None:
+    def stage(self, time_windows=None, run_mode="sequential", run_dir="") -> None:
         """
         Core method to interface a model with the experiment.
 
@@ -335,8 +306,40 @@ class TimeDependentModel(Model):
             model_class=self.__class__.__name__,
             prefix=self.__dict__.get("prefix", self.name),
             run_mode=run_mode,
-            run_dir=run_dir
+            run_dir=run_dir,
         )
+
+    def get_source(self, zenodo_id: int = None, giturl: str = None, **kwargs) -> None:
+        """
+        Search, download or clone the model source in the filesystem from git or zenodo, respectively.
+
+        Args:
+            zenodo_id (int): Zenodo identifier of the repository. Usually as
+             `https://zenodo.org/record/{zenodo_id}`
+            giturl (str): git remote repository URL from which to clone the
+             source
+            **kwargs: see :func:`~floatcsep.utils.from_zenodo` and
+             :func:`~floatcsep.utils.from_git`
+        """
+
+        target_dir = self.registry.path  # TD expects a directory here
+
+        # If forced, start clean so clone/download won’t fail on non-empty
+        if self.force_stage and target_dir.exists():
+
+            shutil.rmtree(target_dir)
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.giturl:
+            from_git(self.giturl, target_dir.as_posix(), branch=self.repo_hash, force=False)
+        elif self.zenodo_id:
+            from_zenodo(self.zenodo_id, target_dir.as_posix(), force=True)
+        else:
+            pass
+
+        if not target_dir.exists() or not target_dir.is_dir():
+            raise FileNotFoundError(f"Expected TD model directory at: {target_dir}")
 
     def get_forecast(
         self, tstring: Union[str, list] = None, region=None
@@ -449,19 +452,19 @@ class TimeDependentModel(Model):
                 """
                 for key, val in src.items():
                     if (
-                            _level < max_depth
-                            and key in dest
-                            and isinstance(dest[key], dict)
-                            and isinstance(val, dict)
+                        _level < max_depth
+                        and key in dest
+                        and isinstance(dest[key], dict)
+                        and isinstance(val, dict)
                     ):
                         nested_update(dest[key], val, max_depth, _level + 1)
                     else:
                         dest[key] = val
 
             if not os.path.exists(filepath):
-                template_file = os.path.join(self.registry.path,
-                                             'input',
-                                             self.registry.args_file)
+                template_file = os.path.join(
+                    self.registry.path, "input", self.registry.args_file
+                )
             else:
                 template_file = filepath
 

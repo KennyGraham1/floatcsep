@@ -6,7 +6,11 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 from dataclasses import dataclass, field
-from floatcsep.infrastructure.registries import ModelFileRegistry, ExperimentFileRegistry, FilepathMixin
+from floatcsep.infrastructure.registries import (
+    ModelFileRegistry,
+    ExperimentFileRegistry,
+    FilepathMixin,
+)
 
 
 @dataclass
@@ -21,7 +25,6 @@ class TestFilepathMixin(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp(prefix="fpmix_")
         self.tmp_path = Path(self.tmpdir)
 
-
         (self.tmp_path / "forecasts").mkdir(parents=True, exist_ok=True)
         (self.tmp_path / "catalogs" / "cat1").mkdir(parents=True, exist_ok=True)
 
@@ -31,14 +34,16 @@ class TestFilepathMixin(unittest.TestCase):
         self.eventlist = self.tmp_path / "catalogs" / "cat1" / "eventlist.txt"
         self.eventlist.write_text("e1\ne2\n")
 
-        self.registry = DummyRegistry(workdir=self.tmpdir,
-                                      forecasts= {
-            "2020-01-01_2020-01-02": "forecasts/f1.csv",
-            "not_exists": "forecasts/does_not_exist.csv",
-        },
-                                      catalogs={
-            "cat1": "catalogs/cat1/eventlist.txt",
-        })
+        self.registry = DummyRegistry(
+            workdir=self.tmpdir,
+            forecasts={
+                "2020-01-01_2020-01-02": "forecasts/f1.csv",
+                "not_exists": "forecasts/does_not_exist.csv",
+            },
+            catalogs={
+                "cat1": "catalogs/cat1/eventlist.txt",
+            },
+        )
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
@@ -48,12 +53,15 @@ class TestFilepathMixin(unittest.TestCase):
 
     def test_parse_arg_object_with_name(self):
         class Obj:
-            def __init__(self, name): self.name = name
+            def __init__(self, name):
+                self.name = name
+
         o = Obj("with_name")
         self.assertEqual(self.registry._parse_arg(o), "with_name")
 
     def test_parse_arg_callable_dunder_name(self):
         def myfunc(): ...
+
         self.assertEqual(self.registry._parse_arg(myfunc), "myfunc")
 
     def test_parse_arg_list_uses_timewindow2str(self):
@@ -115,16 +123,14 @@ class TestModelFileRegistry(unittest.TestCase):
 
     def setUp(self):
         self.registry_for_filebased_model = ModelFileRegistry(
-            model_name='test',
-            workdir="/test/workdir",
-            path="/test/workdir/model.txt"
+            model_name="test", workdir="/test/workdir", path="/test/workdir/model.txt"
         )
         self.registry_for_folderbased_model = ModelFileRegistry(
-            model_name='test',
+            model_name="test",
             workdir="/test/workdir",
             path="/test/workdir/model",
             args_file="args.txt",
-            input_cat="catalog.csv"
+            input_cat="catalog.csv",
         )
 
     def test_call(self):
@@ -165,7 +171,9 @@ class TestModelFileRegistry(unittest.TestCase):
     @patch("floatcsep.infrastructure.registries.exists")
     def test_file_exists(self, mock_exists):
         mock_exists.return_value = True
-        self.registry_for_filebased_model.get_attr = MagicMock(return_value="/test/path/file.txt")
+        self.registry_for_filebased_model.get_attr = MagicMock(
+            return_value="/test/path/file.txt"
+        )
         self.assertTrue(self.registry_for_filebased_model.file_exists("file.txt"))
 
     @patch("os.makedirs")
@@ -200,7 +208,7 @@ class TestExperimentFileRegistry(unittest.TestCase):
 
     def test_initialization(self):
         self.assertEqual(self.registry.workdir, Path("/test/workdir"))
-        self.assertEqual(self.registry.run_dir, Path("results"))
+        self.assertEqual(self.registry.run_dir, Path("/test/workdir/results"))
         self.assertEqual(self.registry.results, {})
         self.assertEqual(self.registry.test_catalogs, {})
         self.assertEqual(self.registry.figures, {})
@@ -235,11 +243,7 @@ class TestExperimentFileRegistry(unittest.TestCase):
 
     def test_get_result_key(self):
         self.registry.results = {
-            "2023-01-01_2023-01-02": {
-                "Test1": {
-                    "Model1": "some/path/to/result.json"
-                }
-            }
+            "2023-01-01_2023-01-02": {"Test1": {"Model1": "some/path/to/result.json"}}
         }
         result = self.registry.get_result_key("2023-01-01_2023-01-02", "Test1", "Model1")
         self.assertTrue(result.endswith("results/some/path/to/result.json"))
@@ -250,7 +254,7 @@ class TestExperimentFileRegistry(unittest.TestCase):
                 "Test1": "some/path/to/figure.png",
                 "catalog_map": "some/path/to/catalog_map.png",
                 "catalog_time": "some/path/to/catalog_time.png",
-                "forecasts": {"Model1": "some/path/to/forecast.png"}
+                "forecasts": {"Model1": "some/path/to/forecast.png"},
             }
         }
         result = self.registry.get_figure_key("2023-01-01_2023-01-02", "Test1")
@@ -260,11 +264,7 @@ class TestExperimentFileRegistry(unittest.TestCase):
     def test_result_exist(self, mock_exists):
         mock_exists.return_value = True
         self.registry.results = {
-            "2023-01-01_2023-01-02": {
-                "Test1": {
-                    "Model1": "some/path/to/result.json"
-                }
-            }
+            "2023-01-01_2023-01-02": {"Test1": {"Model1": "some/path/to/result.json"}}
         }
         result = self.registry.result_exist("2023-01-01_2023-01-02", "Test1", "Model1")
         self.assertTrue(result)

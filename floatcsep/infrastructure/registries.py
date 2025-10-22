@@ -14,11 +14,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("floatLogger")
 
+
 class FilepathMixin:
     """
     Small mixin to provide filepath management functionality to Registries that uses files to
     store objects
     """
+
     workdir: Path
     path: Path
 
@@ -32,7 +34,7 @@ class FilepathMixin:
         return self.path.parents[0]
 
     @staticmethod
-    def _parse_arg(arg) -> Union[str , list[str]]:
+    def _parse_arg(arg) -> Union[str, list[str]]:
         if isinstance(arg, (list, tuple)):
             return timewindow2str(arg)
         elif isinstance(arg, str):
@@ -91,7 +93,7 @@ class FilepathMixin:
         _dir = _path.parents[0]
         return _dir
 
-    def rel(self, *paths: Union[Path | str | Sequence[str | Path]] ) -> Path:
+    def rel(self, *paths: Union[Path | str | Sequence[str | Path]]) -> Path:
         """
         Gets the relative path of an item, relative to the Registry workdir
 
@@ -133,6 +135,7 @@ class FilepathMixin:
         file_abspath = self.get_attr(*args)
         return exists(file_abspath)
 
+
 class ModelRegistry(ABC):
     @abstractmethod
     def get_input_catalog_key(self, tstring: str) -> str:
@@ -147,17 +150,20 @@ class ModelRegistry(ABC):
         pass
 
     @classmethod
-    def factory(cls, registry_type: str = 'file', **kwargs) -> Union["ModelFileRegistry", "ModelHDF5Registry"]:
+    def factory(
+        cls, registry_type: str = "file", **kwargs
+    ) -> Union["ModelFileRegistry", "ModelHDF5Registry"]:
         """Factory method. Instantiate first on any explicit option provided in the model
         configuration.
         """
-        if registry_type == 'file':
+        if registry_type == "file":
             return ModelFileRegistry(**kwargs)
 
-        elif registry_type == 'hdf5':
+        elif registry_type == "hdf5":
             return ModelHDF5Registry(**kwargs)
         else:
             raise Exception("No valid model management schema was selected")
+
 
 class ModelFileRegistry(ModelRegistry, FilepathMixin):
     def __init__(
@@ -181,17 +187,15 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
 
         self.model_name = model_name
         self.workdir = Path(workdir)
-        self.path = Path(path)
+        self.path = self.abs(Path(path))
 
-        self.args_file = self.rel(self.path, args_file) if args_file else None
-        self.input_cat = self.rel(self.path, input_cat) if input_cat else None
-
+        self.args_file = args_file if args_file else None
+        self.input_cat = input_cat if input_cat else None
         self.forecasts = {}
         self.input_args = {}
         self.input_cats = {}
         self.input_store = None
         self._fmt = fmt
-
 
     @property
     def fmt(self) -> str:
@@ -265,8 +269,8 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         time_windows: Sequence[Sequence[datetime]] = None,
         model_class: str = "TimeIndependentModel",
         prefix: str = None,
-        run_mode: str = 'sequential',
-        run_dir: Optional[str] = None
+        run_mode: str = "sequential",
+        run_dir: Optional[str] = None,
     ) -> None:
         """
         Creates the run directory, and reads the file structure inside.
@@ -295,20 +299,20 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             for _, folder_ in dirtree.items():
                 os.makedirs(folder_, exist_ok=True)
 
-            if run_mode == 'sequential':
+            if run_mode == "sequential":
                 self.input_args = {
-                    win: Path(self.path, 'input', self.args_file) for win in windows
+                    win: Path(self.path, "input", self.args_file) for win in windows
                 }
                 self.input_cats = {
-                    win: Path(self.path, 'input', self.input_cat) for win in windows
+                    win: Path(self.path, "input", self.input_cat) for win in windows
                 }
-            elif run_mode == 'parallel':
+            elif run_mode == "parallel":
                 self.input_args = {
-                    win: Path(run_dir, win,  'input', self.model_name, self.args_file)
+                    win: Path(run_dir, win, "input", self.model_name, self.args_file)
                     for win in windows
                 }
                 self.input_cats = {
-                    win: Path(run_dir, win,  'input', self.model_name, self.input_cat)
+                    win: Path(run_dir, win, "input", self.model_name, self.input_cat)
                     for win in windows
                 }
 
@@ -330,16 +334,21 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             "forecasts": self.forecasts,
         }
 
+
 class ModelHDF5Registry(ModelRegistry):
 
     def __init__(self, workdir: str, path: str):
         pass
+
     def get_input_catalog_key(self, tstring: str) -> str:
-        return ''
+        return ""
+
     def get_forecast_key(self, tstring: str) -> str:
-        return ''
+        return ""
+
     def get_args_key(self, tstring: str) -> str:
-        return ''
+        return ""
+
 
 class ExperimentRegistry(ABC):
     @abstractmethod
@@ -372,15 +381,18 @@ class ExperimentRegistry(ABC):
         pass
 
     @classmethod
-    def factory(cls, registry_type: str = 'file', **kwargs) -> Optional["ExperimentFileRegistry"]:
+    def factory(
+        cls, registry_type: str = "file", **kwargs
+    ) -> Optional["ExperimentFileRegistry"]:
         """Factory method. Instantiate first on any explicit option provided in the experiment
         configuration.
         """
 
-        if registry_type == 'file':
+        if registry_type == "file":
             return ExperimentFileRegistry(**kwargs)
         else:
             return None
+
 
 class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
     """
@@ -398,7 +410,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
             run_dir: The directory in which the results will be stored.
         """
         self.workdir = Path(workdir)
-        self.run_dir = Path(run_dir)
+        self.run_dir = self.abs(Path(run_dir))
         self.results = {}
         self.test_catalogs = {}
         self.figures = {}
@@ -510,7 +522,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         time_windows: Sequence[Sequence[datetime]],
         models: Sequence["Model"],
         tests: Sequence["Evaluation"],
-        run_mode: str = 'sequential'
+        run_mode: str = "sequential",
     ) -> None:
         """
         Creates the run directory and reads the file structure inside.
@@ -529,8 +541,8 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
 
         run_folder = self.run_dir
         subfolders = ["catalog", "evaluations", "figures"]
-        if run_mode == 'parallel':
-            subfolders.append('input')
+        if run_mode == "parallel":
+            subfolders.append("input")
         dirtree = {
             win: {folder: self.abs(run_folder, win, folder) for folder in subfolders}
             for win in windows
@@ -540,8 +552,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         for tw, tw_folder in dirtree.items():
             for _, folder_ in tw_folder.items():
                 os.makedirs(folder_, exist_ok=True)
-                if run_mode == 'parallel' and folder_.endswith('input'):
-                    print('a')
+                if run_mode == "parallel" and folder_.name == "input":
                     for model in models:
                         os.makedirs(join(folder_, model), exist_ok=True)
         results = {
@@ -578,4 +589,3 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
     def as_dict(self) -> Path:
 
         return self.workdir
-

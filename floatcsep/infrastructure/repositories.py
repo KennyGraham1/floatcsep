@@ -13,8 +13,12 @@ from csep.core.forecasts import GriddedForecast, CatalogForecast
 from csep.models import EvaluationResult
 from csep.utils.time_utils import decimal_year
 
-from floatcsep.utils.file_io import GriddedForecastParsers, CatalogForecastParsers, \
-    CatalogSerializer, CatalogParser
+from floatcsep.utils.file_io import (
+    GriddedForecastParsers,
+    CatalogForecastParsers,
+    CatalogSerializer,
+    CatalogParser,
+)
 from floatcsep.infrastructure.registries import (
     ExperimentRegistry,
     ModelRegistry,
@@ -106,8 +110,8 @@ class CatalogRepository:
         cat_path = self.registry.abs(self.cat_path)
 
         fmt = splitext(cat_path)[-1]
-        reader = getattr(CatalogParser, 'json')
-        writer = getattr(CatalogSerializer, 'json')
+        reader = getattr(CatalogParser, "json")
+        writer = getattr(CatalogSerializer, "json")
         if callable(self._catalog):
             if isfile(self.cat_path):
                 return reader(self.cat_path)
@@ -195,7 +199,7 @@ class CatalogRepository:
 
         return sub_cat
 
-    def set_input_cat(self, tstring: str, model: "Model", fmt: str ='ascii') -> None:
+    def set_input_cat(self, tstring: str, model: "Model", fmt: str = "ascii") -> None:
         """
         Filters the complete experiment catalog to input sub-catalog filtered to the beginning
         of the test time-window.
@@ -213,7 +217,7 @@ class CatalogRepository:
         writer = getattr(CatalogSerializer, fmt)
         writer(catalog=sub_cat, filename=input_cat_name)
 
-    def set_test_cat(self, tstring: str, fmt: str = 'json') -> None:
+    def set_test_cat(self, tstring: str, fmt: str = "json") -> None:
         """
         Filters the complete experiment catalog to a test sub-catalog bounded by the test
         time-window. Writes it to filepath defined in :attr:`Experiment.registry`
@@ -326,7 +330,10 @@ class CatalogForecastRepository(ForecastRepository):
         self.forecasts = {}
 
     def load_forecast(
-        self, tstring: Union[str, list], region=None, n_sims=None,
+        self,
+        tstring: Union[str, list],
+        region=None,
+        n_sims=None,
     ) -> Union[CatalogForecast, list[CatalogForecast]]:
         """
         Returns a forecast object or a sequence of them for a set of time window strings.
@@ -351,14 +358,15 @@ class CatalogForecastRepository(ForecastRepository):
         fmt = self.registry.fmt
         f_parser = getattr(CatalogForecastParsers, fmt[1:] if fmt.endswith(".") else fmt)
 
-        forecast_ = f_parser(fc_path,
-                             start_time=start_date,
-                             end_time=end_date,
-                             n_cat=n_sims,
-                             region=region,
-                             apply_filters=True,
-                             filter_spatial=True,
-                             )
+        forecast_ = f_parser(
+            fc_path,
+            start_time=start_date,
+            end_time=end_date,
+            n_cat=n_sims,
+            region=region,
+            apply_filters=True,
+            filter_spatial=True,
+        )
         return forecast_
 
     def remove(self, tstring: Union[str, Sequence[str]]):
@@ -372,6 +380,7 @@ class GriddedForecastRepository(ForecastRepository):
     avoid parsing files repeatedly (Skip for large files).
 
     """
+
     def __init__(self, registry: ModelFileRegistry, **kwargs):
         """
 
@@ -459,6 +468,7 @@ class ResultsRepository:
     """
     The class is responsible to access, read and write the results of a given evaluation
     """
+
     def __init__(self, registry: ExperimentRegistry):
         """
 

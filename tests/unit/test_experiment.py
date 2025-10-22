@@ -75,7 +75,7 @@ class TestExperiment(TestCase):
         dict_ = {
             "name": "test",
             "path": os.getcwd(),
-            "run_dir": Path("results").resolve().as_posix(),
+            "run_dir": os.path.relpath("results", os.getcwd()),
             "config_file": None,
             "models": [],
             "tests": [],
@@ -94,7 +94,7 @@ class TestExperiment(TestCase):
                 "depth_min": -2,
                 "depth_max": 70,
             },
-            "catalog": _cat,
+            "catalog": os.path.relpath(_cat, os.getcwd()),
         }
         self.assertEqual(dict_, exp_a.as_dict())
 
@@ -142,7 +142,10 @@ class TestExperiment(TestCase):
         )
         exp.stage_models()
 
-        self.assertEqual(exp.models[0].registry.path.resolve(), Path(f"{_dir}/../artifacts/models/model.csv").resolve())
+        self.assertEqual(
+            exp.models[0].registry.path.resolve(),
+            Path(f"{_dir}/../artifacts/models/model.csv").resolve(),
+        )
 
     def test_set_tests(self):
         test_cfg = os.path.normpath(

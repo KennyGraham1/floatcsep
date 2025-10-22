@@ -147,8 +147,9 @@ class TaskGraph:
         self.tasks[task] = []
         self.ntasks += 1
 
-    def add_dependency(self, task, dep_inst: Union[object, str] = None, dep_meth: str = None,
-                       dkw: Any = None):
+    def add_dependency(
+        self, task, dep_inst: Union[object, str] = None, dep_meth: str = None, dkw: Any = None
+    ):
         """
         Adds a dependency to a task already within the graph.
 

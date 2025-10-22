@@ -127,4 +127,3 @@ class TestModelRepositoryIntegration(TestCase):
             model.registry.build_tree([[start, end]])
             forecast = model.get_forecast(timestring)
             numpy.testing.assert_almost_equal(220.0, forecast.data.sum())
-

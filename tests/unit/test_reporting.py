@@ -59,6 +59,5 @@ class TestMarkdownReport(unittest.TestCase):
             mock_file().writelines.assert_called_with(["# Test Title\n", "Some content\n"])
 
 
-
 if __name__ == "__main__":
     unittest.main()

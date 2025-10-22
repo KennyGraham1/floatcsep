@@ -62,8 +62,6 @@ def set_console_log_level(log_level):
             handler.setLevel(log_level)
 
 
-
-
 def log_models_tree(log, experiment_registry, time_windows):
     """
     Logs the forecasts for all models managed by this ExperimentFileRegistry.
@@ -112,7 +110,9 @@ def log_results_tree(log, experiment_registry):
 
                 for model_name, result_path in models.items():
                     total_results += 1
-                    result_full_path = experiment_registry.get_result_key(timewindow, test_name, model_name)
+                    result_full_path = experiment_registry.get_result_key(
+                        timewindow, test_name, model_name
+                    )
                     if os.path.exists(result_full_path):
                         results_exist_count += 1
                     else:

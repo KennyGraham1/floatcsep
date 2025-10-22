@@ -90,3 +90,9 @@ class ReproduceExamples(DataTest):
         cfg = self.get_rerunpath("f")
         self.repr_evaluation(cfg)
         self.assertEqual(1, 1)
+
+
+if __name__ == "__main__":
+
+    cl = ReproduceExamples
+    cl.test_case_c()
