@@ -138,6 +138,7 @@ class TestModelFileRegistry(unittest.TestCase):
             path="/test/workdir/model",
             args_file="args.txt",
             input_cat="catalog.csv",
+            fmt="csv",
         )
 
     def test_call(self):
@@ -206,6 +207,127 @@ class TestModelFileRegistry(unittest.TestCase):
         )
         self.assertIn("2023-01-01_2023-01-02", self.registry_for_folderbased_model.forecasts)
         self.assertIn("2023-01-02_2023-01-03", self.registry_for_folderbased_model.forecasts)
+
+    @patch("os.makedirs")
+    def test_build_tree_td_serial_inputs_under_model_input(self, mk):
+        """TimeDependent + serial: inputs live under model/input, forecasts under model/forecasts"""
+        win = [datetime(2023, 1, 1), datetime(2023, 1, 2)]
+        winstr = "2023-01-01_2023-01-02"
+
+        self.registry_for_folderbased_model.build_tree(
+            time_windows=[win],
+            model_class="TimeDependentModel",
+            prefix="forecast",
+            run_mode="serial",  # default, but explicit for clarity
+            stage_dir="results",  # ignored in serial mode
+        )
+
+        # Inputs should be under model/input
+        expected_input_dir = Path("/test/workdir/model/input")
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_args[winstr],
+            expected_input_dir / "args.txt",
+        )
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_cats[winstr],
+            expected_input_dir / "catalog.csv",
+        )
+
+        # Forecasts stay under model/forecasts
+        self.assertEqual(
+            self.registry_for_folderbased_model.forecasts[winstr],
+            Path("/test/workdir/model/forecasts") / "forecast_2023-01-01_2023-01-02.csv",
+        )
+
+        # get_input_dir should point to the per-window input dir
+        self.assertEqual(
+            self.registry_for_folderbased_model.get_input_dir(winstr),
+            expected_input_dir,
+        )
+
+    @patch("os.makedirs")
+    def test_build_tree_td_parallel_results_staging(self, mk):
+        """TimeDependent + parallel + results: inputs under results/<win>/input/<model>"""
+        win1 = [datetime(2023, 1, 1), datetime(2023, 1, 2)]
+        win2 = [datetime(2023, 1, 2), datetime(2023, 1, 3)]
+        w1, w2 = "2023-01-01_2023-01-02", "2023-01-02_2023-01-03"
+
+        self.registry_for_folderbased_model.build_tree(
+            time_windows=[win1, win2],
+            model_class="TimeDependentModel",
+            prefix="forecast",
+            run_mode="parallel",
+            stage_dir="/exp/results",
+        )
+
+        base1 = Path("/exp/results") / w1 / "input" / "test"
+        base2 = Path("/exp/results") / w2 / "input" / "test"
+
+        self.assertEqual(self.registry_for_folderbased_model.input_args[w1], base1 / "args.txt")
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_cats[w1], base1 / "catalog.csv"
+        )
+        self.assertEqual(self.registry_for_folderbased_model.input_args[w2], base2 / "args.txt")
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_cats[w2], base2 / "catalog.csv"
+        )
+
+        # Forecasts still under model/forecasts
+        self.assertEqual(
+            self.registry_for_folderbased_model.forecasts[w1],
+            Path("/test/workdir/model/forecasts") / "forecast_2023-01-01_2023-01-02.csv",
+        )
+        self.assertEqual(
+            self.registry_for_folderbased_model.forecasts[w2],
+            Path("/test/workdir/model/forecasts") / "forecast_2023-01-02_2023-01-03.csv",
+        )
+
+        # get_input_dir
+        self.assertEqual(self.registry_for_folderbased_model.get_input_dir(w1), base1)
+        self.assertEqual(self.registry_for_folderbased_model.get_input_dir(w2), base2)
+
+    @patch("os.makedirs")
+    @patch("tempfile.gettempdir", return_value="/tmp")
+    def test_build_tree_td_parallel_tmp_staging(self, mk_tmp, mk_dirs):
+        """TimeDependent + parallel + tmp: inputs under /tmp/floatcsep/<run_id>/<win>/input/<model>"""
+        win = [datetime(2023, 2, 1), datetime(2023, 2, 2)]
+        winstr = "2023-02-01_2023-02-02"
+
+        self.registry_for_folderbased_model.build_tree(
+            time_windows=[win],
+            model_class="TimeDependentModel",
+            prefix="forecast",
+            run_mode="parallel",
+            stage_dir="tmp",
+            run_id="run42",
+        )
+
+        expected_input_dir = Path("/tmp/floatcsep/run42") / winstr / "input" / "test"
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_args[winstr],
+            expected_input_dir / "args.txt",
+        )
+        self.assertEqual(
+            self.registry_for_folderbased_model.input_cats[winstr],
+            expected_input_dir / "catalog.csv",
+        )
+
+        # Forecasts unchanged (model-local)
+        self.assertEqual(
+            self.registry_for_folderbased_model.forecasts[winstr],
+            Path("/test/workdir/model/forecasts") / "forecast_2023-02-01_2023-02-02.csv",
+        )
+
+        # get_input_dir points to tmp path
+        self.assertEqual(
+            self.registry_for_folderbased_model.get_input_dir(winstr),
+            expected_input_dir,
+        )
+
+    def test_get_input_dir_keyerror_if_not_built(self):
+        """Calling get_input_dir before build_tree (or with an unknown window) raises KeyError"""
+        with self.assertRaises(KeyError):
+            self.registry_for_folderbased_model.get_input_dir("2020-01-01_2020-01-02")
 
 
 class TestExperimentFileRegistry(unittest.TestCase):

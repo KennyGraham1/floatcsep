@@ -93,7 +93,9 @@ def generate_report(experiment, timewindow=-1):
         )
         for model in experiment.models:
             try:
-                fig_path = experiment.registry.get_figure_key(timestr, f"{test.name}_{model.name}")
+                fig_path = experiment.registry.get_figure_key(
+                    timestr, f"{test.name}_{model.name}"
+                )
                 width = test.plot_args[0].get("figsize", [4])[0] * 96
                 report.add_figure(
                     f"{test.name}: {model.name}",

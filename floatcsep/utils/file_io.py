@@ -17,6 +17,7 @@ from csep.utils.time_utils import strptime_to_utc_epoch
 
 log = logging.getLogger(__name__)
 
+
 class CatalogSerializer:
 
     @staticmethod
@@ -26,6 +27,7 @@ class CatalogSerializer:
     @staticmethod
     def json(catalog, filename: str) -> None:
         catalog.write_json(filename=filename)
+
 
 class CatalogParser:
 
@@ -42,10 +44,23 @@ class CatalogForecastParsers:
 
     @staticmethod
     def csv(filename, **kwargs):
-        csep_headers = ['lon', 'lat', 'magnitude', 'time_string', 'depth', 'catalog_id',
-                        'event_id']
-        hermes_headers = ['realization_id', 'magnitude', 'depth', 'latitude', 'longitude',
-                          'time']
+        csep_headers = [
+            "lon",
+            "lat",
+            "magnitude",
+            "time_string",
+            "depth",
+            "catalog_id",
+            "event_id",
+        ]
+        hermes_headers = [
+            "realization_id",
+            "magnitude",
+            "depth",
+            "latitude",
+            "longitude",
+            "time",
+        ]
         headers_df = pd.read_csv(filename, nrows=0).columns.str.strip().to_list()
 
         # CSEP headers
@@ -54,16 +69,15 @@ class CatalogForecastParsers:
             return csep.load_catalog_forecast(filename, **kwargs)
 
         elif headers_df == hermes_headers:
-            return csep.load_catalog_forecast(filename,
-                                              catalog_loader=CatalogForecastParsers.load_hermes_catalog,
-                                              **kwargs
-                                              )
+            return csep.load_catalog_forecast(
+                filename, catalog_loader=CatalogForecastParsers.load_hermes_catalog, **kwargs
+            )
         else:
-            raise Exception('Catalog Forecast could not be loaded')
+            raise Exception("Catalog Forecast could not be loaded")
 
     @staticmethod
     def load_hermes_catalog(filename, **kwargs):
-        """ Loads hermes synthetic catalogs in csep-ascii format.
+        """Loads hermes synthetic catalogs in csep-ascii format.
 
         This function can load multiple catalogs stored in a single file. This typically called to
         load a catalog-based forecast, but could also load a collection of catalogs stored in the same file
@@ -85,7 +99,7 @@ class CatalogForecastParsers:
             return val
 
         def is_header_line(line):
-            if line[0].lower() == 'realization_id':
+            if line[0].lower() == "realization_id":
                 return True
             else:
                 return False
@@ -102,11 +116,11 @@ class CatalogForecastParsers:
             origin_time = line[5]
             if origin_time:
                 try:
-                    origin_time = strptime_to_utc_epoch(origin_time,
-                                                        format='%Y-%m-%d %H:%M:%S.%f')
+                    origin_time = strptime_to_utc_epoch(
+                        origin_time, format="%Y-%m-%d %H:%M:%S.%f"
+                    )
                 except ValueError:
-                    origin_time = strptime_to_utc_epoch(origin_time,
-                                                        format='%Y-%m-%d %H:%M:%S')
+                    origin_time = strptime_to_utc_epoch(origin_time, format="%Y-%m-%d %H:%M:%S")
 
             event_id = 0
             # temporary event
@@ -115,8 +129,8 @@ class CatalogForecastParsers:
 
         # handle all catalogs in single file
         if os.path.isfile(filename):
-            with open(filename, 'r', newline='') as input_file:
-                catalog_reader = csv.reader(input_file, delimiter=',')
+            with open(filename, "r", newline="") as input_file:
+                catalog_reader = csv.reader(input_file, delimiter=",")
                 # csv treats everything as a string convert to correct types
                 events = []
                 # all catalogs should start at zero
@@ -130,7 +144,7 @@ class CatalogForecastParsers:
                     temp_event, catalog_id = read_catalog_line(line)
                     empty = False
                     # OK if event_id is empty
-                    if all([val in (None, '') for val in temp_event[1:]]):
+                    if all([val in (None, "") for val in temp_event[1:]]):
                         empty = True
                     # first event is when prev_id is none, catalog_id should always start at zero
                     if prev_id is None:
@@ -147,7 +161,7 @@ class CatalogForecastParsers:
                             continue
                     # accumulate event if catalog_id is the same as previous event
                     if catalog_id == prev_id:
-                        if not all([val in (None, '') for val in temp_event]):
+                        if not all([val in (None, "") for val in temp_event]):
                             events.append(temp_event)
                         prev_id = catalog_id
                     # create and yield class if the events are from different catalogs
@@ -166,9 +180,11 @@ class CatalogForecastParsers:
                         num_empty_catalogs = catalog_id - prev_id - 1
                         # first yield empty catalog classes
                         for id in range(num_empty_catalogs):
-                            yield CSEPCatalog(data=[],
-                                              catalog_id=catalog_id - num_empty_catalogs + id,
-                                              **kwargs)
+                            yield CSEPCatalog(
+                                data=[],
+                                catalog_id=catalog_id - num_empty_catalogs + id,
+                                **kwargs,
+                            )
                         prev_id = catalog_id
                         # add event to new event list
                         if not empty:
@@ -177,14 +193,16 @@ class CatalogForecastParsers:
                             events = []
                     else:
                         raise ValueError(
-                            "catalog_id should be monotonically increasing and events should be ordered by catalog_id")
+                            "catalog_id should be monotonically increasing and events should be ordered by catalog_id"
+                        )
                 # yield final catalog, note: since this is just loading catalogs, it has no idea how many should be there
                 cat = CSEPCatalog(data=events, catalog_id=prev_id, **kwargs)
                 yield cat
 
         elif os.path.isdir(filename):
             raise NotImplementedError(
-                "reading from directory or batched files not implemented yet!")
+                "reading from directory or batched files not implemented yet!"
+            )
 
 
 class GriddedForecastParsers:

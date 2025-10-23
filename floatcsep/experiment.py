@@ -77,7 +77,7 @@ class Experiment:
 
         model_config (str): Path to the models' configuration file
         test_config (str): Path to the evaluations' configuration file
-        run_mode (str): 'sequential' or 'parallel'
+        run_mode (str): 'serial' or 'parallel'
         default_test_kwargs (dict): Default values for the testing
          (seed, number of simulations, etc.)
         postprocess (dict): Contains the instruction for postprocessing
@@ -102,7 +102,7 @@ class Experiment:
         postprocess: str = None,
         default_test_kwargs: dict = None,
         rundir: str = "results",
-        run_mode: str = "sequential",
+        run_mode: str = "serial",
         report_hook: dict = None,
         **kwargs,
     ) -> None:
@@ -123,6 +123,7 @@ class Experiment:
         self.registry = ExperimentRegistry.factory(workdir=workdir, run_dir=rundir)
         self.results_repo = ResultsRepository(self.registry)
         self.catalog_repo = CatalogRepository(self.registry)
+        self.run_id = "run"
 
         self.config_file = kwargs.get("config_file", None)
         self.original_config = kwargs.get("original_config", None)
@@ -285,12 +286,14 @@ class Experiment:
         for model in self.models:
             if model.name == name:
                 return model
+        raise Exception(f"No existing model with name {name}")
 
-    def get_test(self, name: str) -> Model:
+    def get_test(self, name: str) -> Evaluation:
         """Returns an Evaluation by its name string."""
         for test in self.tests:
             if test.name == name:
                 return test
+        raise Exception(f"No existing evaluation with name {name}")
 
     def stage_models(self) -> None:
         """
@@ -298,7 +301,12 @@ class Experiment:
         """
         log.info("Staging models")
         for i in self.models:
-            i.stage(self.time_windows, run_mode=self.run_mode, run_dir=self.run_dir)
+            i.stage(
+                self.time_windows,
+                run_mode=self.run_mode,
+                stage_dir=self.registry.run_dir,
+                run_id=self.run_id,
+            )
             self.registry.add_model_registry(i)
 
     def set_tests(self, test_config: Union[str, Dict, List]) -> list:
@@ -365,7 +373,7 @@ class Experiment:
         Lazy definition of the experiment core tasks by wrapping instances,
         methods and arguments. Creates a graph with task nodes, while assigning
         task-parents to each node, depending on each Evaluation signature.
-        The tasks can then be run sequentially as a list or asynchronous
+        The tasks can then be run in serial as a list or asynchronous
         using the graph's node dependencies.
         For instance:
 

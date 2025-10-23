@@ -1,13 +1,13 @@
-- etas:
-    giturl: https://git.gfz-potsdam.de/csep/it_experiment/models/vetas.git
-    repo_hash: v3.2
-    path: models/etas
-    args_file: args.json
-    func: etas-run
-    func_kwargs:
-      n_sims: 100
-      mc: 3.5
-      seed: 23
+#- etas:
+#    giturl: https://git.gfz-potsdam.de/csep/it_experiment/models/vetas.git
+#    repo_hash: v3.2
+#    path: models/etas
+#    args_file: args.json
+#    func: etas-run
+#    func_kwargs:
+#      n_sims: 100
+#      mc: 3.5
+#      seed: 23
 - Poisson Mock:
     giturl: https://git.gfz-potsdam.de/csep/it_experiment/models/pymock.git
     repo_hash: v0.1

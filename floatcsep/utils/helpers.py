@@ -77,7 +77,6 @@ def parse_csep_func(func):
             floatcsep.utils.file_io.HDF5Serializer,
             floatcsep.utils.file_io.GriddedForecastParsers,
             floatcsep.utils.file_io.CatalogForecastParsers,
-
         ]
         for module in _target_modules:
             try:
@@ -257,7 +256,7 @@ def timewindow2str(datetimes: Sequence) -> Union[str, list[str]]:
 
 
 def str2timewindow(
-    tw_string: Union[str, Sequence[str]]
+    tw_string: Union[str, Sequence[str]],
 ) -> Union[Sequence[datetime], Sequence[Sequence[datetime]]]:
     """
     Converts a string representation of a time window into a list of datetimes representing the
