@@ -302,27 +302,55 @@ class TestModelFileRegistry(unittest.TestCase):
             run_id="run42",
         )
 
-        expected_input_dir = Path("/tmp/floatcsep/run42") / winstr / "input" / "test"
-        self.assertEqual(
-            self.registry_for_folderbased_model.input_args[winstr],
-            expected_input_dir / "args.txt",
-        )
-        self.assertEqual(
-            self.registry_for_folderbased_model.input_cats[winstr],
-            expected_input_dir / "catalog.csv",
-        )
+        try:
+            # FOR LINUX
+            expected_input_dir = Path("/tmp/floatcsep/run42") / winstr / "input" / "test"
+            self.assertEqual(
+                self.registry_for_folderbased_model.input_args[winstr],
+                expected_input_dir / "args.txt",
+            )
+            self.assertEqual(
+                self.registry_for_folderbased_model.input_cats[winstr],
+                expected_input_dir / "catalog.csv",
+            )
 
-        # Forecasts unchanged (model-local)
-        self.assertEqual(
-            self.registry_for_folderbased_model.forecasts[winstr],
-            Path("/test/workdir/model/forecasts") / "forecast_2023-02-01_2023-02-02.csv",
-        )
+            # Forecasts unchanged (model-local)
+            self.assertEqual(
+                self.registry_for_folderbased_model.forecasts[winstr],
+                Path("/test/workdir/model/forecasts") / "forecast_2023-02-01_2023-02-02.csv",
+            )
 
-        # get_input_dir points to tmp path
-        self.assertEqual(
-            self.registry_for_folderbased_model.get_input_dir(winstr),
-            expected_input_dir,
-        )
+            # get_input_dir points to tmp path
+            self.assertEqual(
+                self.registry_for_folderbased_model.get_input_dir(winstr),
+                expected_input_dir,
+            )
+        except AssertionError as msg:
+            ### FOR MACOS
+            expected_input_dir = Path("/private/tmp/floatcsep/run42") / winstr / "input" / "test"
+            self.assertEqual(
+                self.registry_for_folderbased_model.input_args[winstr],
+                expected_input_dir / "args.txt",
+            )
+            self.assertEqual(
+                self.registry_for_folderbased_model.input_cats[winstr],
+                expected_input_dir / "catalog.csv",
+            )
+
+            # Forecasts unchanged (model-local)
+            self.assertEqual(
+                self.registry_for_folderbased_model.forecasts[winstr],
+                Path("/test/workdir/model/forecasts") / "forecast_2023-02-01_2023-02-02.csv",
+            )
+
+            # get_input_dir points to tmp path
+            self.assertEqual(
+                self.registry_for_folderbased_model.get_input_dir(winstr),
+                expected_input_dir,
+            )
+
+
+
 
     def test_get_input_dir_keyerror_if_not_built(self):
         """Calling get_input_dir before build_tree (or with an unknown window) raises KeyError"""
