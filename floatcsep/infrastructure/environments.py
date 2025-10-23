@@ -277,7 +277,7 @@ class CondaManager(EnvironmentManager):
         cmd = [
             "bash",
             "-c",
-            f"{self.package_manager} run --live-stream -n {self.env_name} {command}",
+            f"conda run --live-stream -n {self.env_name} {command}",
         ]
 
         process = subprocess.Popen(
