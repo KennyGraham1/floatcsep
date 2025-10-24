@@ -233,7 +233,8 @@ class TestTimeDependentModel(TestModel):
             model_class="TimeDependentModel",
             prefix=self.model.__dict__.get("prefix", self.name),
             run_mode="sequential",
-            run_dir="",
+            stage_dir="results",
+            run_id="run",
         )
 
         self.mock_environment_instance.create_environment.assert_called_once()
@@ -302,54 +303,119 @@ class TestTimeDependentModel(TestModel):
             f"{self.func} {self.model.registry.get_args_key()}"
         )
 
-    @patch("builtins.open", new_callable=mock_open)
-    @patch("json.load")
-    @patch("json.dump")
-    def test_prepare_args(self, mock_json_dump, mock_json_load, mock_open_file):
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("pathlib.Path.mkdir")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data=(
+            "start_date = 2000-01-01T00:00:00\n"
+            "end_date = 2000-01-02T00:00:00\n"
+            "custom_arg = old\n"
+        ),
+    )
+    def test_prepare_args_txt(self, m_open, m_mkdir, m_exists):
+        tpl_path = Path("/path/to/model/input/args.txt")
+        dest_path = Path("/tmp/run/input/test/args.txt")
+
+        self.mock_registry_instance.get_args_template_path.return_value = tpl_path
+        self.mock_registry_instance.get_args_key.return_value = dest_path
+
         start_date = datetime(2020, 1, 1)
         end_date = datetime(2020, 12, 31)
 
-        # Mock json.load to return a dictionary
-        mock_json_load.return_value = {
-            "start_date": "2020-01-01T00:00:00",
-            "end_date": "2020-12-31T00:00:00",
-            "custom_arg": "value",
-        }
-
-        # Simulate reading a .txt file
-        mock_open_file().readlines.return_value = [
-            "start_date = 2020-01-01T00:00:00\n",
-            "end_date = 2020-12-31T00:00:00\n",
-            "custom_arg = value\n",
-        ]
-
-        # Call the method
-        args_file_path = self.model.registry.get_args_key()
-        self.model.prepare_args(start_date, end_date, custom_arg="value")
-        mock_open_file.assert_any_call(args_file_path, "r")
-        mock_open_file.assert_any_call(args_file_path, "w")
-        handle = mock_open_file()
-        handle.writelines.assert_any_call(
-            [
-                "start_date = 2020-01-01T00:00:00\n",
-                "end_date = 2020-12-31T00:00:00\n",
-                "custom_arg = value\n",
-            ]
-        )
-
-        json_file_path = "/path/to/args_file.json"
-        self.model.registry.get_args_key.return_value = json_file_path
         self.model.prepare_args(start_date, end_date, custom_arg="value")
 
-        mock_open_file.assert_any_call(json_file_path, "r")
-        mock_json_load.assert_called_once()
-        mock_open_file.assert_any_call(json_file_path, "w")
-        mock_json_dump.assert_called_once_with(
-            {
-                "start_date": "2020-01-01T00:00:00",
-                "end_date": "2020-12-31T00:00:00",
-                "custom_arg": "value",
-            },
-            mock_open_file(),
-            indent=2,
-        )
+        def _was_opened(path, mode):
+            return any(
+                (args[0] == path or args[0] == str(path)) and args[1] == mode
+                for args, _ in m_open.call_args_list
+            )
+
+        assert _was_opened(tpl_path, "r"), "template should be opened for read"
+        assert _was_opened(dest_path, "w"), "dest should be opened for write"
+
+        handle = m_open()
+        chunks = []
+        for call in handle.write.mock_calls:
+            chunks.append(call.args[0])
+        for call in handle.writelines.mock_calls:
+            arg0 = call.args[0]
+            if isinstance(arg0, (list, tuple)):
+                chunks.extend(arg0)
+            else:
+                chunks.append(arg0)
+
+        written = "".join(chunks)
+
+        assert "start_date = 2020-01-01T00:00:00\n" in written
+        assert "end_date = 2020-12-31T00:00:00\n" in written
+        assert "custom_arg = value\n" in written
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("json.load")
+    @patch("json.dump")
+    def test_prepare_args_json(self, m_json_dump, m_json_load, m_open, m_exists):
+        tpl_path = Path("/path/to/model/input/args.json")
+        dest_path = Path("/tmp/run/input/test/args.json")
+
+        self.mock_registry_instance.get_args_template_path.return_value = tpl_path
+        self.mock_registry_instance.get_args_key.return_value = dest_path
+
+        m_json_load.return_value = {"custom_arg": "value"}
+
+        start_date = datetime(2020, 1, 1)
+        end_date = datetime(2020, 12, 31)
+
+        self.model.prepare_args(start_date, end_date, extra="X")
+
+        def _was_opened(path, mode):
+            return any(
+                (args[0] == path or args[0] == str(path)) and args[1] == mode
+                for args, _ in m_open.call_args_list
+            )
+
+        assert _was_opened(tpl_path, "r")
+        assert _was_opened(dest_path, "w")
+
+        (dumped_dict, _fh), kwargs = m_json_dump.call_args
+        assert dumped_dict["start_date"] == "2020-01-01T00:00:00"
+        assert dumped_dict["end_date"] == "2020-12-31T00:00:00"
+        assert dumped_dict["custom_arg"] == "value"
+        assert dumped_dict["extra"] == "X"
+        assert kwargs.get("indent") == 2
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("yaml.safe_load")
+    @patch("yaml.safe_dump")
+    def test_prepare_args_yaml(self, m_yaml_dump, m_yaml_load, m_open, m_exists):
+        tpl_path = Path("/path/to/model/input/args.yml")
+        dest_path = Path("/tmp/run/input/test/args.yml")
+
+        self.mock_registry_instance.get_args_template_path.return_value = tpl_path
+        self.mock_registry_instance.get_args_key.return_value = dest_path
+
+        m_yaml_load.return_value = {"nested": {"a": 1}}
+
+        self.model.func_kwargs = {"nested": {"b": 2}}
+        start_date = datetime(2020, 1, 1)
+        end_date = datetime(2020, 1, 2)
+
+        self.model.prepare_args(start_date, end_date, nested={"c": 3})
+
+        def _was_opened(path, mode):
+            return any(
+                (args[0] == path or args[0] == str(path)) and args[1] == mode
+                for args, _ in m_open.call_args_list
+            )
+
+        assert _was_opened(tpl_path, "r")
+        assert _was_opened(dest_path, "w")
+
+        (dumped_dict, _fh), kwargs = m_yaml_dump.call_args
+        assert dumped_dict["start_date"] == "2020-01-01T00:00:00"
+        assert dumped_dict["end_date"] == "2020-01-02T00:00:00"
+        assert dumped_dict["nested"] == {"a": 1, "b": 2, "c": 3}
+        assert kwargs.get("indent") == 2

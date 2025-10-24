@@ -4,6 +4,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import List, Callable, Union, Sequence
 
 import yaml
@@ -284,9 +285,11 @@ class TimeDependentModel(Model):
                 self.build, self.name, self.registry.path.as_posix()
             )
 
-    def stage(self, time_windows=None, run_mode="sequential", run_dir="") -> None:
+    def stage(
+        self, time_windows=None, run_mode="sequential", stage_dir="results", run_id="run"
+    ) -> None:
         """
-        Core method to interface a model with the experiment.
+        Retrieve model artifacts and Set up its interface with the experiment.
 
         1) Get the model from filesystem, Zenodo or Git. Prepares the directory
         2) If source code, creates the computational environment (conda, venv or Docker)
@@ -306,7 +309,8 @@ class TimeDependentModel(Model):
             model_class=self.__class__.__name__,
             prefix=self.__dict__.get("prefix", self.name),
             run_mode=run_mode,
-            run_dir=run_dir,
+            stage_dir=stage_dir,
+            run_id=run_id,
         )
 
     def get_source(self, zenodo_id: int = None, giturl: str = None, **kwargs) -> None:
@@ -406,73 +410,83 @@ class TimeDependentModel(Model):
         """
         window_str = timewindow2str([start, end])
 
-        filepath = self.registry.get_args_key(window_str)
-        fmt = os.path.splitext(filepath)[1]
+        dest_path = Path(self.registry.get_args_key(window_str))
+        tpl_path = self.registry.get_args_template_path()
+        suffix = tpl_path.suffix.lower()
 
-        if fmt == ".txt":
+        if suffix == ".txt":
 
-            def replace_arg(arg, val, fp):
-                with open(fp, "r") as filearg_:
-                    lines = filearg_.readlines()
+            def load_kv(fp: Path) -> dict:
+                data = {}
+                if fp.exists():
+                    with open(fp, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#"):
+                                continue
+                            if "=" in line:
+                                k, v = line.split("=", 1)
+                                data[k.strip()] = v.strip()
+                return data
 
-                pattern_exists = False
-                for k, line in enumerate(lines):
-                    if line.startswith(arg):
-                        lines[k] = f"{arg} = {val}\n"
-                        pattern_exists = True
-                        break  # assume there's only one occurrence of the key
-                if not pattern_exists:
-                    lines.append(f"{arg} = {val}\n")
-                with open(fp, "w") as file:
-                    file.writelines(lines)
+            def dump_kv(fp: Path, data: dict) -> None:
+                ordered_keys = []
+                for k in ("start_date", "end_date"):
+                    if k in data:
+                        ordered_keys.append(k)
+                ordered_keys += sorted(
+                    k for k in data.keys() if k not in ("start_date", "end_date")
+                )
 
-            replace_arg("start_date", start.isoformat(), filepath)
-            replace_arg("end_date", end.isoformat(), filepath)
-            for i, j in kwargs.items():
-                replace_arg(i, j, filepath)
+                with open(fp, "w") as f:
+                    for k in ordered_keys:
+                        f.write(f"{k} = {data[k]}\n")
 
-        elif fmt == ".json":
-            with open(filepath, "r") as file_:
-                args = json.load(file_)
-            args["start_date"] = start.isoformat()
-            args["end_date"] = end.isoformat()
+            data = load_kv(tpl_path)
+            data["start_date"] = start.isoformat()
+            data["end_date"] = end.isoformat()
+            for k, v in (kwargs or {}).items():
+                data[k] = v
+            dump_kv(dest_path, data)
 
-            args.update(kwargs)
+        elif suffix == ".json":
+            base = {}
+            if tpl_path.exists():
+                with open(tpl_path, "r") as f:
+                    base = json.load(f) or {}
+            base["start_date"] = start.isoformat()
+            base["end_date"] = end.isoformat()
+            base.update(kwargs or {})
 
-            with open(filepath, "w") as file_:
-                json.dump(args, file_, indent=2)
+            with open(dest_path, "w") as f:
+                json.dump(base, f, indent=2)
 
-        elif fmt == ".yml" or fmt == ".yaml":
+        elif suffix in (".yml", ".yaml"):
+            if tpl_path.exists():
+                with open(tpl_path, "r") as f:
+                    data = yaml.safe_load(f) or {}
+            else:
+                data = {}
 
-            def nested_update(dest: dict, src: dict, max_depth: int = 3, _level: int = 1):
-                """
-                Recursively update dest with values from src down to max_depth levels.
-                - If dest[k] and src[k] are both dicts, recurse (until max_depth).
-                - Otherwise overwrite dest[k] with src[k].
-                """
-                for key, val in src.items():
+            data["start_date"] = start.isoformat()
+            data["end_date"] = end.isoformat()
+
+            def nested_update(dest: dict, src: dict, max_depth: int = 3, _lvl: int = 1):
+                for key, val in (src or {}).items():
                     if (
-                        _level < max_depth
+                        _lvl < max_depth
                         and key in dest
                         and isinstance(dest[key], dict)
                         and isinstance(val, dict)
                     ):
-                        nested_update(dest[key], val, max_depth, _level + 1)
+                        nested_update(dest[key], val, max_depth, _lvl + 1)
                     else:
                         dest[key] = val
 
-            if not os.path.exists(filepath):
-                template_file = os.path.join(
-                    self.registry.path, "input", self.registry.args_file
-                )
-            else:
-                template_file = filepath
+            nested_update(data, self.func_kwargs or {})
+            nested_update(data, kwargs or {})
+            with open(dest_path, "w") as f:
+                yaml.safe_dump(data, f, indent=2)
 
-            with open(template_file, "r") as file_:
-                args = yaml.safe_load(file_)
-            args["start_date"] = start.isoformat()
-            args["end_date"] = end.isoformat()
-
-            nested_update(args, self.func_kwargs)
-            with open(filepath, "w") as file_:
-                yaml.safe_dump(args, file_, indent=2)
+        else:
+            raise ValueError(f"Unsupported args file format: {suffix}")

@@ -1,10 +1,11 @@
 import logging
 import os
+import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from os.path import join, abspath, relpath, normpath, dirname, exists
 from pathlib import Path
-from typing import Sequence, Union, TYPE_CHECKING, Any, Optional
+from typing import Sequence, Union, TYPE_CHECKING, Any, Optional, Literal
 
 from floatcsep.utils.helpers import timewindow2str
 
@@ -269,8 +270,9 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         time_windows: Sequence[Sequence[datetime]] = None,
         model_class: str = "TimeIndependentModel",
         prefix: str = None,
-        run_mode: str = "sequential",
-        run_dir: Optional[str] = None,
+        run_mode: str = Literal["serial", "parallel"],
+        stage_dir: str = "results",
+        run_id: Optional[str] = "run",
     ) -> None:
         """
         Creates the run directory, and reads the file structure inside.
@@ -279,11 +281,13 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             time_windows (list(str)): List of time windows or strings.
             model_class (str): Model's class name
             prefix (str): prefix of the model forecast filenames if TD
-            run_mode (str): if run mode is sequential, input data (args and cat) will be
+            run_mode (str): if run mode is serial, input data (args and cat) will be
                 dynamically overwritten in 'model/input/`  through time_windows. If 'parallel',
                 input data is dynamically writing anew in
                 'results/{time_window}/input/{model_name}/'.
-            run_dir (str): Where experiment's results are stored.
+            stage_dir (str): Whether input data is stored persistently in the run_dir or
+                just in tmp cache (Only for parallel execution).
+            run_id (str): Job ID of the run for parallel execution and tmp storing of input data
         """
 
         windows = timewindow2str(time_windows)
@@ -293,32 +297,60 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
 
         elif model_class == "TimeDependentModel":
 
-            # grab names for creating model directories
             subfolders = ["input", "forecasts"]
-            dirtree = {folder: self.abs(self.path, folder) for folder in subfolders}
-            for _, folder_ in dirtree.items():
+            model_dirtree = {folder: self.abs(self.path, folder) for folder in subfolders}
+            for _, folder_ in model_dirtree.items():
                 os.makedirs(folder_, exist_ok=True)
 
-            if run_mode == "sequential":
-                self.input_args = {
-                    win: Path(self.path, "input", self.args_file) for win in windows
-                }
-                self.input_cats = {
-                    win: Path(self.path, "input", self.input_cat) for win in windows
-                }
-            elif run_mode == "parallel":
-                self.input_args = {
-                    win: Path(run_dir, win, "input", self.model_name, self.args_file)
-                    for win in windows
-                }
-                self.input_cats = {
-                    win: Path(run_dir, win, "input", self.model_name, self.input_cat)
-                    for win in windows
-                }
+            # Decide the base dir for *per-window* inputs (args + catalog)
+            # - serial mode: under the model folder {model_name}/input
+            # - parallel + run_dir: <run_dir>/<win>/input/<model_name>/
+            # - parallel + tmp: <tmp_root>/floatcsep/<run_id>/<win>/input/<model_name>/
+            def _window_input_dir(win: str) -> Path:
+                if run_mode == "parallel":
+                    if stage_dir == "tmp":
+                        base_tmp = Path(tempfile.gettempdir())
+                        return base_tmp / "floatcsep" / run_id / win / "input" / self.model_name
+                    else:
+                        return Path(stage_dir, win, "input", self.model_name)
+                else:
+                    return model_dirtree["input"]
+
+            # Build input/output maps
+            if not prefix:
+                prefix = self.model_name
+
+            for win in windows:
+                input_dir = _window_input_dir(win)
+                os.makedirs(input_dir, exist_ok=True)
+
+                self.input_args[win] = Path(input_dir, self.args_file)
+                self.input_cats[win] = Path(input_dir, self.input_cat)
 
             self.forecasts = {
-                win: Path(dirtree["forecasts"], f"{prefix}_{win}.{self.fmt}") for win in windows
+                win: Path(model_dirtree["forecasts"], f"{prefix}_{win}.{self.fmt}")
+                for win in windows
             }
+
+    def get_input_dir(self, tstring: str) -> Path:
+        """
+        Returns the directory that contains the per-window input files (args/catalog).
+        """
+
+        if tstring in self.input_args:
+            return self.abs(self.input_args[tstring]).parent
+        elif tstring in self.input_cats:
+            return self.abs(self.input_cats[tstring]).parent
+        raise KeyError(f"No input directory has been built for window '{tstring}'")
+
+    def get_args_template_path(self) -> Path:
+        """
+        Path to the model’s canonical args template: <model.path>/input/<args_file>.
+        Exists regardless of staging mode. This file should come with the source model
+        """
+        if not self.args_file:
+            raise ValueError("args_file is not set on the registry.")
+        return self.abs(self.path, "input", Path(self.args_file).name)
 
     def as_dict(self) -> dict:
         """
