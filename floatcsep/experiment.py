@@ -101,8 +101,9 @@ class Experiment:
         tests: str = None,
         postprocess: str = None,
         default_test_kwargs: dict = None,
-        rundir: str = "results",
+        run_dir: str = "results",
         run_mode: str = "serial",
+        stage_dir: ... = "results",
         report_hook: dict = None,
         **kwargs,
     ) -> None:
@@ -116,20 +117,21 @@ class Experiment:
 
         workdir = Path(kwargs.get("path", os.getcwd())).resolve()
         if kwargs.get("timestamp", False):
-            rundir = Path(rundir, f"run_{datetime.datetime.utcnow().date().isoformat()}")
-        os.makedirs(Path(workdir, rundir), exist_ok=True)
+            run_dir = Path(run_dir, f"run_{datetime.datetime.utcnow().date().isoformat()}")
+        os.makedirs(Path(workdir, run_dir), exist_ok=True)
 
         self.name = name if name else "floatingExp"
-        self.registry = ExperimentRegistry.factory(workdir=workdir, run_dir=rundir)
+        self.registry = ExperimentRegistry.factory(workdir=workdir, run_dir=run_dir)
         self.results_repo = ResultsRepository(self.registry)
         self.catalog_repo = CatalogRepository(self.registry)
         self.run_id = "run"
 
         self.config_file = kwargs.get("config_file", None)
         self.original_config = kwargs.get("original_config", None)
-        self.original_run_dir = kwargs.get("original_rundir", None)
-        self.run_dir = rundir
+        self.original_run_dir = kwargs.get("original_run_dir", None)
+        self.run_dir = run_dir
         self.run_mode = run_mode
+        self.stage_dir = stage_dir
         self.seed = kwargs.get("seed", None)
         self.time_config = read_time_cfg(time_config, **kwargs)
         self.region_config = read_region_cfg(region_config, **kwargs)
@@ -139,7 +141,7 @@ class Experiment:
         logger = kwargs.get("logging", False)
         if logger:
             filename = "experiment.log" if logger is True else logger
-            self.registry.logger = os.path.join(workdir, rundir, filename)
+            self.registry.logger = os.path.join(workdir, run_dir, filename)
             log.info(f"Logging at {self.registry.logger}")
             add_fhandler(self.registry.logger)
 
@@ -304,7 +306,7 @@ class Experiment:
             i.stage(
                 self.time_windows,
                 run_mode=self.run_mode,
-                stage_dir=self.registry.run_dir,
+                stage_dir=self.stage_dir,
                 run_id=self.run_id,
             )
             self.registry.add_model_registry(i)
@@ -587,8 +589,6 @@ class Experiment:
         if not exists(target_cat):
             shutil.copy2(self.registry.abs(self.catalog_repo.cat_path), target_cat)
 
-        # relative_path = self.registry.rel(self.registry.run_dir)
-        # print(self.registry.workdir.__class__, self.registry.run_dir.__class__)
         relative_path = Path(
             os.path.relpath(self.registry.workdir.as_posix(), self.registry.run_dir.as_posix())
         )
@@ -687,14 +687,13 @@ class Experiment:
             # Only ABSOLUTE PATH
             _dict["path"] = abspath(join(_dir_yml, _dict.get("path", "")))
 
-            # replaces rundir case reproduce option is used
+            # replaces run_dir case reproduce option is used
             if repr_dir:
-                _dict["original_rundir"] = _dict.get("rundir", "results")
-                _dict["rundir"] = relpath(join(_dir_yml, repr_dir), _dict["path"])
+                _dict["original_run_dir"] = _dict.get("run_dir", "results")
+                _dict["run_dir"] = relpath(join(_dir_yml, repr_dir), _dict["path"])
                 _dict["original_config"] = abspath(join(_dict["path"], _dict["config_file"]))
             else:
-
-                _dict["rundir"] = _dict.get("rundir", kwargs.pop("rundir", "results"))
+                _dict["run_dir"] = _dict.get("run_dir", kwargs.pop("run_dir", "results"))
             _dict["config_file"] = relpath(config_yml, _dir_yml)
             if "logging" in _dict:
                 kwargs.pop("logging")

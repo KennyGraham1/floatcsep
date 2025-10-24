@@ -22,28 +22,27 @@ def main(arg_path=None, folder=None, verbose=False):
     """
 
     # Create a forecasts folder in current directory if it does not exist.
-    folder = folder or os.path.join(os.path.dirname(arg_path), '../forecasts')
+
+    module_path = os.path.dirname(__file__)
+    arg_path = arg_path or os.path.join(module_path, "../input/args.txt")
+    folder = folder or os.path.join(module_path, "../forecasts/")
     os.makedirs(folder, exist_ok=True)
 
     # 1. Gets input data and arguments.
     args = libs.read_args(arg_path)  # A dictionary containing parameters
 
-    cat_path = args.get('catalog')
-    n_sims = args.get('n_sims', 1000)  # Gets from args or default to 1000
-    seed = args.get('seed', None)        # Gets from args or default to seed
+    cat_path = args.get("catalog")
+    n_sims = args.get("n_sims", 1000)  # Gets from args or default to 1000
+    seed = args.get("seed", None)  # Gets from args or default to seed
 
     # 2. Reads input catalog
     catalog = libs.load_cat(path=cat_path)
 
     # 3. Run model
-    forecast = make_forecast(catalog,
-                             args,
-                             n_sims=n_sims,
-                             seed=seed,
-                             verbose=verbose)
+    forecast = make_forecast(catalog, args, n_sims=n_sims, seed=seed, verbose=verbose)
 
     # 4. Write forecasts
-    libs.write_forecast(args['start_date'], args['end_date'], forecast, folder)
+    libs.write_forecast(args["start_date"], args["end_date"], forecast, folder)
 
 
 def make_forecast(input_catalog, args, n_sims=1000, seed=None, verbose=True):
@@ -57,10 +56,10 @@ def make_forecast(input_catalog, args, n_sims=1000, seed=None, verbose=True):
         seed (int): seed for random number generation
         verbose (bool): Flag to print out the logging.
     """
-    start_date = args['start_date']
-    end_date = args['end_date']
+    start_date = args["start_date"]
+    end_date = args["end_date"]
     dt = end_date - start_date
-    mag_min = args.get('mag_min', 4.0)
+    mag_min = args.get("mag_min", 4.0)
 
     # set seed for pseudo-random number gen
     if seed:
@@ -68,14 +67,16 @@ def make_forecast(input_catalog, args, n_sims=1000, seed=None, verbose=True):
     # filter catalog
 
     cat_total = [i for i in input_catalog if i[3] < start_date]
-    catalog_prev = [i for i in cat_total if start_date - dt <= i[3] and
-                    i[2] >= mag_min]
+    catalog_prev = [i for i in cat_total if start_date - dt <= i[3] and i[2] >= mag_min]
 
     # Previous time-window rate
     lambd = len(catalog_prev)
     # Background rate
-    mu_total = len(cat_total) * (end_date - start_date) / (
-            max([i[3] for i in cat_total]) - min([i[3] for i in cat_total]))
+    mu_total = (
+        len(cat_total)
+        * (end_date - start_date)
+        / (max([i[3] for i in cat_total]) - min([i[3] for i in cat_total]))
+    )
 
     # scale by GR with b=1
     obsmag_min = min([i[2] for i in cat_total])
@@ -86,8 +87,9 @@ def make_forecast(input_catalog, args, n_sims=1000, seed=None, verbose=True):
             f"Making forecast with model parameters:\n {args.__str__()}\n"
             f"and simulation parameters:\n"
             f" n_sims:{locals()['n_sims']}\n"
-            f" seed:{locals()['seed']}")
-    print(f'\tm_min: {mag_min}\n\tdt: {dt}\n\tmu: {mu:.2e}\n\tlambda:{lambd:.2e}')
+            f" seed:{locals()['seed']}"
+        )
+    print(f"\tm_min: {mag_min}\n\tdt: {dt}\n\tmu: {mu:.2e}\n\tlambda:{lambd:.2e}")
 
     # The model creates a random selection of N events from the input_catalog
     # A simulated catalog has N_events ~ Poisson(rate_prevday)
@@ -107,22 +109,18 @@ def make_forecast(input_catalog, args, n_sims=1000, seed=None, verbose=True):
             # Get the magnitude value using GR with b=1
             mag_bins = numpy.arange(mag_min, 8.1, 0.1)
             prob_mag = 10 ** (-mag_bins[:-1]) - 10 ** (-mag_bins[1:])
-            mag = numpy.random.choice(mag_bins[:-1],
-                                      p=prob_mag / numpy.sum(prob_mag))
+            mag = numpy.random.choice(mag_bins[:-1], p=prob_mag / numpy.sum(prob_mag))
             event[2] = mag
             # For each event, assigns a random datetime between start and end:
-            dt = numpy.random.random() * (
-                    args['end_date'] - args['start_date'])
-            event[3] = args['start_date'] + dt
+            dt = numpy.random.random() * (args["end_date"] - args["start_date"])
+            event[3] = args["start_date"] + dt
             # Replace events and catalog ids
             event[5] = n_cat
             event[6] = i
             forecast.append(event)
 
     # if verbose:
-    print(
-        f'\tTotal of {len(forecast)} events M>{mag_min} in {n_sims}'
-        f' synthetic catalogs')
+    print(f"\tTotal of {len(forecast)} events M>{mag_min} in {n_sims}" f" synthetic catalogs")
     return forecast
 
 
