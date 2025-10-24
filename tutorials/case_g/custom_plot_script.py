@@ -13,7 +13,7 @@ def main(experiment):
     """
 
     # Get all the timewindows
-    timewindows = experiment.timewindows
+    timewindows = experiment.time_windows
 
     # Get the pymock model
     model = experiment.get_model("pymock")

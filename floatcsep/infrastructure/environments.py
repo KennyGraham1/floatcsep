@@ -7,6 +7,7 @@ import subprocess
 import sys
 import venv
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Union
 
 import docker
@@ -58,7 +59,7 @@ class EnvironmentManager(ABC):
         pass
 
     @abstractmethod
-    def run_command(self, command):
+    def run_command(self, command, **kwargs):
         """
         Executes a command within the context of the environment.
 
@@ -267,7 +268,7 @@ class CondaManager(EnvironmentManager):
         ]
         subprocess.run(cmd, check=True)
 
-    def run_command(self, command) -> None:
+    def run_command(self, command, **kwargs) -> None:
         """
         Runs a specified command within the conda environment.
 
@@ -350,7 +351,7 @@ class VenvManager(EnvironmentManager):
         cmd = f"{pip_executable} install -e {os.path.abspath(self.model_directory)}"
         self.run_command(cmd)
 
-    def run_command(self, command) -> None:
+    def run_command(self, command, **kwargs) -> None:
         """
         Executes a specified command in the virtual environment and logs the output.
 
@@ -459,15 +460,17 @@ class DockerManager(EnvironmentManager):
         except ImageNotFound:
             return False
 
-    def run_command(self, command=None) -> None:
+    def run_command(self, command=None, input_dir=None, forecast_dir=None) -> None:
         """
         Runs the model’s Docker container with input/ and forecasts/ mounted.
         Streams logs and checks for non-zero exit codes.
         """
-        model_root = os.path.abspath(self.model_directory)
+        model_root = Path(self.model_directory).resolve()
+        host_volume_input = input_dir or model_root / "input"
+        host_volume_forecasts = forecast_dir or model_root / "forecasts"
         mounts = {
-            os.path.join(model_root, "input"): {"bind": "/app/input", "mode": "rw"},
-            os.path.join(model_root, "forecasts"): {"bind": "/app/forecasts", "mode": "rw"},
+            host_volume_input: {"bind": "/app/input", "mode": "rw"},
+            host_volume_forecasts: {"bind": "/app/forecasts", "mode": "rw"},
         }
 
         uid, gid = os.getuid(), os.getgid()

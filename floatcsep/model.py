@@ -1,7 +1,7 @@
-import shutil
 import json
 import logging
 import os
+import shutil
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -10,10 +10,10 @@ from typing import List, Callable, Union, Sequence
 import yaml
 from csep.core.forecasts import GriddedForecast, CatalogForecast
 
-from floatcsep.utils.accessors import from_zenodo, from_git
 from floatcsep.infrastructure.environments import EnvironmentFactory
 from floatcsep.infrastructure.registries import ModelRegistry
 from floatcsep.infrastructure.repositories import ForecastRepository
+from floatcsep.utils.accessors import from_zenodo, from_git
 from floatcsep.utils.helpers import timewindow2str, str2timewindow, parse_nested_dicts
 
 log = logging.getLogger("floatLogger")
@@ -393,7 +393,8 @@ class TimeDependentModel(Model):
             f"Running {self.name} using {self.environment.__class__.__name__}:"
             f" {timewindow2str([start_date, end_date])}"
         )
-        self.environment.run_command(f"{self.func} {self.registry.get_args_key(tstring)}")
+        input_dir = self.registry.get_input_dir(tstring)
+        self.environment.run_command(command=f"{self.func}", input_dir=input_dir)
 
     def prepare_args(self, start: datetime, end: datetime, **kwargs) -> None:
         """

@@ -31,7 +31,6 @@ class TestModel(TestCase):
             if isinstance(getattr(model_a, i), ModelRegistry):
                 continue
             if not (getattr(model_a, i) == getattr(model_b, i)):
-                print(getattr(model_a, i), getattr(model_b, i))
                 raise AssertionError("Models are not equal")
 
 
@@ -98,7 +97,6 @@ class TestTimeIndependentModel(TestModel):
         self.assertEqual(".csv", model_a.registry.fmt)
         self.assertEqual(Path(self._dir), model_a.registry.dir)
 
-        # print(model_a.__dict__, model_b.__dict__)
         self.assertEqualModel(model_a, model_b)
 
         with self.assertRaises(IndexError):
@@ -177,6 +175,8 @@ class TestTimeDependentModel(TestModel):
         # Set attributes on the mock objects
         self.mock_registry_instance.workdir = Path("/path/to/workdir")
         self.mock_registry_instance.path = Path("/path/to/model")
+        self.mock_registry_instance.get_input_dir = MagicMock()
+        self.mock_registry_instance.get_input_dir.return_value = "input"
 
         self.mock_registry_instance.get_args_key.return_value = (
             "/path/to/args_file.txt"  # Mocking the return of the registry call
@@ -300,7 +300,7 @@ class TestTimeDependentModel(TestModel):
         self.model.create_forecast(tstring, force=True)
 
         self.mock_environment_instance.run_command.assert_called_once_with(
-            f"{self.func} {self.model.registry.get_args_key()}"
+            command=f"{self.func}", input_dir="input"
         )
 
     @patch("pathlib.Path.exists", return_value=True)
