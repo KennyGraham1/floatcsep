@@ -2,6 +2,7 @@ import os
 import venv
 import unittest
 import subprocess
+from pathlib import Path
 from unittest.mock import patch, MagicMock, call, mock_open
 import shutil
 import hashlib
@@ -474,8 +475,8 @@ class TestDockerManagerWithSDK(unittest.TestCase):
 
         uid, gid = os.getuid(), os.getgid()
         expected_volumes = {
-            os.path.join(self.model_dir, "input"): {"bind": "/app/input", "mode": "rw"},
-            os.path.join(self.model_dir, "forecasts"): {"bind": "/app/forecasts", "mode": "rw"},
+            Path(self.model_dir, "input"): {"bind": "/app/input", "mode": "rw"},
+            Path(self.model_dir, "forecasts"): {"bind": "/app/forecasts", "mode": "rw"},
         }
         self.mock_client.containers.run.assert_called_once_with(
             self.manager.image_tag,

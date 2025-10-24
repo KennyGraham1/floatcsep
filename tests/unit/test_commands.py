@@ -109,7 +109,7 @@ class TestMainModule(unittest.TestCase):
         mock_reproduced_exp.run.assert_called_once()
 
         mock_experiment.from_yml.assert_any_call(
-            mock_reproduced_exp.original_config, rundir=mock_reproduced_exp.original_run_dir
+            mock_reproduced_exp.original_config, run_dir=mock_reproduced_exp.original_run_dir
         )
         mock_original_exp.stage_models.assert_called_once()
         mock_original_exp.set_tasks.assert_called_once()

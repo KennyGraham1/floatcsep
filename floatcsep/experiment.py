@@ -613,7 +613,7 @@ class Experiment:
             "name": self.name,
             "config_file": self.config_file,
             "path": self.registry.workdir.as_posix(),
-            "run_dir": self.registry.rel(self.registry.run_dir).as_posix(),
+            "run_dir": Path(self.registry.workdir, self.registry.run_dir.name),
             "time_config": {
                 i: j
                 for i, j in self.time_config.items()
