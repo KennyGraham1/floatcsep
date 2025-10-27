@@ -394,7 +394,10 @@ class TimeDependentModel(Model):
             f" {timewindow2str([start_date, end_date])}"
         )
         input_dir = self.registry.get_input_dir(tstring)
-        self.environment.run_command(command=f"{self.func}", input_dir=input_dir)
+        forecast_dir = self.registry.get_forecast_dir()
+        run_label = f"{self.name}_{tstring}"
+        self.environment.run_command(command=f"{self.func}", run_label=run_label,input_volume=input_dir,
+                                     forecast_volume=forecast_dir)
 
     def prepare_args(self, start: datetime, end: datetime, **kwargs) -> None:
         """
@@ -448,6 +451,8 @@ class TimeDependentModel(Model):
             data["end_date"] = end.isoformat()
             for k, v in (kwargs or {}).items():
                 data[k] = v
+            for k, v in (self.func_kwargs or {}).items():
+                data[k] = v
             dump_kv(dest_path, data)
 
         elif suffix == ".json":
@@ -458,6 +463,7 @@ class TimeDependentModel(Model):
             base["start_date"] = start.isoformat()
             base["end_date"] = end.isoformat()
             base.update(kwargs or {})
+            base.update(self.func_kwargs or {})
 
             with open(dest_path, "w") as f:
                 json.dump(base, f, indent=2)

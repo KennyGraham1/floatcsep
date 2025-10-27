@@ -50,6 +50,7 @@ class CatalogRepository:
             registry (ExperimentRegistry): The registry of the experiment
 
         """
+        self.name = "CatalogRepository"
         self.cat_path = None
         self._catalog = None
         self.registry = registry
@@ -97,9 +98,9 @@ class CatalogRepository:
             region_config: Experiment instantiation
             time_config:
         """
-        self.catalog = catalog
         self.time_config = time_config
         self.region_config = region_config
+        self.catalog = catalog
 
     @property
     def catalog(self) -> CSEPCatalog:
@@ -107,15 +108,25 @@ class CatalogRepository:
         Returns a CSEP catalog loaded from the given query function or a stored file if it
         exists.
         """
-        cat_path = self.registry.abs(self.cat_path)
+        return self._catalog
 
-        fmt = splitext(cat_path)[-1]
-        reader = getattr(CatalogParser, "json")
-        writer = getattr(CatalogSerializer, "json")
-        if callable(self._catalog):
-            if isfile(self.cat_path):
-                return reader(self.cat_path)
+    @catalog.setter
+    def catalog(self, cat: Union[Callable, CSEPCatalog, str]) -> None:
+        if cat is None:
+            self._catalog = None
+            self.cat_path = None
 
+        elif isfile(self.registry.abs(cat)):
+            log.info(f"\tCatalog: '{cat}'")
+            try:
+                reader = getattr(CatalogParser, "json")
+                self._catalog = reader(self.registry.abs(cat))
+            except json.JSONDecodeError:
+                self._catalog = csep.load_catalog(cat)
+            self.cat_path = self.registry.rel(cat)
+        else:
+
+            query_function = parse_csep_func(cat)
             bounds = {
                 "start_time": min([item for sublist in self.time_windows for item in sublist]),
                 "end_time": max([item for sublist in self.time_windows for item in sublist]),
@@ -133,38 +144,11 @@ class CatalogRepository:
                     }
                 )
 
-            catalog = self._catalog(catalog_id="catalog", **bounds)
+            self._catalog = query_function(catalog_id="catalog", **bounds)
+            self.cat_path = self.registry.rel("catalog.json")
+            writer = getattr(CatalogSerializer, "json")
+            writer(catalog=self._catalog, filename=self.cat_path)
 
-            if self.region:
-                catalog.filter_spatial(region=self.region, in_place=True)
-                catalog.region = None
-
-            writer(catalog=catalog, filename=self.cat_path)
-
-            return catalog
-
-        elif isfile(cat_path):
-            try:
-                return reader(cat_path)
-            except json.JSONDecodeError:
-                return csep.load_catalog(cat_path)
-
-    @catalog.setter
-    def catalog(self, cat: Union[Callable, CSEPCatalog, str]) -> None:
-
-        if cat is None:
-            self._catalog = None
-            self.cat_path = None
-
-        elif isfile(self.registry.abs(cat)):
-            log.info(f"\tCatalog: '{cat}'")
-            self._catalog = self.registry.rel(cat)
-            self.cat_path = self.registry.rel(cat)
-
-        else:
-            # catalog can be a function
-            self._catalog = parse_csep_func(cat)
-            self.cat_path = self.registry.abs("catalog.json")
             if isfile(self.cat_path):
                 log.info(f"\tCatalog: stored " f"'{self.cat_path}' " f"from '{cat}'")
             else:
@@ -199,7 +183,7 @@ class CatalogRepository:
 
         return sub_cat
 
-    def set_input_cat(self, tstring: str, model: "Model", fmt: str = "ascii") -> None:
+    def set_input_cats(self, tstring: str, models: List["Model"], fmt: str = "ascii") -> None:
         """
         Filters the complete experiment catalog to input sub-catalog filtered to the beginning
         of the test time-window.
@@ -211,13 +195,19 @@ class CatalogRepository:
             fmt (str): Output catalog format
         """
         start, end = str2timewindow(tstring)
-        input_cat_name = model.registry.get_input_catalog_key(tstring)
-        sub_cat = self.catalog.filter([f"origin_time < {start.timestamp() * 1000}"])
+        for model in models:
+            input_cat_name = model.registry.get_input_catalog_key(tstring)
+            sub_cat = self.catalog.filter(
+                [
+                    f"origin_time < {start.timestamp() * 1000}",
+                    f"magnitude >= {self.mag_min}",
+                    f"magnitude < {self.mag_max}",
+                ]
+            )
+            writer = getattr(CatalogSerializer, fmt)
+            writer(catalog=sub_cat, filename=input_cat_name)
 
-        writer = getattr(CatalogSerializer, fmt)
-        writer(catalog=sub_cat, filename=input_cat_name)
-
-    def set_test_cat(self, tstring: str, fmt: str = "json") -> None:
+    def set_test_cats(self, tstring: str, fmt: str = "json") -> None:
         """
         Filters the complete experiment catalog to a test sub-catalog bounded by the test
         time-window. Writes it to filepath defined in :attr:`Experiment.registry`

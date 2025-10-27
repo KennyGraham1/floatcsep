@@ -1,5 +1,21 @@
-from collections import OrderedDict
+import threading
+import time
+from collections import OrderedDict, defaultdict, deque
+from time import perf_counter
 from typing import Union, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+
+log = logging.getLogger()
+
+def _fmt_secs(s: float) -> str:
+    mins, secs = divmod(s, 60)
+    hrs, mins = divmod(int(mins), 60)
+    if hrs:
+        return f"{hrs}h {mins}m {secs:.2f}s"
+    if mins:
+        return f"{mins}m {secs:.2f}s"
+    return f"{secs:.2f}s"
 
 
 class Task:
@@ -120,6 +136,8 @@ class TaskGraph:
         self.tasks = OrderedDict()
         self._ntasks = 0
         self.name = "floatcsep.infrastructure.engine.TaskGraph"
+        self._prof = defaultdict(lambda: {"count": 0, "ms": 0.0})  #
+        self._prof_lock = threading.Lock()  #
 
     @property
     def ntasks(self) -> int:
@@ -170,8 +188,52 @@ class TaskGraph:
         for i, other_tasks in enumerate(self.tasks.keys()):
             if other_tasks.sign_match(dep_inst, dep_meth, dkw):
                 deps.append(other_tasks)
-
         self.tasks[task].extend(deps)
+
+    def _bucket(self, task: "Task") -> str:
+        m = task.method
+        obj = task.obj
+        if m == "set_test_cat":
+            return "prep:set_test_cat"
+        if m == "set_input_cat":
+            return "prep:set_input_cat"
+        if m == "create_forecast":
+            return "model:create_forecast"
+        if m == "get_forecast":
+            return "eval:get_forecast"
+        if m == "compute":
+            t = getattr(obj, "type", None)
+            return f"eval:compute:{t}" if t else "eval:compute"
+        return f"other:{m}"
+
+    def _accum(self, bucket: str, dur_ms: float) -> None:
+        with self._prof_lock:
+            s = self._prof[bucket]
+            s["count"] += 1
+            s["ms"] += dur_ms
+
+    def _print_prof(self, total_s: float) -> None:
+        items = sorted(self._prof.items(), key=lambda kv: kv[1]["ms"], reverse=True)
+        from math import isfinite
+
+        total_s = total_s if isfinite(total_s) else 0.0
+        log.info(f"[TaskGraph] total_wall={total_s:.3f}s  tasks={self.ntasks}")
+        for name, stats in items:
+            cnt, ms = stats["count"], stats["ms"]
+            avg = (ms / cnt) if cnt else 0.0
+            log.info(
+                f"[TaskGraph] {name:24s} count={cnt:3d} time={ms/1000:.3f}s avg={avg:.1f}ms"
+            )
+
+    def _build_dependency_maps(self):  #
+        """Return indegree and dependents maps for current tasks."""
+        indegree = {t: 0 for t in self.tasks}
+        dependents = defaultdict(list)
+        for t, deps in self.tasks.items():
+            indegree[t] = len(deps)
+            for d in deps:
+                dependents[d].append(t)
+        return indegree, dependents
 
     def run(self):
         """
@@ -183,8 +245,87 @@ class TaskGraph:
         Returns:
             None
         """
+
+        log.info(f"[TaskGraph] Running {self.ntasks} tasks in serial")
+        t0 = perf_counter()
         for task, deps in self.tasks.items():
+            bucket = self._bucket(task) #
+            s = time.perf_counter()
+            log.debug(f"[TaskGraph] RUN (serial) {task}")
             task.run()
+            e = time.perf_counter()
+            self._accum(bucket, (e - s) * 1000.0)
+
+        t1 = time.perf_counter()
+        self._print_prof(total_s=(t1 - t0))
+        # total = perf_counter() - t0
+        # rate = (self.ntasks / total) if total > 0 else float("inf")
+        # log.info(
+        #     f"[TaskGraph] Serial execution complete in {_fmt_secs(total)} "
+        #     f"({self.ntasks} tasks, {rate:.2f} tasks/s)"
+        # )
+
+    def run_parallel(self, max_workers: int):
+        indegree, dependents = self._build_dependency_maps()
+        ready = deque([t for t, deg in indegree.items() if deg == 0])
+
+        log.info(
+            f"[TaskGraph] Running {self.ntasks} tasks in parallel (max_workers={max_workers})"
+        )
+
+        t0 = perf_counter()
+        running = {}
+        completed = 0
+
+        def submit_task(executor, task):
+            log.debug(f"[TaskGraph] SUBMIT {task}")
+            bucket = self._bucket(task)
+
+            def _timed():
+                s = perf_counter()
+                try:
+                    return task.run()
+                finally:
+                    e = perf_counter()
+                    self._accum(bucket, (e - s) * 1000.0)
+
+            fut = executor.submit(_timed)
+            running[fut] = task
+
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            # seed
+            while ready and len(running) < max_workers:
+                submit_task(ex, ready.popleft())
+
+            while running:
+                for fut in as_completed(list(running.keys()), timeout=None):
+                    task = running.pop(fut)
+                    try:
+                        fut.result()
+                        log.debug(f"[TaskGraph] DONE {task}")
+                    except Exception as e:
+                        log.error(f"[TaskGraph] FAIL {task}: {e}")
+                    completed += 1
+
+                    # release dependents
+                    for dep in dependents[task]:
+                        indegree[dep] -= 1
+                        if indegree[dep] == 0:
+                            ready.append(dep)
+
+                    # backfill
+                    while ready and len(running) < max_workers:
+                        submit_task(ex, ready.popleft())
+
+        total = perf_counter() - t0
+        rate = (completed / total) if total > 0 else float("inf")
+        log.info(
+            f"[TaskGraph] Parallel execution complete in {_fmt_secs(total)} "
+            f"({completed}/{self.ntasks} tasks, {rate:.2f} tasks/s)"
+        )
+
+        # <- NEW: print per-bucket summary
+        self._print_prof(total_s=total)
 
     def __call__(self, *args, **kwargs):
         """

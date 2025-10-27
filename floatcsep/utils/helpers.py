@@ -148,7 +148,7 @@ def read_time_cfg(time_config, **kwargs):
         time_config = {}
 
     try:
-        experiment_class = time_config.get("exp_class", kwargs["exp_class"])
+        experiment_class = time_config.get("exp_class", kwargs.get("exp_class", None))
     except KeyError:
         experiment_class = "ti"
         time_config["exp_class"] = experiment_class

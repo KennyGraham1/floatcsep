@@ -343,6 +343,12 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             return self.abs(self.input_cats[tstring]).parent
         raise KeyError(f"No input directory has been built for window '{tstring}'")
 
+    def get_forecast_dir(self) -> Path:
+        """
+        Returns the directory that contains the forecasts.
+        """
+        return self.abs(self.path, "forecasts")
+
     def get_args_template_path(self) -> Path:
         """
         Path to the model’s canonical args template: <model.path>/input/<args_file>.

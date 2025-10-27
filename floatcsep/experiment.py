@@ -99,6 +99,7 @@ class Experiment:
         catalog: str = None,
         models: str = None,
         tests: str = None,
+        exp_class: str = "ti",
         postprocess: str = None,
         default_test_kwargs: dict = None,
         run_dir: str = "results",
@@ -162,7 +163,6 @@ class Experiment:
 
         self.postprocess = postprocess if postprocess else {}
         self.default_test_kwargs = default_test_kwargs
-
         self.catalog_repo.set_main_catalog(catalog, self.time_config, self.region_config)
 
         self.models = self.set_models(
@@ -347,29 +347,6 @@ class Experiment:
 
         return tests
 
-    def set_test_cat(self, tstring: str) -> None:
-        """
-        Filters the complete experiment catalog to a test sub-catalog bounded by the test
-        time-window. Writes it to filepath defined in :attr:`Experiment.registry`
-
-        Args:
-            tstring (str): Time window string
-        """
-
-        self.catalog_repo.set_test_cat(tstring)
-
-    def set_input_cat(self, tstring: str, model: Model) -> None:
-        """
-        Filters the complete experiment catalog to an input sub-catalog filtered to the
-        beginning of the test time-window.
-
-        Args:
-            tstring (str): Time window string
-            model (:class:`~floatcsep.model.Model`): Model to give the input
-             catalog
-        """
-        self.catalog_repo.set_input_cat(tstring, model)
-
     def set_tasks(self) -> None:
         """
         Lazy definition of the experiment core tasks by wrapping instances,
@@ -403,38 +380,33 @@ class Experiment:
         # Prepare the testing catalogs
         task_graph = TaskGraph()
         for time_i in tw_strings:
-            # The method call Experiment.set_test_cat(time_i) is created lazily
-            task_i = Task(instance=self, method="set_test_cat", tstring=time_i)
-            # An is added to the task graph
+            task_i = Task(instance=self.catalog_repo, method="set_test_cats", tstring=time_i)
             task_graph.add(task_i)
-            # the task will be executed later with Experiment.run()
-            # once all the tasks are defined
+            if self.exp_class in ["td", "time_dependent"]:
+                task_j = Task(
+                    instance=self.catalog_repo, method="set_input_cats", tstring=time_i, models=self.models
+                )
+
+                task_graph.add(task=task_j)
 
         # Set up the Forecasts creation
         for time_i in tw_strings:
             for model_j in self.models:
-                if isinstance(model_j, TimeDependentModel):
-                    task_tj = Task(
-                        instance=self, method="set_input_cat", tstring=time_i, model=model_j
-                    )
-
-                    task_graph.add(task=task_tj)
-                    # A catalog needs to have been filtered
-
                 task_ij = Task(
                     instance=model_j,
                     method="create_forecast",
                     tstring=time_i,
                     force=self.force_rerun,
                 )
+
                 task_graph.add(task=task_ij)
                 # A catalog needs to have been filtered
                 if isinstance(model_j, TimeDependentModel):
                     task_graph.add_dependency(
-                        task_ij, dep_inst=self, dep_meth="set_input_cat", dkw=(time_i, model_j)
+                        task_ij, dep_inst=self.catalog_repo, dep_meth="set_input_cats", dkw=(time_i, model_j)
                     )
                 task_graph.add_dependency(
-                    task_ij, dep_inst=self, dep_meth="set_test_cat", dkw=time_i
+                    task_ij, dep_inst=self.catalog_repo, dep_meth="set_test_cats", dkw=time_i
                 )
 
         # Set up the Consistency Tests
@@ -450,6 +422,7 @@ class Experiment:
                             region=self.region,
                         )
                         task_graph.add(task_ijk)
+
                         # the forecast needs to have been created
                         task_graph.add_dependency(
                             task_ijk, dep_inst=model_j, dep_meth="create_forecast", dkw=time_i
@@ -531,7 +504,6 @@ class Experiment:
                         task_graph.add_dependency(
                             task_k, dep_inst=m_j, dep_meth="create_forecast", dkw=time_str
                         )
-
         self.task_graph = task_graph
 
     def run(self) -> None:
@@ -544,12 +516,18 @@ class Experiment:
          - Memory monitor?
          - Queuer?
         """
-        log.info(f"Running {self.task_graph.ntasks} tasks")
+
+        log.info(f"Running {self.task_graph.ntasks} tasks " f"in {self.run_mode} mode")
 
         if self.seed:
             numpy.random.seed(self.seed)
 
-        self.task_graph.run()
+        if self.run_mode == "parallel":
+            workers = getattr(self, "concurrent_tasks", None) or os.cpu_count() or 4
+            self.task_graph.run_parallel(max_workers=workers)
+        else:
+            self.task_graph.run()
+
         log.info("Calculation completed")
         log.debug("Post-run forecast registry")
         log_models_tree(log, self.registry, self.time_windows)
