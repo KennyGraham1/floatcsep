@@ -384,7 +384,10 @@ class Experiment:
             task_graph.add(task_i)
             if self.exp_class in ["td", "time_dependent"]:
                 task_j = Task(
-                    instance=self.catalog_repo, method="set_input_cats", tstring=time_i, models=self.models
+                    instance=self.catalog_repo,
+                    method="set_input_cats",
+                    tstring=time_i,
+                    models=self.models,
                 )
 
                 task_graph.add(task=task_j)
@@ -403,7 +406,10 @@ class Experiment:
                 # A catalog needs to have been filtered
                 if isinstance(model_j, TimeDependentModel):
                     task_graph.add_dependency(
-                        task_ij, dep_inst=self.catalog_repo, dep_meth="set_input_cats", dkw=(time_i, model_j)
+                        task_ij,
+                        dep_inst=self.catalog_repo,
+                        dep_meth="set_input_cats",
+                        dkw=(time_i, model_j),
                     )
                 task_graph.add_dependency(
                     task_ij, dep_inst=self.catalog_repo, dep_meth="set_test_cats", dkw=time_i

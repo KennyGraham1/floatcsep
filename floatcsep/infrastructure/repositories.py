@@ -154,34 +154,21 @@ class CatalogRepository:
             else:
                 log.info(f"\tCatalog: '{cat}'")
 
-    def get_test_cat(self, tstring: str = None) -> CSEPCatalog:
+    def get_test_cat(self, tstring: str = None, fmt: str = "json") -> CSEPCatalog:
         """
         Filters the complete experiment catalog to a test sub-catalog bounded by the test
         time-window. Writes it to filepath defined in :attr:`Experiment.registry`
 
         Args:
             tstring (str): Time window string
+            fmt (str): Format of the catalog to be used
         """
 
-        if tstring:
-            start, end = str2timewindow(tstring)
-        else:
-            start = self.start_date
-            end = self.end_date
+        test_cat_name = self.registry.get_test_catalog_key(tstring)
+        reader = getattr(CatalogParser, fmt)
+        test_catalog = reader(filename=test_cat_name)
 
-        sub_cat = self.catalog.filter(
-            [
-                f"origin_time < {end.timestamp() * 1000}",
-                f"origin_time >= {start.timestamp() * 1000}",
-                f"magnitude >= {self.mag_min}",
-                f"magnitude < {self.mag_max}",
-            ],
-            in_place=False,
-        )
-        if self.region:
-            sub_cat.filter_spatial(region=self.region, in_place=True)
-
-        return sub_cat
+        return test_catalog
 
     def set_input_cats(self, tstring: str, models: List["Model"], fmt: str = "ascii") -> None:
         """

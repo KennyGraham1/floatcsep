@@ -32,8 +32,8 @@ class CatalogSerializer:
 class CatalogParser:
 
     @staticmethod
-    def ascii(catalog, filename: str) -> None:
-        catalog.write_ascii(filename=filename)
+    def ascii(filename: str) -> None:
+        return CSEPCatalog.load_catalog(filename=filename)
 
     @staticmethod
     def json(filename: str) -> None:
