@@ -52,8 +52,6 @@ instances onto an experimental workflow. The class and its main methods are:
     Experiment.set_models
     Experiment.set_tests
     Experiment.stage_models
-    Experiment.set_input_cat
-    Experiment.set_test_cat
     Experiment.set_tasks
     Experiment.run
     Experiment.read_results
@@ -74,7 +72,6 @@ reading. The abstract and concrete classes, and their main methods are:
    Model.factory
 
    TimeIndependentModel
-   TimeIndependentModel.init_db
    TimeIndependentModel.get_forecast
 
    TimeDependentModel.stage
@@ -128,8 +125,8 @@ These are the helper functions of ``floatCSEP``
     parse_timedelta_string
     read_time_cfg
     read_region_cfg
-    timewindows_ti
-    timewindows_td
+    time_windows_ti
+    time_windows_td
 
 
 Some additional plotting functions to pyCSEP are:
@@ -148,16 +145,26 @@ Some additional plotting functions to pyCSEP are:
 
 A small wrapper for ``pyCSEP`` readers
 
-.. currentmodule:: floatcsep.utils.readers
+.. currentmodule:: floatcsep.utils.file_io
 
 .. autosummary::
    :nosignatures:
 
-    ForecastParsers.dat
-    ForecastParsers.xml
-    ForecastParsers.quadtree
-    ForecastParsers.csv
-    ForecastParsers.hdf5
+    CatalogParser.ascii
+    CatalogParser.json
+
+    CatalogSerializer.ascii
+    CatalogSerializer.json
+
+    GriddedForecastParsers.dat
+    GriddedForecastParsers.xml
+    GriddedForecastParsers.quadtree
+    GriddedForecastParsers.csv
+    GriddedForecastParsers.hdf5
+
+    CatalogForecastParsers.csv
+    CatalogForecastParsers.load_hermes_catalog
+
     HDF5Serializer.grid2hdf5
     serialize
 
@@ -194,20 +201,25 @@ components (e.g., forecasts, catalogs, results, etc.), and allows to be aware of
 .. autosummary::
    :nosignatures:
 
-    ForecastRegistry
-    ForecastRegistry.get_forecast
-    ForecastRegistry.fmt
-    ForecastRegistry.forecast_exists
-    ForecastRegistry.build_tree
+    ModelFileRegistry
+    ModelFileRegistry.fmt
+    ModelFileRegistry.get_input_catalog_key
+    ModelFileRegistry.get_forecast_key
+    ModelFileRegistry.get_args_key
+    ModelFileRegistry.get_input_dir
+    ModelFileRegistry.get_forecast_dir
+    ModelFileRegistry.get_args_template_path
+    ModelFileRegistry.forecast_exists
+    ModelFileRegistry.build_tree
 
-    ExperimentRegistry
-    ExperimentRegistry.add_forecast_registry
-    ExperimentRegistry.get_forecast_registry
-    ExperimentRegistry.get_result
-    ExperimentRegistry.get_test_catalog
-    ExperimentRegistry.get_figure
-    ExperimentRegistry.result_exist
-    ExperimentRegistry.build_tree
+    ExperimentFileRegistry
+    ExperimentFileRegistry.add_model_registry
+    ExperimentFileRegistry.get_model_registry
+    ExperimentFileRegistry.get_result_key
+    ExperimentFileRegistry.get_test_catalog_key
+    ExperimentFileRegistry.get_figure_key
+    ExperimentFileRegistry.result_exist
+    ExperimentFileRegistry.build_tree
 
 
 **Repositories**
@@ -225,8 +237,9 @@ catalogs, forecasts), abstracting the experiment logic from the pyCSEP io functi
    CatalogRepository.set_main_catalog
    CatalogRepository.catalog
    CatalogRepository.get_test_cat
-   CatalogRepository.set_test_cat
-   CatalogRepository.set_input_cat
+   CatalogRepository.set_test_cats
+   CatalogRepository.set_input_cats
+   CatalogRepository.filter_catalog
 
    GriddedForecastRepository
    GriddedForecastRepository.load_forecast

@@ -115,11 +115,11 @@ class TimeUtilsTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            time_windows_td(start_date=start, timeintervals=1, timehorizon="1-years"),
+            time_windows_td(start_date=start, timeintervals=1, horizon="1-years"),
             [(datetime(2010, 1, 1, 0, 0), datetime(2011, 1, 1, 0, 0))],
         )
         self.assertEqual(
-            time_windows_td(start_date=start, timeintervals=5, timehorizon="5-days"),
+            time_windows_td(start_date=start, timeintervals=5, horizon="5-days"),
             [
                 (datetime(2010, 1, 1, 0, 0), datetime(2010, 1, 6, 0, 0)),
                 (datetime(2010, 1, 6, 0, 0), datetime(2010, 1, 11, 0, 0)),
@@ -130,19 +130,19 @@ class TimeUtilsTest(unittest.TestCase):
         )
         self.assertEqual(
             time_windows_td(
-                start_date=start, end_date=end, timehorizon="10-years", timeoffset="10-years"
+                start_date=start, end_date=end, horizon="10-years", timeoffset="10-years"
             ),
             [(datetime(2010, 1, 1, 0, 0), datetime(2020, 1, 1, 0, 0))],
         )
         self.assertEqual(
             time_windows_td(
-                start_date=start, end_date=end, timehorizon="12-years", timeoffset="10-years"
+                start_date=start, end_date=end, horizon="12-years", timeoffset="10-years"
             ),
             [(datetime(2010, 1, 1, 0, 0), datetime(2022, 1, 1, 0, 0))],
         )
         self.assertEqual(
             time_windows_td(
-                start_date=start, end_date=end, timehorizon="5-years", timeoffset="5-years"
+                start_date=start, end_date=end, horizon="5-years", timeoffset="5-years"
             ),
             [
                 (datetime(2010, 1, 1, 0, 0), datetime(2015, 1, 1, 0, 0)),
@@ -151,7 +151,7 @@ class TimeUtilsTest(unittest.TestCase):
         )
         self.assertEqual(
             time_windows_td(
-                start_date=start, end_date=end, timehorizon="5-years", timeoffset="3-years"
+                start_date=start, end_date=end, horizon="5-years", timeoffset="3-years"
             ),
             [
                 (datetime(2010, 1, 1, 0, 0), datetime(2015, 1, 1, 0, 0)),
@@ -163,7 +163,7 @@ class TimeUtilsTest(unittest.TestCase):
             time_windows_td(
                 start_date=start,
                 end_date=datetime(2010, 2, 1),
-                timehorizon="14-days",
+                horizon="14-days",
                 timeoffset="7-days",
             ),
             [
@@ -177,7 +177,7 @@ class TimeUtilsTest(unittest.TestCase):
             time_windows_td(
                 start_date=start,
                 timeintervals=3,
-                timehorizon="3-years",
+                horizon="3-years",
                 timeoffset="1-years",
             ),
             [

@@ -1,9 +1,8 @@
 import datetime
 import json
 import logging
-import os.path
 from abc import ABC, abstractmethod
-from os.path import isfile, exists, splitext
+from os.path import isfile, exists
 from typing import Sequence, Union, List, TYPE_CHECKING, Callable
 
 import csep
@@ -13,17 +12,17 @@ from csep.core.forecasts import GriddedForecast, CatalogForecast
 from csep.models import EvaluationResult
 from csep.utils.time_utils import decimal_year
 
-from floatcsep.utils.file_io import (
-    GriddedForecastParsers,
-    CatalogForecastParsers,
-    CatalogSerializer,
-    CatalogParser,
-)
 from floatcsep.infrastructure.registries import (
     ExperimentRegistry,
     ModelRegistry,
     ExperimentFileRegistry,
     ModelFileRegistry,
+)
+from floatcsep.utils.file_io import (
+    GriddedForecastParsers,
+    CatalogForecastParsers,
+    CatalogSerializer,
+    CatalogParser,
 )
 from floatcsep.utils.helpers import str2timewindow, parse_csep_func
 from floatcsep.utils.helpers import timewindow2str
@@ -117,15 +116,14 @@ class CatalogRepository:
             self.cat_path = None
 
         elif isfile(self.registry.abs(cat)):
-            log.info(f"\tCatalog: '{cat}'")
+            log.info(f"\tCatalog: {cat}")
             try:
                 reader = getattr(CatalogParser, "json")
                 self._catalog = reader(self.registry.abs(cat))
             except json.JSONDecodeError:
-                self._catalog = csep.load_catalog(cat)
+                self._catalog = csep.load_catalog(self.registry.abs(cat))
             self.cat_path = self.registry.rel(cat)
         else:
-
             query_function = parse_csep_func(cat)
             bounds = {
                 "start_time": min([item for sublist in self.time_windows for item in sublist]),
@@ -182,6 +180,7 @@ class CatalogRepository:
             fmt (str): Output catalog format
         """
         start, end = str2timewindow(tstring)
+        log.debug(f"[Catalogs] Filtering input catalog and saving to models' input directory")
         for model in models:
             input_cat_name = model.registry.get_input_catalog_key(tstring)
             sub_cat = self.catalog.filter(
@@ -189,7 +188,8 @@ class CatalogRepository:
                     f"origin_time < {start.timestamp() * 1000}",
                     f"magnitude >= {self.mag_min}",
                     f"magnitude < {self.mag_max}",
-                ]
+                ],
+                in_place=False,
             )
             writer = getattr(CatalogSerializer, fmt)
             writer(catalog=sub_cat, filename=input_cat_name)
@@ -207,7 +207,8 @@ class CatalogRepository:
         test_cat_name = self.registry.get_test_catalog_key(tstring)
         if not exists(test_cat_name):
             log.debug(
-                f"Filtering testing catalog and saving to {self.registry.rel(test_cat_name)}"
+                f"[Catalogs] Filtering testing catalog and saving to "
+                f"{self.registry.rel(test_cat_name)}"
             )
             start, end = str2timewindow(tstring)
             sub_cat = self.catalog.filter(
@@ -226,7 +227,41 @@ class CatalogRepository:
             writer(catalog=sub_cat, filename=test_cat_name)
 
         else:
-            log.debug(f"Using test catalog from {self.registry.rel(test_cat_name)}")
+            log.debug(f"[Catalogs] Using test catalog from {self.registry.rel(test_cat_name)}")
+
+    def filter_catalog(
+        self,
+        start_date=None,
+        end_date=None,
+        min_mag=None,
+        max_mag=None,
+        min_depth=None,
+        max_depth=None,
+        region=None,
+    ) -> CSEPCatalog:
+
+        filters = []
+        if start_date:
+            filters.append(
+                f"origin_time >= {csep.utils.time_utils.datetime_to_utc_epoch(start_date)}"
+            )
+        if end_date:
+            filters.append(
+                f"origin_time <= {csep.utils.time_utils.datetime_to_utc_epoch(end_date)}"
+            )
+        if min_mag:
+            filters.append(f"magnitude >= {min_mag}")
+        if max_mag:
+            filters.append(f"magnitude <= {max_mag}")
+        if min_depth:
+            filters.append(f"depth >= {min_depth}")
+        if max_depth:
+            filters.append(f"depth <= {max_depth}")
+        filtered_catalog = self.catalog.filter(filters, in_place=False)
+        if region:
+            filtered_catalog.filter_spatial(region=region, in_place=True)
+
+        return filtered_catalog
 
 
 class ForecastRepository(ABC):

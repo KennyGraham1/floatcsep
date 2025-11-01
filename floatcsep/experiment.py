@@ -77,7 +77,7 @@ class Experiment:
 
         model_config (str): Path to the models' configuration file
         test_config (str): Path to the evaluations' configuration file
-        run_mode (str): 'serial' or 'parallel'
+        run_mode (str): 'sequential' or 'parallel'
         default_test_kwargs (dict): Default values for the testing
          (seed, number of simulations, etc.)
         postprocess (dict): Contains the instruction for postprocessing
@@ -103,7 +103,7 @@ class Experiment:
         postprocess: str = None,
         default_test_kwargs: dict = None,
         run_dir: str = "results",
-        run_mode: str = "serial",
+        run_mode: str = "sequential",
         stage_dir: ... = "results",
         report_hook: dict = None,
         **kwargs,
@@ -156,6 +156,12 @@ class Experiment:
             f"\tMagnitude range: [{numpy.min(self.magnitudes)},"
             f" {numpy.max(self.magnitudes)}]"
         )
+        exp_class_str = (
+            "Time-Dependent"
+            if self.exp_class in ("td", "time-dependent")
+            else "Time-Independent"
+        )
+        log.info(f"\tExperiment class: {exp_class_str}")
 
         self.catalog = None
         self.models = []
@@ -352,7 +358,7 @@ class Experiment:
         Lazy definition of the experiment core tasks by wrapping instances,
         methods and arguments. Creates a graph with task nodes, while assigning
         task-parents to each node, depending on each Evaluation signature.
-        The tasks can then be run in serial as a list or asynchronous
+        The tasks can then be run in sequential as a list or asynchronous
         using the graph's node dependencies.
         For instance:
 
@@ -523,18 +529,15 @@ class Experiment:
          - Queuer?
         """
 
-        log.info(f"Running {self.task_graph.ntasks} tasks " f"in {self.run_mode} mode")
-
         if self.seed:
             numpy.random.seed(self.seed)
 
         if self.run_mode == "parallel":
-            workers = getattr(self, "concurrent_tasks", None) or os.cpu_count() or 4
+            cpu_count = os.cpu_count() or 4
+            workers = getattr(self, "concurrent_tasks", None) or min(cpu_count, 32)
             self.task_graph.run_parallel(max_workers=workers)
         else:
             self.task_graph.run()
-
-        log.info("Calculation completed")
         log.debug("Post-run forecast registry")
         log_models_tree(log, self.registry, self.time_windows)
         log.debug("Post-run result summary")
@@ -661,7 +664,7 @@ class Experiment:
         Returns:
             An :class:`~floatcsep.experiment.Experiment` class instance
         """
-        log.info("Initializing experiment from .yml file")
+        log.info(f"Initializing experiment from {config_yml} file")
         with open(config_yml, "r") as yml:
 
             # experiment configuration file

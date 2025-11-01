@@ -2,6 +2,7 @@ import configparser
 import hashlib
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Union, List
 
 import docker
-from docker.errors import ImageNotFound, NotFound, APIError
+from docker.errors import ImageNotFound, APIError
 from packaging.specifiers import SpecifierSet
 
 log = logging.getLogger("floatLogger")
@@ -460,8 +461,15 @@ class DockerManager(EnvironmentManager):
         except ImageNotFound:
             return False
 
-    def run_command(self, command: List[str] =None, run_label: str = None, input_volume: Union[Path, str] = None,
-                    forecast_volume: Union[Path, str] = None, mem_limit=None, cpus=None) -> None:
+    def run_command(
+        self,
+        command: List[str] = None,
+        run_label: str = None,
+        input_volume: Union[Path, str] = None,
+        forecast_volume: Union[Path, str] = None,
+        mem_limit=None,
+        cpus=None,
+    ) -> None:
         """
         Runs the model’s Docker container with input/ and forecasts/ mounted.
         Streams logs and checks for non-zero exit codes.
@@ -476,13 +484,18 @@ class DockerManager(EnvironmentManager):
 
         uid, gid = os.getuid(), os.getgid()
 
-        run_kwargs = dict(
-            image=self.image_tag,
-            remove=False,
-            volumes=mounts,
-            detach=True,
-            user=f"{uid}:{gid}",
-        )
+        run_kwargs = {
+            "image": self.image_tag,
+            "remove": False,
+            "volumes": mounts,
+            "detach": True,
+        }
+        if platform.system() != "Windows":
+            try:
+                run_kwargs["user"] = f"{os.getuid()}:{os.getgid()}"
+            except AttributeError:
+                pass
+
         if run_label:
             run_kwargs["labels"] = {"model_timewindow": run_label}
         if mem_limit:
@@ -490,36 +503,33 @@ class DockerManager(EnvironmentManager):
         if cpus:
             run_kwargs["nano_cpus"] = int(float(cpus) * 1e9)
 
-        log.info(f"[{self.base_name}] Launching container {self.container_name}")
+        log.info(f"[{self.base_name}] Launching Docker container")
 
         try:
-            container = self.client.containers.run(**run_kwargs
-            )
+            container = self.client.containers.run(**run_kwargs)
         except docker.errors.APIError as e:
+            log.error(f"[{self.base_name}] Failed to start container: {e}")
             raise RuntimeError(f"[{self.base_name}] Failed to start container: {e}")
 
-        result = container.wait()
-        exit_code = result.get("StatusCode", 1)
+        cid = container.id
+        log.debug(f"[{self.base_name}] Using container {cid[:12]} for task {run_label}")
+        exit_code = container.wait().get("StatusCode", 1)
 
         if exit_code != 0:
             logs = container.logs(stdout=True, stderr=True, tail=2000)
             log.error(
-                f"[{self.base_name}] Failed (code={exit_code}). Last logs:\n{logs.decode(errors='ignore')}"
+                f"[{self.base_name}] Container {cid[:12]} for task name {run_label} exited with"
+                f" code {exit_code}."
+            )
+            log.debug(f"[{self.base_name}]. Last logs:\n{logs.decode(errors='ignore')}")
+            container.remove(force=True)
+            raise RuntimeError(
+                f"[{self.base_name}] Container {cid[:12]} for task name {run_label} exited with"
+                f" code {exit_code}."
             )
         else:
-            log.debug(f"[{self.base_name}] Completed with exit code 0")
-
-        # Wait for exit and clean up
-        exit_code = container.wait().get("StatusCode", 1)
-        cid = container.id
-        container.remove(force=True)
-
-        if exit_code != 0:
-            raise RuntimeError(
-                f"[{run_label}] Container {cid[:12]} exited with code {exit_code}"
-            )
-
-        log.info(f"[{run_label}] Container {cid[:12]} finished successfully.")
+            container.remove(force=True)
+            log.info(f"[{self.base_name}] Finished successfully.")
 
     def install_dependencies(self) -> None:
         """
@@ -527,6 +537,32 @@ class DockerManager(EnvironmentManager):
         so no additional action is needed here.
         """
         log.info("No additional dependency installation required for Docker environments.")
+
+    @staticmethod
+    def kill_containers(label_key: str, label_value_prefix: str = None):
+        client = docker.from_env()
+        filters = (
+            {"label": label_key}
+            if label_value_prefix is None
+            else {"label": f"{label_key}={label_value_prefix}"}
+        )
+
+        containers = client.containers.list(all=True, filters=filters)
+        for c in containers:
+            labels = c.labels or {}
+            if label_value_prefix and not (
+                labels.get(label_key, "").startswith(label_value_prefix)
+            ):
+                continue
+            try:
+                c.kill()
+            except Exception:
+                pass
+            try:
+                c.remove(force=True)
+            except Exception:
+                pass
+            log.warning(f"[Engine] killed {c.id[:12]} labels={labels}")
 
 
 class EnvironmentFactory:

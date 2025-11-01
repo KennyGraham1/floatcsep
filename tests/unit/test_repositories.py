@@ -204,17 +204,14 @@ class TestCatalogRepository(unittest.TestCase):
         self.assertEqual(self.catalog_repo.registry, self.mock_registry)
 
     @patch("floatcsep.infrastructure.repositories.isfile", return_value=True)
-    def test_set_catalog(self, mock_isfile):
-        # Mock the registry's rel method to return the same path for simplicity
+    @patch("csep.load_catalog", return_value="csep catalog")
+    def test_set_catalog(self, mock_reader, mock_isfile):
         self.mock_registry.rel.return_value = "catalog_path"
 
         self.catalog_repo.set_main_catalog("catalog_path", {}, {})
 
-        # Check if _catpath is set correctly
         self.assertEqual(self.catalog_repo.cat_path, "catalog_path")
-
-        # Check if _catalog is set correctly
-        self.assertEqual(self.catalog_repo._catalog, "catalog_path")
+        self.assertEqual(self.catalog_repo._catalog, "csep catalog")
 
 
 if __name__ == "__main__":

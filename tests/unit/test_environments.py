@@ -107,7 +107,7 @@ class TestCondaEnvironmentManager(unittest.TestCase):
         manager.env_exists = MagicMock()
         manager.env_exists.side_effect = [True, False]
         manager.create_environment(force=True)
-        self.assertEqual(mock_run.call_count, 3)  # One for remove, one for create
+        self.assertEqual(mock_run.call_count, 3)
 
     @patch("subprocess.run")
     @patch.object(CondaManager, "detect_package_manager", return_value="conda")
@@ -140,22 +140,16 @@ class TestCondaEnvironmentManager(unittest.TestCase):
         manager = CondaManager("test_base", "../artifacts/models/td_model")
         python_version = manager.detect_python_version()
 
-        # Extract major and minor version parts
         major_minor_version = ".".join(python_version.split(".")[:2])
 
-        self.assertIn(
-            major_minor_version, ["3.9", "3.10", "3.11"]
-        )  # Check if it falls within the specified range
+        self.assertIn(major_minor_version, ["3.9", "3.10", "3.11"])
 
     def test_create_and_delete_environment(self):
-        # Create the environment
         self.manager.create_environment(force=True)
 
-        # Check if the environment was created
         result = subprocess.run(["conda", "env", "list"], stdout=subprocess.PIPE, check=True)
         self.assertIn(self.manager.env_name, result.stdout.decode())
 
-        # Check if numpy is installed
         result = subprocess.run(
             [
                 "conda",
@@ -170,12 +164,8 @@ class TestCondaEnvironmentManager(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
 
-        # Delete the environment
-        self.manager.create_environment(
-            force=True
-        )  # This should remove and recreate the environment
+        self.manager.create_environment(force=True)
 
-        # Check if the environment was recreated
         result = subprocess.run(["conda", "env", "list"], stdout=subprocess.PIPE, check=True)
         self.assertIn(self.manager.env_name, result.stdout.decode())
 
@@ -271,7 +261,6 @@ class TestVenvEnvironmentManager(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Check if venv is available (Python standard library)
         if not hasattr(venv, "create"):
             raise unittest.SkipTest("Venv is not available in the environment.")
 
@@ -290,25 +279,18 @@ class TestVenvEnvironmentManager(unittest.TestCase):
             shutil.rmtree(self.model_directory)
 
     def test_create_and_delete_environment(self):
-        # Create the environment
         self.manager.create_environment(force=True)
 
-        # Check if the environment was created
         self.assertTrue(self.manager.env_exists())
 
-        # Check if pip is available in the environment
         pip_executable = os.path.join(self.manager.env_path, "bin", "pip")
         result = subprocess.run(
             [pip_executable, "list"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        self.assertEqual(result.returncode, 0)  # pip should run without errors
+        self.assertEqual(result.returncode, 0)
 
-        # Delete the environment
-        self.manager.create_environment(
-            force=True
-        )  # This should remove and recreate the environment
+        self.manager.create_environment(force=True)
 
-        # Check if the environment was recreated
         self.assertTrue(self.manager.env_exists())
 
     def test_init(self):
@@ -330,7 +312,7 @@ class TestVenvEnvironmentManager(unittest.TestCase):
         env_path_before = self.manager.env_path
         self.manager.create_environment(force=True)
         self.assertTrue(self.manager.env_exists())
-        self.assertEqual(env_path_before, self.manager.env_path)  # Ensure it's a new path
+        self.assertEqual(env_path_before, self.manager.env_path)
 
     def test_install_dependencies(self):
         self.manager.create_environment(force=True)
@@ -340,11 +322,10 @@ class TestVenvEnvironmentManager(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self.assertEqual(result.returncode, 0)  # pip should run without errors
+        self.assertEqual(result.returncode, 0)
 
     @patch("subprocess.Popen")
     def test_run_command(self, mock_popen):
-        # Arrange
         mock_process = MagicMock()
         mock_process.stdout = iter(["Output line 1\n", "Output line 2\n"])
         mock_process.wait.return_value = None
@@ -352,11 +333,9 @@ class TestVenvEnvironmentManager(unittest.TestCase):
 
         command = "echo test_command"
 
-        # Act
         self.manager.run_command(command)
 
         output_cmd = f"bash -c 'source {os.path.join(self.manager.env_path, 'bin', 'activate')}' && {command}"
-        # Assert
         mock_popen.assert_called_once_with(
             output_cmd,
             shell=True,
@@ -370,7 +349,6 @@ class TestVenvEnvironmentManager(unittest.TestCase):
 @unittest.skipUnless(DOCKER_SDK_AVAILABLE, "docker SDK is not installed")
 class TestDockerManagerWithSDK(unittest.TestCase):
     def setUp(self):
-        # Prepare a fake model directory with a Dockerfile
         self.model_dir = "/tmp/test_model"
         os.makedirs(self.model_dir, exist_ok=True)
         with open(os.path.join(self.model_dir, "Dockerfile"), "w") as f:
@@ -388,30 +366,23 @@ class TestDockerManagerWithSDK(unittest.TestCase):
         shutil.rmtree(self.model_dir, ignore_errors=True)
 
     def test_init(self):
-        # base_name slugged
         self.assertEqual(self.manager.base_name, "My_Model")
-        # tags
         self.assertEqual(self.manager.image_tag, "my_model_image")
         self.assertEqual(self.manager.container_name, "my_model_container")
-        # client setup
         self.mock_from_env.assert_called_once()
         self.assertIs(self.manager.client, self.mock_client)
 
     def test_env_exists_true(self):
-        # images.get returns without error
         self.mock_client.images.get.return_value = MagicMock()
         self.assertTrue(self.manager.env_exists())
         self.mock_client.images.get.assert_called_once_with(self.manager.image_tag)
 
     def test_env_exists_false(self):
-        # images.get raises ImageNotFound
         self.mock_client.images.get.side_effect = ImageNotFound("not found")
         self.assertFalse(self.manager.env_exists())
         self.mock_client.images.get.assert_called_once_with(self.manager.image_tag)
 
     def test_create_environment_builds_when_missing(self):
-
-        # no image exists
         self.manager.env_exists = MagicMock(return_value=False)
         fake_logs = [{"stream": "Step 1/2\n"}, {"stream": "Step 2/2\n"}]
         self.mock_client.api.build.return_value = fake_logs
@@ -430,7 +401,6 @@ class TestDockerManagerWithSDK(unittest.TestCase):
             },
             nocache=False,
         )
-        # success logged only once
         infos = [call_args[0][0] for call_args in mock_log.info.call_args_list]
         self.assertEqual(sum("Successfully built" in msg for msg in infos), 1)
 
@@ -448,7 +418,6 @@ class TestDockerManagerWithSDK(unittest.TestCase):
         with patch("floatcsep.environments.log") as mock_log:
             self.manager.create_environment(force=True)
 
-        # remove then build
         self.mock_client.images.remove.assert_called_once_with(
             self.manager.image_tag, force=True
         )
@@ -496,7 +465,7 @@ class TestDockerManagerWithSDK(unittest.TestCase):
 
     def test_run_command_failure(self):
         fake_container = MagicMock()
-        fake_container.logs.return_value = []
+        fake_container.logs.return_value = b"error message"
         fake_container.wait.return_value = {"StatusCode": 5}
         self.mock_client.containers.run.return_value = fake_container
 
@@ -504,7 +473,6 @@ class TestDockerManagerWithSDK(unittest.TestCase):
             self.manager.run_command()
 
     def test_install_dependencies_noop(self):
-        # No exception should be raised
         self.manager.install_dependencies()
 
 

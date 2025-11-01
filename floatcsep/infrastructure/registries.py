@@ -189,6 +189,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         self.model_name = model_name
         self.workdir = Path(workdir)
         self.path = self.abs(Path(path))
+        self.model_dirtree = None
 
         self.args_file = args_file if args_file else None
         self.input_cat = input_cat if input_cat else None
@@ -270,7 +271,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         time_windows: Sequence[Sequence[datetime]] = None,
         model_class: str = "TimeIndependentModel",
         prefix: str = None,
-        run_mode: str = Literal["serial", "parallel"],
+        run_mode: str = Literal["sequential", "parallel"],
         stage_dir: str = "results",
         run_id: Optional[str] = "run",
     ) -> None:
@@ -281,7 +282,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
             time_windows (list(str)): List of time windows or strings.
             model_class (str): Model's class name
             prefix (str): prefix of the model forecast filenames if TD
-            run_mode (str): if run mode is serial, input data (args and cat) will be
+            run_mode (str): if run mode is sequential, input data (args and cat) will be
                 dynamically overwritten in 'model/input/`  through time_windows. If 'parallel',
                 input data is dynamically writing anew in
                 'results/{time_window}/input/{model_name}/'.
@@ -298,12 +299,12 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
         elif model_class == "TimeDependentModel":
 
             subfolders = ["input", "forecasts"]
-            model_dirtree = {folder: self.abs(self.path, folder) for folder in subfolders}
-            for _, folder_ in model_dirtree.items():
+            self.model_dirtree = {folder: self.abs(self.path, folder) for folder in subfolders}
+            for _, folder_ in self.model_dirtree.items():
                 os.makedirs(folder_, exist_ok=True)
 
             # Decide the base dir for *per-window* inputs (args + catalog)
-            # - serial mode: under the model folder {model_name}/input
+            # - sequential mode: under the model folder {model_name}/input
             # - parallel + run_dir: <run_dir>/<win>/input/<model_name>/
             # - parallel + tmp: <tmp_root>/floatcsep/<run_id>/<win>/input/<model_name>/
             def _window_input_dir(win: str) -> Path:
@@ -312,9 +313,9 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
                         base_tmp = Path(tempfile.gettempdir())
                         return base_tmp / "floatcsep" / run_id / win / "input" / self.model_name
                     else:
-                        return Path(stage_dir, win, "input", self.model_name)
+                        return self.abs(stage_dir, win, "input", self.model_name)
                 else:
-                    return model_dirtree["input"]
+                    return self.model_dirtree["input"]
 
             # Build input/output maps
             if not prefix:
@@ -328,7 +329,7 @@ class ModelFileRegistry(ModelRegistry, FilepathMixin):
                 self.input_cats[win] = Path(input_dir, self.input_cat)
 
             self.forecasts = {
-                win: Path(model_dirtree["forecasts"], f"{prefix}_{win}.{self.fmt}")
+                win: Path(self.model_dirtree["forecasts"], f"{prefix}_{win}.{self.fmt}")
                 for win in windows
             }
 

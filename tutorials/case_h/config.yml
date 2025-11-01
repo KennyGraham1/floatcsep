@@ -15,6 +15,7 @@ region_config:
   depth_max: 70
 
 catalog: catalog.csv
+force_rerun: True
 model_config: models.yml
 test_config: tests.yml
 

@@ -5,6 +5,14 @@ from unittest.mock import patch
 import os
 
 
+def _is_ci():
+    return os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+
+
+def skip_on_ci(reason="local-only test"):
+    return unittest.skipIf(_is_ci(), reason)
+
+
 class DataTest(unittest.TestCase):
 
     @staticmethod
@@ -75,6 +83,24 @@ class RunExamples(DataTest):
 
     def test_case_g(self, *args):
         cfg = self.get_runpath("g")
+        self.run_evaluation(cfg)
+        self.assertEqual(1, 1)
+
+    # @skip_on_ci("Tested only locally")
+    # def test_case_h(self, *args):
+    #     cfg = self.get_runpath("h")
+    #     self.run_evaluation(cfg)
+    #     self.assertEqual(1, 1)
+
+    @skip_on_ci("Tested only locally")
+    def test_case_i(self, *args):
+        cfg = self.get_runpath("i")
+        self.run_evaluation(cfg)
+        self.assertEqual(1, 1)
+
+    @skip_on_ci("Tested only locally")
+    def test_case_j(self, *args):
+        cfg = self.get_runpath("j")
         self.run_evaluation(cfg)
         self.assertEqual(1, 1)
 

@@ -49,6 +49,8 @@ Configuration files are written in ``YAML`` format and are divided into differen
      - Poisson S-test:
          func: poisson_evaluations.spatial_test
          plot_func: plot_poisson_consistency_test
+   run_mode: parallel
+   force_rerun: true
    postprocess:
      plot_forecasts:
        cmap: magma
@@ -278,3 +280,12 @@ The seismicity catalog can be defined with the ``catalog`` parameter. It represe
 
 .. important::
   The main catalog will be stored, and consecutively filtered to the extent of each testing time-window, as well as to the experiment's spatial domain, and magnitude- and depth- ranges.
+
+
+Run Configuration
+-----------------
+
+The ``run_mode`` parameter allows to perform the experiment tasks in either ``sequential`` (default) or ``parallel``.
+The former is appropriate for staging and testing the experiment is working, whereas ``parallel`` is optimal for heavy computations when the experiment is set to production (e.g., real conditions)
+
+The ``force_rerun`` makes the experiment recompute every forecast. Default is ``false``, which allows when instantiating the experiment to make a self-discovery of existing forecasts.

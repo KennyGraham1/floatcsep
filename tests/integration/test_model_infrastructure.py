@@ -1,7 +1,5 @@
-import filecmp
 import os.path
-import shutil
-import tempfile
+
 from datetime import datetime
 from unittest import TestCase
 from unittest.mock import patch
@@ -10,7 +8,7 @@ import numpy.testing
 import csep.core.regions
 from csep.core.forecasts import GriddedForecast
 
-from floatcsep.infrastructure.environments import EnvironmentManager
+from floatcsep.infrastructure.engine import TaskGraph, Task
 from floatcsep.model import TimeIndependentModel, TimeDependentModel
 from floatcsep.utils.helpers import timewindow2str
 
@@ -127,3 +125,32 @@ class TestModelRepositoryIntegration(TestCase):
             model.registry.build_tree([[start, end]])
             forecast = model.get_forecast(timestring)
             numpy.testing.assert_almost_equal(220.0, forecast.data.sum())
+
+
+def test_time_independent_model_with_engine_taskgraph(monkeypatch):
+    # Reuse your TimeIndependentModel setup, but don’t hit filesystem in the task
+    from floatcsep.model import TimeIndependentModel
+
+    m = TimeIndependentModel(
+        name="EngineTI",
+        model_path=os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../artifacts/models/model.csv")
+        ),
+        forecast_unit=1,
+        store_db=False,
+    )
+
+    # Replace create_forecast with a cheap stub to avoid reading anything
+    calls = []
+
+    def _fake_create_forecast(tstring, force=False):
+        calls.append((tstring, force))
+        return "ok"
+
+    monkeypatch.setattr(m, "create_forecast", _fake_create_forecast)
+
+    g = TaskGraph()
+    g.add(Task(m, "create_forecast", tstring="2023-01-01_2023-01-02", force=True))
+    g.run()
+
+    assert ("2023-01-01_2023-01-02", True) in calls
