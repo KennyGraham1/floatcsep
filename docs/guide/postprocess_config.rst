@@ -422,9 +422,9 @@ Here are some basic functionalities from **floatCSEP** to access catalogs, forec
               timewindow_str = timewindow2str(timewindow)
               model.get_forecast(timewindow_str)
 
-      * - :attr:`Model.registry.path <floatcsep.infrastructure.registries.ForecastRegistry>`
+      * - :attr:`Model.registry.path <floatcsep.infrastructure.registries.ModelFileRegistry>`
         - Directory of the model file or source code.
-      * - :attr:`Model.registry.database <floatcsep.infrastructure.registries.ForecastRegistry>`
+      * - :attr:`Model.registry.database <floatcsep.infrastructure.registries.ModelFileRegistry>`
         - Database path where forecasts are stored.
       * - :attr:`TimeIndependentModel.forecast_unit <floatcsep.model.TimeIndependentModel>`
         - The forecast unit for a time independent model.
@@ -432,9 +432,9 @@ Here are some basic functionalities from **floatCSEP** to access catalogs, forec
         - The function command to execute a time dependent source code.
       * - :meth:`TimeDependentModel.func_kwargs`
         - The keyword arguments of the model, passed to the arguments file.
-      * - :meth:`TimeDependentModel.registry.args_file <floatcsep.infrastructure.registries.ForecastRegistry>`
+      * - :meth:`TimeDependentModel.registry.args_file <floatcsep.infrastructure.registries.ModelFileRegistry>`
         - The path of the arguments file. Default is ``args.txt``.
-      * - :meth:`TimeDependentModel.registry.input_cat <floatcsep.infrastructure.registries.ForecastRegistry>`
+      * - :meth:`TimeDependentModel.registry.input_cat <floatcsep.infrastructure.registries.ModelFileRegistry>`
         - The path of the input catalog for the model execution.
 
 

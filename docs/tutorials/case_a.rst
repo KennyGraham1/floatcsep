@@ -46,7 +46,7 @@ The source code can be found in the ``tutorials/case_a`` folder or in  `GitHub <
     .. literalinclude:: ../../tutorials/case_a/catalog.csep
        :caption: tutorials/case_a/catalog.csep
 
-* The forecast ``best_model.dat`` to be evaluated is written in the ``.dat`` format (see :doc:`pycsep:concepts/forecasts`). Forecast formats are detected automatically (see :mod:`floatcsep.utils.readers.ForecastParsers`)
+* The forecast ``best_model.dat`` to be evaluated is written in the ``.dat`` format (see :doc:`pycsep:concepts/forecasts`). Forecast formats are detected automatically (see :mod:`floatcsep.utils.file_io.GriddedForecastParsers`)
 
     .. literalinclude:: ../../tutorials/case_a/best_model.dat
         :caption: tutorials/case_a/best_model.dat

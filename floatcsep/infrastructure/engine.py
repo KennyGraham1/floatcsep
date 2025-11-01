@@ -1,5 +1,13 @@
-from collections import OrderedDict
+import os
+import threading
+from collections import OrderedDict, defaultdict, deque
+from time import perf_counter
 from typing import Union, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from floatcsep.infrastructure.environments import DockerManager
+import logging
+
+log = logging.getLogger("floatLogger")
 
 
 class Task:
@@ -26,8 +34,7 @@ class Task:
         self.obj = instance
         self.method = method
         self.kwargs = kwargs
-
-        self.store = None  # Bool for nested tasks.
+        self.store = None  # In-case the returned object by the call is required as output
 
     def sign_match(self, obj: Union[object, str] = None, meth: str = None, kw_arg: Any = None):
         """
@@ -60,13 +67,19 @@ class Task:
         Returns:
             str: A formatted string describing the task.
         """
-        task_str = f"{self.__class__}\n\t" f"Instance: {self.obj.__class__.__name__}\n"
+        task_str = f"\tClass: {self.obj.__class__.__name__}\n"
         a = getattr(self.obj, "name", None)
         if a:
             task_str += f"\tName: {a}\n"
         task_str += f"\tMethod: {self.method}\n"
         for i, j in self.kwargs.items():
-            task_str += f"\t\t{i}: {j} \n"
+            try:
+                if isinstance(j, list):
+                    task_str += f"\t\t{i}: {[k.name for k in j]} \n"
+                else:
+                    task_str += f"\t\t{i}: {j.name} \n"
+            except AttributeError:
+                task_str += f"\t\t{i}: {j} \n"
 
         return task_str[:-2]
 
@@ -85,20 +98,7 @@ class Task:
             self.obj = self.obj.store
         output = getattr(self.obj, self.method)(**self.kwargs)
 
-        if output:
-            self.store = output
-            del self.obj
-
         return output
-
-    def __call__(self, *args, **kwargs):
-        """
-        A callable alias for the `run` method. Allows the task to be invoked directly.
-
-        Returns:
-            The result of the `run` method.
-        """
-        return self.run()
 
 
 class TaskGraph:
@@ -120,6 +120,7 @@ class TaskGraph:
         self.tasks = OrderedDict()
         self._ntasks = 0
         self.name = "floatcsep.infrastructure.engine.TaskGraph"
+        self.profiler = Profiler()
 
     @property
     def ntasks(self) -> int:
@@ -170,12 +171,31 @@ class TaskGraph:
         for i, other_tasks in enumerate(self.tasks.keys()):
             if other_tasks.sign_match(dep_inst, dep_meth, dkw):
                 deps.append(other_tasks)
-
         self.tasks[task].extend(deps)
+
+    def _build_dependency_maps(self):  #
+        """Return indegree and dependents maps for current tasks."""
+        indegree = {t: 0 for t in self.tasks}
+        dependents = defaultdict(list)
+        for t, deps in self.tasks.items():
+            indegree[t] = len(deps)
+            for d in deps:
+                dependents[d].append(t)
+        return indegree, dependents
+
+    def _run_task(self, task):
+        """Execute a single task and record its duration"""
+        t0 = perf_counter()
+        try:
+            return task.run()
+        finally:
+            dt_ms = (perf_counter() - t0) * 1000.0
+            self.profiler.record(task, dt_ms)
 
     def run(self):
         """
-        Executes all tasks in the task graph in the correct order based on dependencies.
+        Executes in sequential all tasks in the task graph according to the order set in
+        Experiment.set_tasks().
 
         Iterates over each task in the graph and runs it after its dependencies have been
         resolved.
@@ -183,14 +203,153 @@ class TaskGraph:
         Returns:
             None
         """
-        for task, deps in self.tasks.items():
-            task.run()
 
-    def __call__(self, *args, **kwargs):
-        """
-        A callable alias for the `run` method. Allows the task graph to be invoked directly.
+        log.info(f"[Engine] Running {self.ntasks} tasks.")
+        try:
+            self.profiler.begin(mode="sequential", ntasks=self.ntasks)
+            for task, deps in self.tasks.items():
+                log.debug(f"[Engine] Running task: \n{task}")
+                self._run_task(task)
+                log.debug(f"[Engine] Done")
 
-        Returns:
-            None
-        """
-        return self.run()
+        except KeyboardInterrupt:
+            log.warning("[Engine] Keyboard Interrupt")
+            try:
+                DockerManager.kill_containers(label_key="model_timewindow")
+            except Exception as e:
+                log.error(f"[Engine] Cleanup failed: {e}")
+            finally:
+                log.warning("[Engine] Exiting after cleanup.")
+                os._exit(130)
+        finally:
+            self.profiler.end()
+
+    def run_parallel(self, max_workers: int):
+        indegree, dependents = self._build_dependency_maps()
+        ready = deque([t for t, deg in indegree.items() if deg == 0])
+
+        log.info(
+            f"[Engine] Running {self.ntasks} tasks in parallel (max_workers={max_workers})"
+        )
+
+        running = {}
+        completed = 0
+
+        def submit_task(executor, task):
+            log.debug(f"[Engine] Submit \n{task}")
+            fut = executor.submit(self._run_task, task)  # note: TaskGraph still executes tasks
+            running[fut] = task
+
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            try:
+                self.profiler.begin(
+                    mode=f"parallel (max_workers={max_workers})", ntasks=self.ntasks
+                )
+
+                while ready and len(running) < max_workers:
+                    submit_task(ex, ready.popleft())
+                while running:
+                    for fut in as_completed(list(running.keys()), timeout=None):
+                        task = running.pop(fut)
+                        try:
+                            fut.result()
+                            log.debug(f"[Engine] Done \n{task}")
+                        except Exception as e:
+                            log.error(f"[Engine] Fail \n{task}: {e}")
+                        completed += 1
+
+                        for dep in dependents[task]:
+                            indegree[dep] -= 1
+                            if indegree[dep] == 0:
+                                ready.append(dep)
+                        while ready and len(running) < max_workers:
+                            submit_task(ex, ready.popleft())
+            except KeyboardInterrupt:
+                log.warning("[Engine] Keyboard Interrupt")
+                try:
+                    DockerManager.kill_containers(label_key="model_timewindow")
+                except Exception as e:
+                    log.error(f"[Engine] Cleanup failed: {e}")
+                finally:
+                    log.warning("[Engine] Exiting after cleanup.")
+                    os._exit(130)
+            finally:
+                self.profiler.end()
+
+
+class Profiler:
+    """Collect per-task timings and emit one clean summary at session end."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._groups = {}
+        self._t0 = 0.0
+        self._mode = ""
+        self._ntasks = 0
+
+    def begin(self, mode: str, ntasks: int) -> None:
+        self._mode = mode
+        self._ntasks = ntasks
+        self._groups.clear()
+        self._t0 = perf_counter()
+
+    def end(self) -> None:
+        total_wall = perf_counter() - self._t0
+        log.info(
+            f"[Engine] Calculation in {self._mode} completed | Total time: {fmt_wall(total_wall)} | Tasks: {self._ntasks}"
+        )
+
+        if not self._groups or not log.isEnabledFor(logging.DEBUG):
+            return
+
+        items = sorted(self._groups.items(), key=lambda kv: kv[1]["ms"], reverse=True)
+        total_ms = sum(v["ms"] for v in self._groups.values()) or 1.0
+
+        def _fmt(ms: float) -> str:
+            return f"{ms / 1000:.2f}s" if ms >= 1000 else f"{ms:.0f}ms"
+
+        log.debug("[Engine] Breakdown by group:")
+        log.debug("[Engine] Task: Share | N Tasks | Mean t | Max t | Total t")
+        log.debug("[Engine] ------------------------------------------------")
+        for name, stats in items:
+            cnt = stats["count"]
+            ms = stats["ms"]
+            mx = stats.get("max_ms", 0.0)
+            avg = (ms / cnt) if cnt else 0.0
+            share = 100.0 * ms / total_ms
+            log.debug(
+                f"[Engine] {name}: {share:.0f}% | {cnt}x | {_fmt(avg)} | {_fmt(mx)} | {_fmt(ms)}"
+            )
+
+    def record(self, task, dt_ms: float) -> None:
+        """Record a single task duration (in ms) under its group."""
+        g = self.group_for(task)
+        with self._lock:
+            entry = self._groups.setdefault(g, {"count": 0, "ms": 0.0, "max_ms": 0.0})
+            entry["count"] += 1
+            entry["ms"] += dt_ms
+            if dt_ms > entry["max_ms"]:
+                entry["max_ms"] = dt_ms
+
+    @staticmethod
+    def group_for(task) -> str:
+        """Map task.object type to the requested group name."""
+        cls = getattr(task.obj, "__class__", type(task.obj)).__name__
+        if cls == "CatalogRepository":
+            return "Catalogs"
+        if cls in ("Model", "TimeDependentModel", "TimeIndependentModel"):
+            name = getattr(task.obj, "name", "Model")
+            return f"Forecasts / {name}"  # one-line change for finer buckets
+        if cls == "Evaluation":
+            return "Evaluations"
+        return "Other"
+
+
+def fmt_wall(s: float) -> str:
+    mins, secs = divmod(s, 60)
+    hrs, mins = divmod(int(mins), 60)
+    if hrs:
+        return f"{hrs}h {mins}m {secs:.2f}s"
+    if mins:
+        return f"{mins}m {secs:.2f}s"
+    return f"{secs:.2f}s"

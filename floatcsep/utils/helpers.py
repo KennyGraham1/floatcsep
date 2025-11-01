@@ -147,11 +147,8 @@ def read_time_cfg(time_config, **kwargs):
     if time_config is None:
         time_config = {}
 
-    try:
-        experiment_class = time_config.get("exp_class", kwargs["exp_class"])
-    except KeyError:
-        experiment_class = "ti"
-        time_config["exp_class"] = experiment_class
+    experiment_class = time_config.get("exp_class", kwargs.get("exp_class", "ti"))
+    time_config["exp_class"] = experiment_class
 
     time_config.update({i: j for i, j in kwargs.items() if i in _attrs})
     if "horizon" in time_config.keys():
@@ -291,8 +288,8 @@ def time_windows_ti(
         The following argument combinations are possible:
             - (start_date, end_date)
             - (start_date, end_date, timeintervals)
-            - (start_date, end_date, timehorizon)
-            - (start_date, timeintervals, timehorizon)
+            - (start_date, end_date, horizon)
+            - (start_date, timeintervals, horizon)
 
     Args:
         start_date (datetime.datetime): Start of the experiment
@@ -338,7 +335,7 @@ def time_windows_ti(
 
 
 def time_windows_td(
-    start_date=None, end_date=None, timeintervals=None, timehorizon=None, timeoffset=None, **_
+    start_date=None, end_date=None, timeintervals=None, horizon=None, timeoffset=None, **_
 ):
     """
     Creates the testing intervals for a time-dependent experiment.
@@ -346,18 +343,18 @@ def time_windows_td(
     Note:
         The following are combinations are possible:
             - (start_date, end_date, timeintervals)
-            - (start_date, end_date, timehorizon)
-            - (start_date, timeintervals, timehorizon)
-            - (start_date,  end_date, timehorizon, timeoffset)
-            - (start_date,  timeinvervals, timehorizon, timeoffset)
+            - (start_date, end_date, horizon)
+            - (start_date, timeintervals, horizon)
+            - (start_date,  end_date, horizon, timeoffset)
+            - (start_date,  timeinvervals, horizon, timeoffset)
 
     Args:
         start_date (datetime.datetime): Start of the experiment
         end_date  (datetime.datetime): End of the experiment
         timeintervals (int): number of intervals to discretize the time span
-        timehorizon (str): time length of each time window
+        horizon (str): time length of each time window
         timeoffset (str): Offset between consecutive forecast.
-                          if None or timeoffset=timehorizon, windows are
+                          if None or timeoffset=horizon, windows are
                           non-overlapping
 
     Returns:
@@ -365,7 +362,7 @@ def time_windows_td(
         testing window, as :py:class:`datetime.datetime`.
     """
 
-    frequency = parse_timedelta_string(timehorizon)
+    frequency = parse_timedelta_string(horizon)
     offset = parse_timedelta_string(timeoffset)
 
     if frequency:
@@ -379,7 +376,7 @@ def time_windows_td(
 
     windows = []
 
-    if start_date and end_date and timehorizon and timeoffset:
+    if start_date and end_date and horizon and timeoffset:
 
         current_start = start_date
         current_end = start_date
@@ -396,7 +393,7 @@ def time_windows_td(
                 1
             ].to_pydatetime()
 
-    elif start_date and timeintervals and timehorizon and timeoffset:
+    elif start_date and timeintervals and horizon and timeoffset:
 
         for _ in range(timeintervals):
             next_window = pandas.date_range(
@@ -418,15 +415,15 @@ def time_windows_td(
         ).tolist()
         windows = [(i, j) for i, j in zip(timelimits[:-1], timelimits[1:])]
 
-    # Case 2: (start_date, end_date, timehorizon)
-    elif start_date and end_date and timehorizon:
+    # Case 2: (start_date, end_date, horizon)
+    elif start_date and end_date and horizon:
         timelimits = pandas.date_range(
             start=start_date, end=end_date, periods=periods, freq=frequency
         ).tolist()
         windows = [(i, j) for i, j in zip(timelimits[:-1], timelimits[1:])]
 
-    # Case 3: (start_date, timeintervals, timehorizon)
-    elif start_date and timeintervals and timehorizon:
+    # Case 3: (start_date, timeintervals, horizon)
+    elif start_date and timeintervals and horizon:
         timelimits = pandas.date_range(
             start=start_date, end=end_date, periods=periods, freq=frequency
         ).tolist()
@@ -436,10 +433,10 @@ def time_windows_td(
         raise ValueError(
             "The following experiment parameters combinations are possible:\n"
             "   (start_date, end_date, timeintervals)\n"
-            "   (start_date, end_date, timehorizon)\n"
-            "   (start_date, timeintervals, timehorizon)\n"
-            "   (start_date, end_date, timehorizon, timeoffset)\n"
-            "   (start_date, timeinvervals, timehorizon, timeoffset)\n"
+            "   (start_date, end_date, horizon)\n"
+            "   (start_date, timeintervals, horizon)\n"
+            "   (start_date, end_date, horizon, timeoffset)\n"
+            "   (start_date, timeinvervals, horizon, timeoffset)\n"
         )
     return windows
 

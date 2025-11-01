@@ -158,20 +158,27 @@ def plot_catalogs(experiment: "Experiment") -> None:
     experiment_timewindow = timewindow2str([experiment.start_date, experiment.end_date])
 
     # Get the catalog for the entire duration of the experiment
-    main_catalog = experiment.catalog_repo.get_test_cat(experiment_timewindow)
-
+    test_catalog = experiment.catalog_repo.filter_catalog(
+        start_date=experiment.start_date,
+        end_date=experiment.end_date,
+        min_mag=experiment.mag_min,
+        max_mag=experiment.mag_max,
+        min_depth=experiment.depth_min,
+        max_depth=experiment.depth_max,
+        region=experiment.region,
+    )
     # Skip plotting if no events
-    if main_catalog.get_number_of_events() == 0:
+    if test_catalog.get_number_of_events() == 0:
         log.debug(f"Catalog has zero events in {experiment_timewindow}")
         return
 
     # Plot catalog map
-    ax = main_catalog.plot(plot_args=plot_catalog_config)
+    ax = test_catalog.plot(plot_args=plot_catalog_config)
     cat_map_path = experiment.registry.get_figure_key("main_catalog_map")
     ax.get_figure().savefig(cat_map_path, dpi=plot_catalog_config.get("dpi", 300))
 
     # Plot catalog time series vs. magnitude
-    ax = magnitude_vs_time(main_catalog)
+    ax = magnitude_vs_time(test_catalog)
     cat_time_path = experiment.registry.get_figure_key("main_catalog_time")
     ax.get_figure().savefig(cat_time_path, dpi=plot_catalog_config.get("dpi", 300))
 

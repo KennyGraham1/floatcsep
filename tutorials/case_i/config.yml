@@ -1,7 +1,7 @@
 name: case_i
 
 time_config:
-  start_date: 2016-11-14T00:00:00
+  start_date: 2016-11-13T00:00:00
   end_date: 2016-11-20T00:00:00
   horizon: 1days
   exp_class: td
@@ -19,7 +19,4 @@ force_rerun: True
 catalog: catalog.csep
 model_config: models.yml
 test_config: tests.yml
-postprocess:
-  plot_forecasts:
-    all_time_windows: True
 

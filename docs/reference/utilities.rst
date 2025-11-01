@@ -27,11 +27,11 @@ This section documents the `accessors` module.
    :inherited-members:
 
 
-Readers
--------
-This section documents the `readers` module.
+Readers and Parsers
+-------------------
+This section documents the `file_io` module.
 
-.. automodule:: floatcsep.utils.readers
+.. automodule:: floatcsep.utils.file_io
    :members:
    :undoc-members:
    :show-inheritance:

@@ -176,7 +176,9 @@ class TestTimeDependentModel(TestModel):
         self.mock_registry_instance.workdir = Path("/path/to/workdir")
         self.mock_registry_instance.path = Path("/path/to/model")
         self.mock_registry_instance.get_input_dir = MagicMock()
-        self.mock_registry_instance.get_input_dir.return_value = "input"
+        self.mock_registry_instance.get_input_dir.return_value = Path("input")
+        self.mock_registry_instance.get_forecast_dir = MagicMock()
+        self.mock_registry_instance.get_forecast_dir.return_value = "forecasts"
 
         self.mock_registry_instance.get_args_key.return_value = (
             "/path/to/args_file.txt"  # Mocking the return of the registry call
@@ -219,7 +221,8 @@ class TestTimeDependentModel(TestModel):
         self.assertEqual(self.model.environment, self.mock_environment_instance)
 
     @patch("floatcsep.model.TimeDependentModel.get_source")
-    def test_stage(self, mock_get_source):
+    @patch("os.makedirs")
+    def test_stage(self, mock_mkdirs, mock_get_source):
         self.model.force_stage = True
 
         self.model.stage(time_windows=["2020-01-01_2020-12-31"])
@@ -300,7 +303,10 @@ class TestTimeDependentModel(TestModel):
         self.model.create_forecast(tstring, force=True)
 
         self.mock_environment_instance.run_command.assert_called_once_with(
-            command=f"{self.func}", input_dir="input"
+            command=f"{self.func}",
+            input_volume=Path("input"),
+            run_label=f"{self.name}_{tstring}",
+            forecast_volume="forecasts",
         )
 
     @patch("pathlib.Path.exists", return_value=True)

@@ -2,13 +2,21 @@
     giturl: git@github.com:KennyGraham1/STEPModel.git
     repo_hash: floatcsep-interface
     forecast_type: gridded
-#    fmt: dat
+    fmt: dat
     path: models/step
     args_file: step_config.yaml
     build: docker
-#    force_stage: True
-#    force_build: True
+    force_stage: true
+    force_build: true
     func: run
     func_kwargs:
       paths:
         catalog_file: catalog.csv
+      forecast:
+        min_magnitude: 4.0
+        region_code: 90
+        parameters:
+          a_value: 0
+          b_value: 1.03
+          p_value: 1.07
+          c_value: 0.04

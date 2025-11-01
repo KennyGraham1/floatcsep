@@ -389,12 +389,21 @@ class TimeDependentModel(Model):
             return
 
         self.prepare_args(start_date, end_date, **kwargs)
+        self.prepare_extra_input(start_date, end_date, **kwargs)
+
         log.info(
-            f"Running {self.name} using {self.environment.__class__.__name__}:"
+            f"[Model] Running {self.name} using {self.environment.__class__.__name__}:"
             f" {timewindow2str([start_date, end_date])}"
         )
         input_dir = self.registry.get_input_dir(tstring)
-        self.environment.run_command(command=f"{self.func}", input_dir=input_dir)
+        forecast_dir = self.registry.get_forecast_dir()
+        run_label = f"{self.name}_{tstring}"
+        self.environment.run_command(
+            command=f"{self.func}",
+            run_label=run_label,
+            input_volume=input_dir,
+            forecast_volume=forecast_dir,
+        )
 
     def prepare_args(self, start: datetime, end: datetime, **kwargs) -> None:
         """
@@ -448,6 +457,8 @@ class TimeDependentModel(Model):
             data["end_date"] = end.isoformat()
             for k, v in (kwargs or {}).items():
                 data[k] = v
+            for k, v in (self.func_kwargs or {}).items():
+                data[k] = v
             dump_kv(dest_path, data)
 
         elif suffix == ".json":
@@ -458,6 +469,7 @@ class TimeDependentModel(Model):
             base["start_date"] = start.isoformat()
             base["end_date"] = end.isoformat()
             base.update(kwargs or {})
+            base.update(self.func_kwargs or {})
 
             with open(dest_path, "w") as f:
                 json.dump(base, f, indent=2)
@@ -491,3 +503,42 @@ class TimeDependentModel(Model):
 
         else:
             raise ValueError(f"Unsupported args file format: {suffix}")
+
+    def prepare_extra_input(self, start: datetime, end: datetime, **kwargs) -> None:
+        """
+        When the model is a source code, and the run is in parallel, additional data located in
+         the model's input folder is copied onto the mounted folder (in /tmp or  /results)
+
+        Args:
+            start: start date of the forecast timewindow
+            end: end date of the forecast timewindow
+            **kwargs: represents additional model arguments (name/value pair)
+
+        """
+        window_str = timewindow2str([start, end])
+
+        src_path = self.registry.model_dirtree["input"]
+        dest_path = self.registry.get_input_dir(window_str)
+
+        catalog_filename = Path(self.registry.get_input_catalog_key(window_str)).name
+        args_filename = Path(self.registry.get_args_key(window_str)).name
+        exclude = {catalog_filename, args_filename}
+
+        if src_path.resolve() == dest_path.resolve():
+            return
+
+        dest_path.mkdir(parents=True, exist_ok=True)
+
+        for root, dirs, files in os.walk(src_path):
+            root_p = Path(root)
+            rel = root_p.relative_to(src_path)
+            out_dir = dest_path / rel
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            for fname in files:
+                if fname in exclude:
+                    continue
+                src_file = root_p / fname
+                dst_file = out_dir / fname
+
+                shutil.copy2(src_file, dst_file)

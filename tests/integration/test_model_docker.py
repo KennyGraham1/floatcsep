@@ -36,7 +36,6 @@ class TestModelDockerIntegration(unittest.TestCase):
         cls.client = docker.from_env()
 
     def tearDown(self):
-        # Clean up containers and images matching the test prefix
         prefix = "testdocker_"
         for container in self.client.containers.list(all=True):
             if container.name.startswith(prefix):

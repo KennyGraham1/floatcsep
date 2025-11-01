@@ -52,7 +52,7 @@ class TestPlotHandler(unittest.TestCase):
         mock_ax = MagicMock()
         mock_figure = MagicMock()
 
-        mock_experiment.catalog_repo.get_test_cat = MagicMock(return_value=mock_catalog)
+        mock_experiment.catalog_repo.filter_catalog = MagicMock(return_value=mock_catalog)
         mock_catalog.plot = mock_plot
         mock_plot.return_value = mock_ax
         mock_ax.get_figure.return_value = mock_figure

@@ -7,12 +7,12 @@ and the required workflow to run an Experiment.
 Registries
 ----------
 
-.. autoclass:: floatcsep.infrastructure.registries.ForecastRegistry
+.. autoclass:: floatcsep.infrastructure.registries.ModelFileRegistry
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. autoclass:: floatcsep.infrastructure.registries.ExperimentRegistry
+.. autoclass:: floatcsep.infrastructure.registries.ExperimentFileRegistry
    :members:
    :undoc-members:
    :show-inheritance:
