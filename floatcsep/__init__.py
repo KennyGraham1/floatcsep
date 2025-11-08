@@ -4,9 +4,7 @@ from floatcsep import model
 from floatcsep.infrastructure import engine, environments, registries, repositories, logger
 from floatcsep.utils import file_io, accessors, helpers
 from floatcsep.postprocess import reporting, plot_handler
-
 from importlib.metadata import version, PackageNotFoundError
-
 
 try:
     __version__ = version("floatcsep")

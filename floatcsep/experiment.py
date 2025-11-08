@@ -138,6 +138,7 @@ class Experiment:
         self.region_config = read_region_cfg(region_config, **kwargs)
         self.model_config = models if isinstance(models, str) else None
         self.test_config = tests if isinstance(tests, str) else None
+        self.exp_class = exp_class
 
         logger = kwargs.get("logging", False)
         if logger:

@@ -145,9 +145,9 @@ class CatalogRepository:
             self._catalog = query_function(catalog_id="catalog", **bounds)
             self.cat_path = self.registry.rel("catalog.json")
             writer = getattr(CatalogSerializer, "json")
-            writer(catalog=self._catalog, filename=self.cat_path)
+            writer(catalog=self._catalog, filename=self.registry.abs(self.cat_path))
 
-            if isfile(self.cat_path):
+            if isfile(self.registry.abs(self.cat_path)):
                 log.info(f"\tCatalog: stored " f"'{self.cat_path}' " f"from '{cat}'")
             else:
                 log.info(f"\tCatalog: '{cat}'")

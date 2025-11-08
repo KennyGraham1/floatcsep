@@ -296,9 +296,11 @@ class TestTimeDependentModel(TestModel):
         )
 
     @patch("floatcsep.model.TimeDependentModel.prepare_args")
-    def test_create_forecast(self, prep_args_mock):
+    @patch("floatcsep.model.TimeDependentModel.prepare_extra_input")
+    def test_create_forecast(self, preps_extra_mock, prep_args_mock):
         tstring = "2020-01-01_2020-12-31"
         prep_args_mock.return_value = None
+        preps_extra_mock.return_value = None
         self.model.registry.forecast_exists.return_value = False
         self.model.create_forecast(tstring, force=True)
 
