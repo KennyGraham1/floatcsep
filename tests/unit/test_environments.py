@@ -24,11 +24,14 @@ except ImportError:
     DOCKER_SDK_AVAILABLE = False
 
 
+@unittest.skipUnless(
+    os.environ.get("CONDA_EXE") or shutil.which("conda"),
+    "Conda not available on PATH (and CONDA_EXE unset).",
+)
 class TestCondaEnvironmentManager(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        print((os.environ.get("CONDA_EXE") or shutil.which("conda")))
         if not (os.environ.get("CONDA_EXE") or shutil.which("conda")):
             raise unittest.SkipTest("Conda not available on PATH (and CONDA_EXE unset).")
 
