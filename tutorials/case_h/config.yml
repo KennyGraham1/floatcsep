@@ -22,3 +22,4 @@ test_config: tests.yml
 postprocess:
   report: custom_report.py:main
   plot_catalog: False
+  plot_forecasts: False

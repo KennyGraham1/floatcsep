@@ -10,7 +10,7 @@ def main(experiment):
 
     """
     # Access the last time-window
-    timewindow = experiment.timewindows[-1]
+    timewindow = experiment.time_windows[-1]
 
     # Convert the time-window to a string
     timestr = timewindow2str(timewindow)

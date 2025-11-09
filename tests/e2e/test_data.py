@@ -1,3 +1,5 @@
+import sys
+
 from floatcsep.commands import main
 
 import unittest
@@ -86,11 +88,12 @@ class RunExamples(DataTest):
         self.run_evaluation(cfg)
         self.assertEqual(1, 1)
 
-    # @skip_on_ci("Tested only locally")
-    # def test_case_h(self, *args):
-    #     cfg = self.get_runpath("h")
-    #     self.run_evaluation(cfg)
-    #     self.assertEqual(1, 1)
+    @skip_on_ci("Tested only locally")
+    @unittest.skipUnless(sys.version_info >= (3, 10), "Requires Python 3.10+")
+    def test_case_h(self, *args):
+        cfg = self.get_runpath("h")
+        self.run_evaluation(cfg)
+        self.assertEqual(1, 1)
 
     @skip_on_ci("Tested only locally")
     def test_case_i(self, *args):
