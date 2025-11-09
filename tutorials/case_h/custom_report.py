@@ -21,7 +21,7 @@ def main(experiment):
     report.add_heading("Objectives", level=2)
 
     objs = [
-        f"Comparison of ETAS, pyMock-Poisson and pyMock-NegativeBinomial models for the"
+        f"Comparison of ETAS, pyMock-Poisson and pyMock-NegativeBinomial models for the "
         f"day after the Amatrice earthquake, for events with M>{min(experiment.magnitudes)}.",
     ]
     report.add_list(objs)

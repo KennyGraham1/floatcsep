@@ -540,7 +540,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
             val = val[parsed_arg]
         return self.abs(self.run_dir, val).as_posix()
 
-    def get_figure_key(self, *args: Sequence[any]) -> Path:
+    def get_figure_key(self, *args: Sequence[any]) -> str:
         """
         Gets the file path of a result figure.
 

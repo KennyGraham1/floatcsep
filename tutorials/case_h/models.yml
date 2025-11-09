@@ -6,7 +6,7 @@
     args_file: args.json
     func: etas-run
     func_kwargs:
-      n_sims: 100
+      n_sims: 1000
       mc: 3.5
       seed: 23
 - Poisson Mock:
@@ -16,7 +16,7 @@
     prefix: pymock
     build: conda
     func_kwargs:
-      n_sims: 100
+      n_sims: 1000
       mag_min: 3.5
       seed: 23
 - Negbinom Mock:
@@ -26,7 +26,7 @@
     prefix: pymock
     build: conda
     func_kwargs:
-      n_sims: 100
+      n_sims: 1000
       mag_min: 3.5
       seed: 23
       distribution: negbinom
