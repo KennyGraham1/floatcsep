@@ -1,12 +1,13 @@
-import os
-import venv
-import unittest
-import subprocess
-from pathlib import Path
-from unittest.mock import patch, MagicMock, call, mock_open
-import shutil
 import hashlib
 import logging
+import os
+import shutil
+import subprocess
+import unittest
+import venv
+from pathlib import Path
+from unittest.mock import patch, MagicMock, call, mock_open
+
 from floatcsep.infrastructure.environments import (
     CondaManager,
     EnvironmentFactory,
@@ -27,8 +28,9 @@ class TestCondaEnvironmentManager(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not shutil.which("conda"):
-            raise unittest.SkipTest("Conda is not available in the environment.")
+        print((os.environ.get("CONDA_EXE") or shutil.which("conda")))
+        if not (os.environ.get("CONDA_EXE") or shutil.which("conda")):
+            raise unittest.SkipTest("Conda not available on PATH (and CONDA_EXE unset).")
 
     def setUp(self):
         self.manager = CondaManager(base_name="test_env", model_directory="/tmp/test_model")
@@ -54,6 +56,7 @@ class TestCondaEnvironmentManager(unittest.TestCase):
         expected_name = "test_base_" + hashlib.md5("/path/to/model".encode()).hexdigest()[:8]
         self.assertEqual(manager.generate_env_name(), expected_name)
 
+    #
     @patch("subprocess.run")
     def test_env_exists(self, mock_run):
         hashed = hashlib.md5("/path/to/model".encode()).hexdigest()[:8]
@@ -69,7 +72,11 @@ class TestCondaEnvironmentManager(unittest.TestCase):
         manager.create_environment(force=False)
         package_manager = manager.detect_package_manager()
         expected_calls = [
-            call(["conda", "env", "list"], stdout=-1),
+            call(
+                [os.environ.get("CONDA_EXE") or shutil.which("conda"), "env", "list"],
+                stdout=-1,
+                check=True,
+            ),
             call().stdout.decode(),
             call().stdout.decode().__contains__(manager.env_name),
             call(
@@ -328,14 +335,18 @@ class TestVenvEnvironmentManager(unittest.TestCase):
     def test_run_command(self, mock_popen):
         mock_process = MagicMock()
         mock_process.stdout = iter(["Output line 1\n", "Output line 2\n"])
-        mock_process.wait.return_value = None
+        mock_process.wait.return_value = 0
         mock_popen.return_value = mock_process
 
         command = "echo test_command"
 
         self.manager.run_command(command)
 
-        output_cmd = f"bash -c 'source {os.path.join(self.manager.env_path, 'bin', 'activate')}' && {command}"
+        output_cmd = (
+            f"bash -lc 'source "
+            f"{os.path.join(self.manager.env_path, 'bin', 'activate')} && {command}'"
+        )
+
         mock_popen.assert_called_once_with(
             output_cmd,
             shell=True,
@@ -343,6 +354,7 @@ class TestVenvEnvironmentManager(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
+            bufsize=1,
         )
 
 

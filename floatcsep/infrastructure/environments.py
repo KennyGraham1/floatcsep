@@ -185,7 +185,10 @@ class CondaManager(EnvironmentManager):
         Returns:
             bool: True if the conda environment exists, False otherwise.
         """
-        result = subprocess.run(["conda", "env", "list"], stdout=subprocess.PIPE)
+        conda_exe = os.environ.get("CONDA_EXE") or shutil.which("conda")
+        if not conda_exe:
+            return False
+        result = subprocess.run([conda_exe, "env", "list"], stdout=subprocess.PIPE, check=True)
         return self.env_name in result.stdout.decode()
 
     def detect_python_version(self) -> str:
@@ -329,7 +332,7 @@ class VenvManager(EnvironmentManager):
 
         if not self.env_exists():
             log.info(f"Creating virtual environment: {self.env_name}")
-            venv.create(self.env_path, with_pip=True)
+            venv.EnvBuilder(with_pip=True, clear=False, symlinks=False).create(self.env_path)
             log.info(f"\tVirtual environment created: {self.env_name}")
             self.install_dependencies()
 
@@ -359,29 +362,42 @@ class VenvManager(EnvironmentManager):
         Args:
             command (str): The command to be executed in the virtual environment.
         """
+
         activate_script = os.path.join(self.env_path, "bin", "activate")
 
-        virtualenv = os.environ.copy()
-        virtualenv.pop("PYTHONPATH", None)
-        virtualenv["VIRTUAL_ENV"] = self.env_path
-        virtualenv["PATH"] = (
-            os.path.join(self.env_path, "bin") + os.pathsep + virtualenv.get("PATH", "")
-        )
+        env = os.environ.copy()
+        for var in (
+            "PYTHONPATH",
+            "PYTHONHOME",
+            "CONDA_PREFIX",
+            "CONDA_DEFAULT_ENV",
+            "CONDA_SHLVL",
+            "__PYVENV_LAUNCHER__",
+        ):
+            env.pop(var, None)
+        env["VIRTUAL_ENV"] = self.env_path
+        env["PATH"] = os.path.join(self.env_path, "bin") + os.pathsep + env.get("PATH", "")
 
-        full_command = f"bash -c 'source {activate_script}' && {command}"
+        full_command = f"bash -lc 'source {activate_script} && {command}'"
 
         process = subprocess.Popen(
             full_command,
             shell=True,
-            env=virtualenv,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
+            bufsize=1,
         )
+        assert process.stdout is not None
         for line in process.stdout:
-            stripped_line = line.strip()
-            log.info(f"[{self.base_name}]: " + stripped_line)
-        process.wait()
+            log.info(f"[{self.base_name}]: {line.rstrip()}")
+
+        rc = process.wait()
+        if rc != 0:
+            raise RuntimeError(
+                f"[{self.base_name}] Command failed with exit code {rc}: {command}"
+            )
 
 
 class DockerManager(EnvironmentManager):
