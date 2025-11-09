@@ -99,7 +99,6 @@ class Experiment:
         catalog: str = None,
         models: str = None,
         tests: str = None,
-        exp_class: str = "ti",
         postprocess: str = None,
         default_test_kwargs: dict = None,
         run_dir: str = "results",
@@ -138,7 +137,6 @@ class Experiment:
         self.region_config = read_region_cfg(region_config, **kwargs)
         self.model_config = models if isinstance(models, str) else None
         self.test_config = tests if isinstance(tests, str) else None
-        self.exp_class = exp_class
 
         logger = kwargs.get("logging", False)
         if logger:
@@ -396,7 +394,7 @@ class Experiment:
                     tstring=time_i,
                     models=self.models,
                 )
-
+                print("000")
                 task_graph.add(task=task_j)
 
         # Set up the Forecasts creation
