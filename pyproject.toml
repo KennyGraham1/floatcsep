@@ -1,6 +1,74 @@
 [build-system]
-requires = ["setuptools>=52.0", "wheel", "setuptools-scm"]
+requires = ["setuptools>=61", "wheel", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "floatcsep"
+description = "CSEP Floating Experiment application"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Pablo Iturrieta", email = "pciturri@gfz-potsdam.de" },
+]
+requires-python = ">=3.9,<3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "numpy",
+    "dateparser",
+    "docker",
+    "gitpython",
+    "h5py",
+    "matplotlib",
+    "pandas",
+    "packaging",
+    "pycsep",
+    "pyyaml",
+    "requests",
+    "scipy",
+    "seaborn",
+    "tables",
+    "xmltodict",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "flake8",
+    "pytest",
+    "pytest-cov",
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx_design",
+    "sphinx-toolbox",
+    "sphinx-gallery",
+    "sphinx-rtd-theme",
+    "sphinx_copybutton",
+    "vcrpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/cseptesting/floatcsep.git"
+
+[project.scripts]
+floatcsep = "floatcsep.commands.main:floatcsep"
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.setuptools.packages.find]
+include = ["floatcsep*"]
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "no-local-version"
+fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
 norecursedirs = ["tutorials", "tests/artifacts"]
@@ -16,8 +84,3 @@ target-version = ["py39", "py310", "py311"]
 [tool.flake8]
 ignore = ["E203", "W503", "F401"]
 max-line-length = 96
-
-[tool.setuptools_scm]
-version_scheme = "post-release"
-local_scheme = "no-local-version"
-fallback_version = "0.2.0"
