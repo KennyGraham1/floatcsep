@@ -54,7 +54,7 @@ class TestMarkdownReport(unittest.TestCase):
         report = reporting.MarkdownReport()
         report.markdown = [["# Test Title\n", "Some content\n"]]
         with patch("builtins.open", unittest.mock.mock_open()) as mock_file:
-            report.save("/path/to/save")
+            report.save("/path/to/save/report.md")
             mock_file.assert_called_with("/path/to/save/report.md", "w")
             mock_file().writelines.assert_called_with(["# Test Title\n", "Some content\n"])
 
