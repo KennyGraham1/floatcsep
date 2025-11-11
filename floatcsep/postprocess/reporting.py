@@ -35,6 +35,8 @@ def generate_report(experiment, timewindow=-1):
         custom_report(report_function, experiment)
         return
 
+    report_path = experiment.registry.run_dir / "report.md"
+
     timewindow = experiment.time_windows[timewindow]
     timestr = timewindow2str(timewindow)
 
@@ -56,18 +58,15 @@ def generate_report(experiment, timewindow=-1):
 
     # Generate catalog plot
     if experiment.catalog_repo.catalog is not None:
+        cat_map_path = os.path.relpath(
+            experiment.registry.get_figure_key("main_catalog_map"), report_path.parent
+        )
+        cat_time_path = os.path.relpath(
+            experiment.registry.get_figure_key("main_catalog_time"), report_path.parent
+        )
         report.add_figure(
             "Input catalog",
-            [
-                os.path.relpath(
-                    experiment.registry.get_figure_key("main_catalog_map"),
-                    experiment.registry.run_dir,
-                ),
-                os.path.relpath(
-                    experiment.registry.get_figure_key("main_catalog_time"),
-                    experiment.registry.run_dir,
-                ),
-            ],
+            [cat_map_path, cat_time_path],
             level=3,
             ncols=1,
             caption="Evaluation catalog from "
@@ -83,11 +82,13 @@ def generate_report(experiment, timewindow=-1):
 
     # Include results from Experiment
     for test in experiment.tests:
-        fig_path = experiment.registry.get_figure_key(timestr, test)
+        fig_path = os.path.relpath(
+            experiment.registry.get_figure_key(timestr, test), report_path.parent
+        )
         width = test.plot_args[0].get("figsize", [4])[0] * 96
         report.add_figure(
             f"{test.name}",
-            os.path.relpath(fig_path, experiment.registry.run_dir),
+            fig_path,
             level=3,
             caption=test.markdown,
             add_ext=True,
@@ -95,8 +96,9 @@ def generate_report(experiment, timewindow=-1):
         )
         for model in experiment.models:
             try:
-                fig_path = experiment.registry.get_figure_key(
-                    timestr, f"{test.name}_{model.name}"
+                fig_path = os.path.relpath(
+                    experiment.registry.get_figure_key(timestr, f"{test.name}_{model.name}"),
+                    report_path.parent,
                 )
                 width = test.plot_args[0].get("figsize", [4])[0] * 96
                 report.add_figure(
@@ -110,21 +112,21 @@ def generate_report(experiment, timewindow=-1):
             except KeyError:
                 pass
     report.table_of_contents()
-    report.save(experiment.registry.abs(experiment.registry.run_dir))
+    report.save(report_path)
 
 
 def reproducibility_report(exp_comparison: "ExperimentComparison"):
 
     numerical = exp_comparison.num_results
     data = exp_comparison.file_comp
-    outname = os.path.join("reproducibility_report.md")
-    save_path = os.path.dirname(
-        os.path.join(
-            exp_comparison.reproduced.registry.workdir,
-            exp_comparison.reproduced.registry.run_dir,
-        )
+
+    report_path = (
+        exp_comparison.reproduced.registry.workdir
+        / exp_comparison.reproduced.registry.run_dir
+        / "reproducibility_report.md"
     )
-    report = MarkdownReport(out_name=outname)
+
+    report = MarkdownReport()
     report.add_title(f"Reproducibility Report - {exp_comparison.original.name}", "")
 
     report.add_heading("Objectives", level=2)
@@ -205,7 +207,7 @@ def reproducibility_report(exp_comparison: "ExperimentComparison"):
 
             report.add_table(rows)
     report.table_of_contents()
-    report.save(save_path)
+    report.save(report_path)
 
 
 def custom_report(report_function: str, experiment: "Experiment"):
@@ -270,8 +272,8 @@ def custom_report(report_function: str, experiment: "Experiment"):
 class MarkdownReport:
     """Class to generate a Markdown report from a study."""
 
-    def __init__(self, out_name="report.md"):
-        self.out_name = out_name
+    def __init__(self):
+
         self.toc = []
         self.has_title = True
         self.has_introduction = False
@@ -478,8 +480,8 @@ class MarkdownReport:
         table = "\n".join(table)
         self.markdown.append(table + "\n\n")
 
-    def save(self, save_dir):
+    def save(self, out_path):
         output = list(itertools.chain.from_iterable(self.markdown))
-        full_md_fname = os.path.join(save_dir, self.out_name)
-        with open(full_md_fname, "w") as f:
+
+        with open(out_path, "w") as f:
             f.writelines(output)

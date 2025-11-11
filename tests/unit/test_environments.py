@@ -345,10 +345,7 @@ class TestVenvEnvironmentManager(unittest.TestCase):
 
         self.manager.run_command(command)
 
-        output_cmd = (
-            f"bash -lc 'source "
-            f"{os.path.join(self.manager.env_path, 'bin', 'activate')} && {command}'"
-        )
+        output_cmd = f"bash -lc 'source \"{os.path.join(self.manager.env_path, 'bin', 'activate')}\"' && {command}"
 
         mock_popen.assert_called_once_with(
             output_cmd,

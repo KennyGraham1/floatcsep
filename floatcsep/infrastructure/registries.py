@@ -554,7 +554,7 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         for i in args:
             parsed_arg = self._parse_arg(i)
             val = val[parsed_arg]
-        return self.rel(self.run_dir, val).as_posix()
+        return self.abs(self.run_dir, val).as_posix()
 
     def build_tree(
         self,
