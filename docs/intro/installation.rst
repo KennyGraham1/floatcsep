@@ -105,6 +105,26 @@ Having installed the binary dependencies of **pyCSEP** (see `Installing pyCSEP <
     Or downloaded manually from the `latest release  <https://github.com/cseptesting/floatcsep/releases>`_.
 
 
+.. _docker-install:
+
+Docker (Model Containerization & Parallel Run)
+----------------------------------------------
+
+Some tutorials and experiments **containerize models with Docker**, and the engine can use Docker
+for **parallel** execution. To use these features, please install Docker and (on Linux) perform the
+post-installation steps:
+
+- Docker install guide: https://docs.docker.com/engine/install/
+- Linux post-installation (non-root usage and add your user to the `docker` group):
+  https://docs.docker.com/engine/install/linux-postinstall/
+
+.. tip::
+   After installing, verify Docker works:
+
+   .. code-block:: console
+
+      $ docker run --rm hello-world
+
 
 For Developers
 --------------

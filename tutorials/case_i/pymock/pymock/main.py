@@ -3,6 +3,7 @@ import sys
 import numpy
 from pymock import libs
 from copy import deepcopy
+import math
 
 
 def main(arg_path=None, folder=None, verbose=False):
@@ -43,9 +44,6 @@ def main(arg_path=None, folder=None, verbose=False):
 
     # 4. Write forecasts
     libs.write_forecast(args["start_date"], args["end_date"], forecast, folder)
-
-
-import math, random
 
 
 def spin_cpu(work_iters=500_000):

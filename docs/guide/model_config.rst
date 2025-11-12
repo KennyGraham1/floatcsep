@@ -159,9 +159,6 @@ Here you can find a comprehensive list of parameters used to configure models
    * - **forecast_unit** (required)
      - All
      - Specifies the time unit for the forecast. Use **years** for time-independent models and **days** for time-dependent models.
-   * - **store_db** (optional)
-     - All
-     - If the model consists on only files, this is a boolean (true/false) specifying whether to store the forecast in a database (HDF5).
    * - **flavours** (optional)
      - All
      - A set of parameter variations to generate multiple model variants (e.g., different settings for the same model).

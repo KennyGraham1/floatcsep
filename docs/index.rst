@@ -64,6 +64,8 @@ Quickstart
 |                                                  | - :ref:`case_f`                     |
 | |api| **API Reference**                          | - :ref:`case_g`                     |
 |                                                  | - :ref:`case_h`                     |
+|                                                  | - :ref:`case_i`                     |
+|                                                  | - :ref:`case_j`                     |
 +--------------------------------------------------+-------------------------------------+
 
 What is floatCSEP
@@ -158,6 +160,8 @@ Collaborators
    tutorials/case_f.rst
    tutorials/case_g.rst
    tutorials/case_h.rst
+   tutorials/case_i.rst
+   tutorials/case_j.rst
 
 
 .. toctree::
