@@ -3,6 +3,7 @@ dateparser
 docker
 gitpython
 h5py
+markdown-pdf
 matplotlib
 packaging
 pandas

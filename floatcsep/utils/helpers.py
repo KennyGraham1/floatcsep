@@ -5,7 +5,9 @@ import logging
 import os
 import re
 from datetime import datetime, date
-from typing import Union, Mapping, Sequence
+from typing import Union, Mapping, Sequence, Any, Optional
+
+import matplotlib
 
 # third-party libraries
 import numpy
@@ -30,6 +32,8 @@ from csep.core.poisson_evaluations import (
 from csep.core.regions import CartesianGrid2D
 from csep.models import EvaluationResult
 from csep.utils.calc import cleaner_range
+from matplotlib.dates import AutoDateLocator, DateFormatter
+from csep.utils.constants import SECONDS_PER_DAY, SECONDS_PER_HOUR
 
 # floatCSEP libraries
 import floatcsep.utils.accessors
@@ -39,6 +43,60 @@ _UNITS = ["years", "months", "weeks", "days"]
 _PD_FORMAT = ["YS", "MS", "W", "D"]
 
 
+DEFAULT_PLOT_ARGS = {
+    # General figure/axes handling
+    "figsize": None,
+    "tight_layout": True,
+    "grid": True,
+    "title": None,
+    "title_fontsize": 16,
+    "xlabel": None,
+    "ylabel": None,
+    "xlabel_fontsize": 12,
+    "ylabel_fontsize": 12,
+    "xlabel_rotation": 90,
+    "xticks_fontsize": 12,
+    "yticks_fontsize": 12,
+    "xlim": None,
+    "ylim": None,
+    "legend": True,
+    "legend_loc": "best",
+    "legend_fontsize": 10,
+    "legend_title": None,
+    "legend_titlesize": None,
+    "legend_labelspacing": 1,
+    "legend_borderpad": 0.4,
+    "legend_framealpha": None,
+    # Line/Scatter parameters
+    "color": "steelblue",
+    "secondary_color": "red",
+    "alpha": 0.8,
+    "linewidth": 1,
+    "linestyle": "-",
+    "size": 5,
+    "marker": "o",
+    "markersize": 5,
+    "markercolor": "steelblue",
+    "markeredgecolor": "black",
+    # Time-Series
+    "datetime_locator": AutoDateLocator(),
+    "datetime_formatter": DateFormatter("%Y-%m-%d"),
+    # Consistency and Comparison tests
+    "capsize": 2,
+    "hbars": True,
+    # Spatial plotting
+    "grid_labels": True,
+    "grid_fontsize": 8,
+    "region_color": "black",
+    "coastline": True,
+    "coastline_color": "black",
+    "coastline_linewidth": 1.5,
+    "borders_color": "black",
+    "borders_linewidth": 1.5,
+    # Color bars
+    "colorbar_labelsize": 12,
+    "colorbar_ticksize": 10,
+}
 log = logging.getLogger("floatLogger")
 
 
@@ -745,24 +803,104 @@ def plot_sequential_likelihood(evaluation_results, plot_args=None):
     fig.tight_layout()
 
 
-def magnitude_vs_time(catalog):
+def magnitude_vs_time(
+    catalog: "CSEPCatalog",
+    color: str = "steelblue",
+    size: int = 15,
+    max_size: int = 300,
+    power: int = 4,
+    alpha: float = 0.5,
+    reset_times: bool = False,
+    ax: Optional[matplotlib.axes.Axes] = None,
+    show: bool = False,
+    **kwargs: Any,
+) -> matplotlib.axes.Axes:
     """
-    Simple magnitude vs. time plot (TBI in pyCSEP)
+    Scatter plot of the catalog magnitudes and origin times. The size of each event is scaled
+    exponentially by its magnitude using the parameters ``size``, ``max_size`` and ``power``.
+
 
     Args:
-        catalog: Catalog to be plotted
+        catalog (CSEPCatalog): Catalog of seismic events to be plotted.
+        color (str, optional): Color of the scatter plot. Defaults to `'steelblue'`.
+        size (int, optional): Marker size for the event with the minimum magnitude. Defaults
+            to `4`.
+        max_size (int, optional): Marker size for the event with the maximum magnitude.
+            Defaults to `300`.
+        power (int, optional): Power scaling of the scatter sizing. Defaults to `4`.
+        alpha (float, optional): Transparency level for the scatter points. Defaults to `0.5`.
+        reset_times (bool, optional): If True, x-axis shows time in days since first event.
+            Defaults to False.
+        ax (matplotlib.axes.Axes, optional): Axis object on which to plot. If not provided, a
+            new figure and axis are created. Defaults to `None`.
+        show (bool, optional): Whether to display the plot. Defaults to `False`.
+        **kwargs:
+            Additional keyword arguments to customize the plot:
+
+            - **figsize** (`tuple`): The size of the figure.
+            - **title** (`str`): Plot title. Defaults to `None`.
+            - **title_fontsize** (`int`): Font size for the plot title.
+            - **xlabel** (`str`): Label for the X-axis. Defaults to `'Datetime'`.
+            - **xlabel_fontsize** (`int`): Font size for the X-axis label.
+            - **ylabel** (`str`): Label for the Y-axis. Defaults to `'Magnitude'`.
+            - **ylabel_fontsize** (`int`): Font size for the Y-axis label.
+            - **datetime_locator** (`matplotlib.dates.Locator`): Locator for the
+              X-axis datetime ticks.
+            - **datetime_formatter** (`str` or `matplotlib.dates.Formatter`):
+              Formatter for the datetime axis. Defaults to `'%Y-%m-%d'`.
+            - **grid** (`bool`): Whether to show grid lines. Defaults to `True`.
+            - **tight_layout** (`bool`): Whether to use a tight layout for the figure.
+              Defaults to `True`.
 
     Returns:
-        Ax object
+        matplotlib.axes.Axes: The Matplotlib axes object with the plotted data.
 
     """
+    # Initialize plot
+
+    plot_args = {**DEFAULT_PLOT_ARGS, **kwargs.get("plot_args", {}), **kwargs}
+    fig, ax = pyplot.subplots(figsize=plot_args["figsize"]) if ax is None else (ax.figure, ax)
+
+    # Get data
     mag = catalog.data["magnitude"]
-    time = [datetime.fromtimestamp(i / 1000.0) for i in catalog.data["origin_time"]]
-    fig, ax = pyplot.subplots(figsize=(12, 4))
-    ax.plot(time, mag, marker="o", linewidth=0, color="r", alpha=0.2)
-    ax.set_xlabel("Date", fontsize=16)
-    ax.set_ylabel("$M_w$", fontsize=16)
-    ax.set_title("Magnitude vs. Time", fontsize=18)
+    datetimes = catalog.get_datetimes()
+
+    if reset_times:
+        # Convert to days since first event
+        timestamps = numpy.array([dt.timestamp() for dt in datetimes])
+        xdata = (timestamps - timestamps[0]) / SECONDS_PER_DAY
+        xlabel = plot_args["xlabel"] or "Days since first event"
+    else:
+        xdata = datetimes
+        xlabel = plot_args["xlabel"] or "Datetime"
+
+    # Plot data
+    ax.scatter(
+        xdata,
+        mag,
+        marker="o",
+        c=color,
+        s=_autosize_scatter(mag, min_size=size, max_size=max_size, power=power),
+        alpha=alpha,
+    )
+
+    # Set labels and title
+    ax.set_xlabel(xlabel, fontsize=plot_args["xlabel_fontsize"])
+    ax.set_ylabel(plot_args["ylabel"] or "Magnitude", fontsize=plot_args["ylabel_fontsize"])
+    ax.set_title(plot_args["title"], fontsize=plot_args["title_fontsize"])
+
+    # Autoformat ticks and labels
+    if not reset_times:
+        ax.xaxis.set_major_locator(plot_args["datetime_locator"])
+        ax.xaxis.set_major_formatter(plot_args["datetime_formatter"])
+        fig.autofmt_xdate()
+    ax.grid(plot_args["grid"])
+
+    if plot_args["tight_layout"]:
+        fig.tight_layout()
+    if show:
+        pyplot.show()
+
     return ax
 
 
@@ -836,3 +974,32 @@ def plot_matrix_comparative_test(evaluation_results, p=0.05, order=True, plot_ar
         handletextpad=0,
     )
     pyplot.tight_layout()
+
+
+def _autosize_scatter(
+    values: numpy.ndarray,
+    min_size: float = 50.0,
+    max_size: float = 400.0,
+    power: float = 3.0,
+    min_val: Optional[float] = None,
+    max_val: Optional[float] = None,
+) -> numpy.ndarray:
+    """
+    Auto-sizes scatter plot markers based on values.
+
+    Args:
+        values (numpy.ndarray): The data values (e.g., magnitude) to base the sizing on.
+        min_size (float): The minimum marker size.
+        max_size (float): The maximum marker size.
+        power (float): The power to apply for scaling.
+        min_val (Optional[float]): The minimum value (e.g., magnitude) for normalization.
+        max_val (Optional[float]): The maximum value (e.g., magnitude) for normalization.
+
+    Returns:
+        numpy.ndarray: The calculated marker sizes.
+    """
+    min_val = min_val or numpy.min(values)
+    max_val = max_val or numpy.max(values)
+    normalized_values = ((values - min_val) / (max_val - min_val)) ** power
+    marker_sizes = min_size + normalized_values * (max_size - min_size) * bool(power)
+    return marker_sizes

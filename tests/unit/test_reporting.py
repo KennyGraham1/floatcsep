@@ -20,13 +20,15 @@ class TestReporting(unittest.TestCase):
         # Assert that custom_report was called with the experiment
         mock_custom_report.assert_called_once_with("custom_report_function", mock_experiment)
 
+    @patch("floatcsep.postprocess.reporting.MarkdownPdf")
     @patch("floatcsep.postprocess.reporting.MarkdownReport")
-    def test_generate_standard_report(self, mock_markdown_report):
+    def test_generate_standard_report(self, mock_markdown_report, mock_markdown_pdf):
         # Mock experiment without a custom report function
         mock_experiment = MagicMock()
-        mock_experiment.postprocess.get.return_value = None
+        mock_experiment.postprocess.get.return_value = {}
         mock_experiment.registry.get_figure_key.return_value = "figure_path"
         mock_experiment.magnitudes = [0, 1]
+        mock_experiment.time_windows = [[1, 2]]
         # Call the generate_report function
         reporting.generate_report(mock_experiment)
 
@@ -52,11 +54,11 @@ class TestMarkdownReport(unittest.TestCase):
 
     def test_save_report(self):
         report = reporting.MarkdownReport()
-        report.markdown = [["# Test Title\n", "Some content\n"]]
+        report.markdown = ["# Test Title\n", "Some content\n"]
         with patch("builtins.open", unittest.mock.mock_open()) as mock_file:
             report.save("/path/to/save/report.md")
-            mock_file.assert_called_with("/path/to/save/report.md", "w")
-            mock_file().writelines.assert_called_with(["# Test Title\n", "Some content\n"])
+            mock_file.assert_called_with("/path/to/save/report.md", "w", encoding="utf-8")
+            mock_file().write.assert_called_with("# Test Title\nSome content\n")
 
 
 if __name__ == "__main__":

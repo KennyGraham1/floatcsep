@@ -1,3 +1,5 @@
+import os
+
 from floatcsep.postprocess.reporting import MarkdownReport
 from floatcsep.utils.helpers import timewindow2str
 
@@ -9,6 +11,9 @@ def main(experiment):
         experiment: a floatcsep.experiment.Experiment class
 
     """
+
+    report_path = experiment.registry.run_dir / "report.md"
+
     # Access the last time-window
     timewindow = experiment.time_windows[-1]
 
@@ -27,12 +32,16 @@ def main(experiment):
     report.add_list(objs)
 
     # Adds an input figure
+    cat_map_path = os.path.relpath(
+        experiment.registry.get_figure_key("main_catalog_map"), report_path.parent
+    )
+    cat_time_path = os.path.relpath(
+        experiment.registry.get_figure_key("main_catalog_time"), report_path.parent
+    )
+    report.add_heading("Catalog", level=2)
     report.add_figure(
         f"Input catalog",
-        [
-            experiment.registry.get_figure_key("main_catalog_map"),
-            experiment.registry.get_figure_key("main_catalog_time"),
-        ],
+        [cat_map_path, cat_time_path],
         level=3,
         ncols=1,
         caption=f"Evaluation catalog of {experiment.start_date}. "
@@ -42,17 +51,21 @@ def main(experiment):
     )
 
     # Include results from Experiment
+    report.add_heading("Results", level=2)
     test = experiment.tests[0]
     for model in experiment.models:
-        fig_path = experiment.registry.get_figure_key(timestr, f"{test.name}_{model.name}")
+        fig_path = os.path.relpath(
+            experiment.registry.get_figure_key(timestr, f"{test.name}_{model.name}"),
+            report_path.parent,
+        )
         report.add_figure(
             f"{test.name}: {model.name}",
             fig_path,
             level=3,
             caption="Catalog-based N-test",
             add_ext=True,
-            width=200,
+            width=500,
         )
 
     # Stores the report
-    report.save(experiment.registry.abs(experiment.registry.run_dir))
+    report.save(report_path)

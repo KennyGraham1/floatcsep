@@ -364,7 +364,7 @@ class TimeDependentModel(Model):
                 If None, will return a forecast for all regions.
 
         """
-        return self.repository.load_forecast(tstring, region=region)
+        return self.repository.load_forecast(tstring, name=self.name, region=region)
 
     def create_forecast(self, tstring: str, **kwargs) -> None:
         """

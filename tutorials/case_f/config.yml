@@ -17,3 +17,6 @@ region_config:
 catalog: catalog.json
 model_config: models.yml
 test_config: tests.yml
+
+postprocess:
+  plot_forecasts: True

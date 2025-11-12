@@ -6,6 +6,7 @@ flake8
 gitpython
 h5py
 matplotlib
+markdown-pdf
 packaging
 pandas
 pycsep

@@ -205,29 +205,26 @@ class CatalogRepository:
         """
 
         test_cat_name = self.registry.get_test_catalog_key(tstring)
-        if not exists(test_cat_name):
-            log.debug(
-                f"[Catalogs] Filtering testing catalog and saving to "
-                f"{self.registry.rel(test_cat_name)}"
-            )
-            start, end = str2timewindow(tstring)
-            sub_cat = self.catalog.filter(
-                [
-                    f"origin_time < {end.timestamp() * 1000}",
-                    f"origin_time >= {start.timestamp() * 1000}",
-                    f"magnitude >= {self.mag_min}",
-                    f"magnitude < {self.mag_max}",
-                ],
-                in_place=False,
-            )
-            if self.region:
-                sub_cat.filter_spatial(region=self.region, in_place=True)
 
-            writer = getattr(CatalogSerializer, fmt)
-            writer(catalog=sub_cat, filename=test_cat_name)
+        log.debug(
+            f"[Catalogs] Filtering testing catalog and saving to "
+            f"{self.registry.rel(test_cat_name)}"
+        )
+        start, end = str2timewindow(tstring)
+        sub_cat = self.catalog.filter(
+            [
+                f"origin_time < {end.timestamp() * 1000}",
+                f"origin_time >= {start.timestamp() * 1000}",
+                f"magnitude >= {self.mag_min}",
+                f"magnitude < {self.mag_max}",
+            ],
+            in_place=False,
+        )
+        if self.region:
+            sub_cat.filter_spatial(region=self.region, in_place=True)
 
-        else:
-            log.debug(f"[Catalogs] Using test catalog from {self.registry.rel(test_cat_name)}")
+        writer = getattr(CatalogSerializer, fmt)
+        writer(catalog=sub_cat, filename=test_cat_name)
 
     def filter_catalog(
         self,
@@ -344,6 +341,7 @@ class CatalogForecastRepository(ForecastRepository):
     def load_forecast(
         self,
         tstring: Union[str, list],
+        name=None,
         region=None,
         n_sims=None,
     ) -> Union[CatalogForecast, list[CatalogForecast]]:
@@ -351,19 +349,20 @@ class CatalogForecastRepository(ForecastRepository):
         Returns a forecast object or a sequence of them for a set of time window strings.
 
         Args:
-            tstring (str, list): String representing the time-window
+            tstring (str, list): String representing the time-window.
+            name (str): Name of the forecast model.
             region (optional): A region, in case the forecast requires to be filtered lazily.
-            n_sims (optional: The number of simulations/synthetic catalogs of the forecast
+            n_sims (optional: The number of simulations/synthetic catalogs of the forecast.
 
         Returns:
             The CSEP CatalogForecast object or a list of them.
         """
         if isinstance(tstring, str):
-            return self._load_single_forecast(tstring, region=region, n_sims=n_sims)
+            return self._load_single_forecast(tstring, name=name, region=region, n_sims=n_sims)
         else:
             return [self._load_single_forecast(t, region) for t in tstring]
 
-    def _load_single_forecast(self, tstring: str, region=None, n_sims=None):
+    def _load_single_forecast(self, tstring: str, name=None, region=None, n_sims=None):
         start_date, end_date = str2timewindow(tstring)
 
         fc_path = self.registry.get_forecast_key(tstring)
@@ -372,6 +371,7 @@ class CatalogForecastRepository(ForecastRepository):
 
         forecast_ = f_parser(
             fc_path,
+            name=name,
             start_time=start_date,
             end_time=end_date,
             n_cat=n_sims,

@@ -1,7 +1,6 @@
 - pymock:
     path: pymock
     func: pymock
-    force_build: true
     func_kwargs:
       n_sims: 1000
       mag_min: 3.5
@@ -10,7 +9,6 @@
     path: pymock_slow
     func: pymock
     prefix: pymock
-    force_build: true
     func_kwargs:
       n_sims: 1000
       mag_min: 3.5

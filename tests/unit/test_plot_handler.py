@@ -20,10 +20,10 @@ class TestPlotHandler(unittest.TestCase):
             ["2021-01-01", "2021-12-31"], mock_experiment.models, mock_experiment.registry
         )
 
-    @patch("matplotlib.pyplot.savefig")
+    @patch("matplotlib.pyplot.close")
     @patch("floatcsep.postprocess.plot_handler.parse_plot_config")
     @patch("floatcsep.postprocess.plot_handler.parse_projection")
-    def test_plot_forecasts(self, mock_parse_projection, mock_parse_plot_config, mock_savefig):
+    def test_plot_forecasts(self, mock_parse_projection, mock_parse_plot_config, mock_close):
         mock_experiment = MagicMock()
         mock_model = MagicMock()
         mock_experiment.models = [mock_model]
@@ -39,9 +39,9 @@ class TestPlotHandler(unittest.TestCase):
         mock_model.get_forecast().plot.assert_called()
 
         # Verify that pyplot.savefig was called to save the plot
-        mock_savefig.assert_called()
+        mock_close.assert_called()
 
-    @patch("matplotlib.pyplot.Figure.savefig")  # Mocking savefig on the Figure object
+    @patch("matplotlib.pyplot.Figure.savefig")
     @patch("floatcsep.postprocess.plot_handler.parse_plot_config")
     @patch("floatcsep.postprocess.plot_handler.parse_projection")
     def test_plot_catalogs(self, mock_parse_projection, mock_parse_plot_config, mock_savefig):
@@ -54,6 +54,8 @@ class TestPlotHandler(unittest.TestCase):
 
         mock_experiment.catalog_repo.filter_catalog = MagicMock(return_value=mock_catalog)
         mock_catalog.plot = mock_plot
+        mock_catalog.get_datetimes = MagicMock(return_value=["2021-01-01", "2021-12-31"])
+        mock_catalog.data = {"magnitude": [1, 2]}
         mock_plot.return_value = mock_ax
         mock_ax.get_figure.return_value = mock_figure
 
@@ -71,7 +73,9 @@ class TestPlotHandler(unittest.TestCase):
             plot_args=mock_parse_plot_config.return_value,
         )
 
-        mock_figure.savefig.assert_called_once_with("cat.png", dpi=300)
+        mock_figure.savefig.assert_called_once_with(
+            "cat.png", dpi=300, bbox_inches="tight", pad_inches=0.02, facecolor="white"
+        )
 
         mock_savefig.assert_called()
 
