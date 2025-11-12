@@ -14,6 +14,11 @@ Here, we run an experiment that accesses, containerizes and executes multiple **
         $ floatcsep run config.yml
 
     After the calculation is complete, the results will be summarized in ``results/report.md``.
+    For troubleshooting, run the experiment with:
+
+    .. code-block:: console
+
+        $ floatcsep run config.yml --debug
 
 .. currentmodule:: floatcsep
 

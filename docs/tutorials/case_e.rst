@@ -3,7 +3,7 @@
 E - A Time-Independent Experiment
 =================================
 
-This example shows how to run a realistic testing experiment (based on :ref:`Schorlemmer et al. 2010<References>`) while summarizing the concepts from the previous tutorials.
+This example shows how to run a realistic testing experiment (based on :ref:`Schorlemmer et al. 2010<case_e_references>`) while summarizing the concepts from the previous tutorials.
 
 .. currentmodule:: floatcsep
 
@@ -138,6 +138,8 @@ Plot command
 
     and re-run with the ``plot`` command. A forecast figure will re-appear in ``results/{window}/forecasts`` with a different colormap. Additional forecast and catalog plotting options can be found in the :func:`csep.utils.plots.plot_spatial_dataset` and :func:`csep.utils.plots.plot_catalog` ``pycsep`` functions.
 
+
+.. _case_e_references:
 
 References
 ----------

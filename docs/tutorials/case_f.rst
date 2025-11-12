@@ -49,7 +49,7 @@ The source files can be found in the ``tutorials/case_e`` folder or in  `the Git
 Model
 -----
 
-The time-dependency of a model is manifested here by the provision of different forecasts, i.e., statistical descriptions of seismicity, for different time-windows. In this example, the forecasts were created from an external model https://github.com/lmizrahi/etas (:ref:`Mizrahi et al. 2021<References>`_), with which the experiment has no interface. This means that we use **only the forecast files** and no source code. We leave the handling of a model source code for subsequent tutorials.
+The time-dependency of a model is manifested here by the provision of different forecasts, i.e., statistical descriptions of seismicity, for different time-windows. In this example, the forecasts were created from an external `ETAS model <https://github.com/lmizrahi/etas>`_ (:ref:`Mizrahi et al. 2021 <case_f_references>`), with which the experiment has no interface. This means that we use **only the forecast files** and no source code. We leave the handling of a model source code for subsequent tutorials.
 
 
 
@@ -119,6 +119,8 @@ Running the experiment
 
     This will automatically set all the calculation paths (testing catalogs, evaluation results, figures) and will create a summarized report in ``results/report.md``.
 
+
+.. _case_f_references:
 
 References
 ----------
