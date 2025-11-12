@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -6,6 +7,7 @@ import subprocess
 import unittest
 import venv
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock, call, mock_open
 
 from floatcsep.infrastructure.environments import (
@@ -22,6 +24,20 @@ try:
     DOCKER_SDK_AVAILABLE = True
 except ImportError:
     DOCKER_SDK_AVAILABLE = False
+
+
+def _proc_ok():
+    p = SimpleNamespace()
+    p.stdout = iter([])
+    p.wait = lambda: 0
+    return p
+
+
+def _proc_fail():
+    p = SimpleNamespace()
+    p.stdout = iter([])
+    p.wait = lambda: 1
+    return p
 
 
 @unittest.skipUnless(
@@ -62,81 +78,188 @@ class TestCondaEnvironmentManager(unittest.TestCase):
     #
     @patch("subprocess.run")
     def test_env_exists(self, mock_run):
-        hashed = hashlib.md5("/path/to/model".encode()).hexdigest()[:8]
-        mock_run.return_value.stdout = f"test_base_{hashed}\n".encode()
+        manager = CondaManager("test_base", "/path/to/model")
+        env_path = os.path.join("/some/prefix/envs", manager.env_name)
 
+        mock_run.return_value = SimpleNamespace(
+            stdout=json.dumps({"envs": [env_path]}),
+            stderr="",
+            returncode=0,
+        )
         manager = CondaManager("test_base", "/path/to/model")
         self.assertTrue(manager.env_exists())
 
+    @patch.object(CondaManager, "_build_exe", return_value="conda")
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch.object(CondaManager, "install_dependencies", return_value=None)
+    @patch("subprocess.Popen")
     @patch("subprocess.run")
-    @patch("os.path.exists", return_value=True)
-    def test_create_environment(self, mock_exists, mock_run):
-        manager = CondaManager("test_base", "/path/to/model")
-        manager.create_environment(force=False)
-        package_manager = manager.detect_package_manager()
-        expected_calls = [
-            call(
-                [os.environ.get("CONDA_EXE") or shutil.which("conda"), "env", "list"],
-                stdout=-1,
-                check=True,
+    def test_create_env_already_exists(self, mock_run, mock_popen, *_):
+        m = CondaManager("test_base", "/path/to/model")
+        env_path = f"/x/envs/{m.env_name}"
+
+        mock_run.return_value = SimpleNamespace(
+            stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
+        )
+
+        m.create_environment(force=False)
+
+        self.assertEqual(mock_run.call_count, 1)
+        mock_popen.assert_not_called()
+
+    @patch.object(CondaManager, "_build_exe", return_value="conda")
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch.object(CondaManager, "install_dependencies", return_value=None)  # speed!
+    @patch("yaml.safe_load", return_value={"dependencies": ["python=3.12", "numpy"]})
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("os.path.exists", side_effect=lambda p: p.endswith("environment.yml"))
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    def test_from_yaml(self, mock_run, mock_popen, *_patches):
+        m = CondaManager("test_base", "/path/to/model")
+        env_path = f"/x/envs/{m.env_name}"
+
+        mock_run.side_effect = [
+            SimpleNamespace(
+                stdout=json.dumps({"envs": []}), stderr="", returncode=0, text=True
             ),
-            call().stdout.decode(),
-            call().stdout.decode().__contains__(manager.env_name),
-            call(
-                [
-                    package_manager,
-                    "env",
-                    "create",
-                    "--name",
-                    manager.env_name,
-                    "--file",
-                    "/path/to/model/environment.yml",
-                ]
+            SimpleNamespace(
+                stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
             ),
-            call(
-                [
-                    package_manager,
-                    "run",
-                    "-n",
-                    manager.env_name,
-                    "pip",
-                    "install",
-                    "-e",
-                    "/path/to/model",
-                ],
-                check=True,
+        ]
+        mock_popen.return_value = _proc_ok()
+
+        m.create_environment(force=False)
+
+        args0 = mock_popen.call_args_list[0][0][0]
+        self.assertEqual(args0[:3], ["conda", "env", "create"])
+        self.assertIn("-f", args0)
+        self.assertIn("/path/to/model/environment.yml", args0)
+
+    @patch.object(CondaManager, "_build_exe", return_value="conda")
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch.object(CondaManager, "detect_python_version", return_value="3.11")
+    @patch.object(CondaManager, "install_dependencies", return_value=None)
+    @patch("os.path.exists", return_value=False)
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    def test_no_yaml_create_with_python(self, mock_run, mock_popen, *_):
+        m = CondaManager("test_base", "/path/to/model")
+        env_path = f"/x/envs/{m.env_name}"
+
+        mock_run.side_effect = [
+            SimpleNamespace(
+                stdout=json.dumps({"envs": []}), stderr="", returncode=0, text=True
+            ),
+            SimpleNamespace(
+                stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
             ),
         ]
 
-        self.assertEqual(mock_run.call_count, 3)
-        mock_run.assert_has_calls(expected_calls, any_order=False)
+        proc = SimpleNamespace()
+        proc.stdout = iter([])
+        proc.wait = lambda: 0
+        mock_popen.return_value = proc
 
-    @patch("subprocess.run")
-    def test_create_environment_force(self, mock_run):
-        manager = CondaManager("test_base", "/path/to/model")
-        manager.env_exists = MagicMock()
-        manager.env_exists.side_effect = [True, False]
-        manager.create_environment(force=True)
-        self.assertEqual(mock_run.call_count, 3)
+        m.create_environment(force=False)
+        self.assertEqual(mock_run.call_count, 2)
 
+        self.assertEqual(mock_popen.call_count, 1)
+        create_args = mock_popen.call_args_list[0][0][0]
+        self.assertEqual(create_args[:2], ["conda", "create"])
+        self.assertIn("-n", create_args)
+        self.assertIn(m.env_name, create_args)
+        self.assertIn(f"python=3.11", create_args)
+
+    @patch.object(CondaManager, "_build_exe", return_value="conda")
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch.object(CondaManager, "detect_python_version", return_value="3.12")
+    @patch.object(CondaManager, "install_dependencies", return_value=None)
+    @patch("yaml.safe_load", return_value={"dependencies": ["numpy"]})
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("os.path.exists", side_effect=lambda p: p.endswith("environment.yml"))
+    @patch("subprocess.Popen")
     @patch("subprocess.run")
-    @patch.object(CondaManager, "detect_package_manager", return_value="conda")
-    def test_install_dependencies(self, mock_detect_package_manager, mock_run):
-        manager = CondaManager("test_base", "/path/to/model")
-        manager.install_dependencies()
-        mock_run.assert_called_once_with(
-            [
-                "conda",
-                "run",
-                "-n",
-                manager.env_name,
-                "pip",
-                "install",
-                "-e",
-                "/path/to/model",
-            ],
-            check=True,
-        )
+    def test_from_yaml_no_python(self, mock_run, mock_popen, *_patches):
+        m = CondaManager("test_base", "/path/to/model")
+        env_path = f"/x/envs/{m.env_name}"
+
+        mock_run.side_effect = [
+            SimpleNamespace(
+                stdout=json.dumps({"envs": []}), stderr="", returncode=0, text=True
+            ),
+            SimpleNamespace(stdout="", stderr="", returncode=0, text=True),
+            SimpleNamespace(
+                stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
+            ),
+        ]
+        mock_popen.return_value = _proc_ok()
+
+        m.create_environment(force=False)
+
+        create_call = mock_run.call_args_list[1][0][0]
+        self.assertEqual(create_call[:2], ["conda", "create"])
+        self.assertIn(f"python=3.12", create_call)
+
+        args0 = mock_popen.call_args_list[0][0][0]
+        self.assertEqual(args0[:3], ["conda", "env", "update"])
+        self.assertIn("-f", args0)
+
+    @patch.object(CondaManager, "_build_exe", return_value="conda")
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch.object(CondaManager, "install_dependencies", return_value=None)
+    @patch("subprocess.Popen")
+    @patch("subprocess.run")
+    def test_force_removes_first(self, mock_run, mock_popen, *_):
+        m = CondaManager("test_base", "/path/to/model")
+        env_path = f"/x/envs/{m.env_name}"
+
+        mock_run.side_effect = [
+            SimpleNamespace(
+                stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
+            ),
+            SimpleNamespace(
+                stdout=json.dumps({"envs": []}), stderr="", returncode=0, text=True
+            ),
+            SimpleNamespace(
+                stdout=json.dumps({"envs": [env_path]}), stderr="", returncode=0, text=True
+            ),
+        ]
+        mock_popen.return_value = _proc_ok()
+
+        m.create_environment(force=True)
+
+        self.assertGreaterEqual(mock_run.call_count, 2)
+
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch("subprocess.Popen")
+    def test_install_dependencies_ok(self, mock_popen, _conda_exe):
+        m = CondaManager("test_base", "/path/to/model")
+        abs_model = os.path.abspath(m.model_directory)
+        proc = SimpleNamespace()
+        proc.stdout = iter([])
+        proc.wait = lambda: 0
+        mock_popen.return_value = proc
+
+        m.install_dependencies()
+
+        called = mock_popen.call_args[0][0]
+        assert called[:5] == ["conda", "run", "--live-stream", "-n", m.env_name]
+        assert called[5:10] == ["python", "-m", "pip", "install", "-e"]
+        assert called[10] == abs_model
+
+    @patch.object(CondaManager, "_conda_exe", return_value="conda")
+    @patch("subprocess.Popen")
+    def test_install_dependencies_fail_raises(self, mock_popen, _conda_exe):
+        m = CondaManager("test_base", "/path/to/model")
+
+        proc = SimpleNamespace()
+        proc.stdout = iter([])
+        proc.wait = lambda: 1  # simulate pip failure
+        mock_popen.return_value = proc
+
+        with self.assertRaises(RuntimeError):
+            m.install_dependencies()
 
     @patch("shutil.which", return_value="conda")
     @patch("os.path.exists", side_effect=[False, False, True])
@@ -152,32 +275,37 @@ class TestCondaEnvironmentManager(unittest.TestCase):
 
         major_minor_version = ".".join(python_version.split(".")[:2])
 
-        self.assertIn(major_minor_version, ["3.9", "3.10", "3.11"])
+        self.assertIn(major_minor_version, ["3.9", "3.10", "3.11", "3.12"])
 
-    def test_create_and_delete_environment(self):
-        self.manager.create_environment(force=True)
-
-        result = subprocess.run(["conda", "env", "list"], stdout=subprocess.PIPE, check=True)
-        self.assertIn(self.manager.env_name, result.stdout.decode())
-
-        result = subprocess.run(
-            [
-                "conda",
-                "run",
-                "-n",
-                self.manager.env_name,
-                "python",
-                "-c",
-                "import numpy",
-            ],
-            check=True,
-        )
-        self.assertEqual(result.returncode, 0)
-
-        self.manager.create_environment(force=True)
-
-        result = subprocess.run(["conda", "env", "list"], stdout=subprocess.PIPE, check=True)
-        self.assertIn(self.manager.env_name, result.stdout.decode())
+    def test_integration_create_and_delete(self):
+        try:
+            self.manager.create_environment(force=True)
+            res = subprocess.run(
+                ["conda", "env", "list", "--json"],
+                stdout=subprocess.PIPE,
+                check=True,
+                text=True,
+            )
+            envs = json.loads(res.stdout)["envs"]
+            self.assertTrue(any(p.endswith(os.path.sep + self.manager.env_name) for p in envs))
+            res = subprocess.run(
+                ["conda", "run", "-n", self.manager.env_name, "python", "-c", "import numpy"],
+                check=True,
+                text=True,
+            )
+            self.assertEqual(res.returncode, 0)
+            res = subprocess.run(
+                ["conda", "env", "list", "--json"],
+                stdout=subprocess.PIPE,
+                check=True,
+                text=True,
+            )
+            envs = json.loads(res.stdout)["envs"]
+            self.assertTrue(any(p.endswith(os.path.sep + self.manager.env_name) for p in envs))
+        finally:
+            subprocess.run(
+                ["conda", "env", "remove", "-n", self.manager.env_name, "-y"], check=False
+            )
 
 
 class TestEnvironmentFactory(unittest.TestCase):
