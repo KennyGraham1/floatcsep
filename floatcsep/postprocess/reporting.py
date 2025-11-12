@@ -1,13 +1,13 @@
 import importlib.util
-import itertools
+import re
 import logging
 import os
 from typing import TYPE_CHECKING
-
 import numpy
-
+from markdown_pdf import MarkdownPdf, Section
 from floatcsep.experiment import ExperimentComparison
 from floatcsep.utils.helpers import timewindow2str, str2timewindow
+from floatcsep.postprocess import plot_handler
 
 if TYPE_CHECKING:
     from floatcsep.experiment import Experiment
@@ -37,26 +37,31 @@ def generate_report(experiment, timewindow=-1):
 
     report_path = experiment.registry.run_dir / "report.md"
 
-    timewindow = experiment.time_windows[timewindow]
-    timestr = timewindow2str(timewindow)
+    all_windows = list(experiment.time_windows)
+    if timewindow == 0:
+        windows = all_windows
+    else:
+        windows = [all_windows[timewindow]]
+
+    show_tw_heading = len(all_windows) > 1
 
     log.info(f"Saving report into {experiment.registry.run_dir}")
 
     report = MarkdownReport()
     report.add_title(f"Experiment Report - {experiment.name}", "")
     report.add_heading("Objectives", level=2)
-
     objs = [
         "Describe the predictive skills of posited hypothesis about "
         "seismogenesis with earthquakes of"
         f" M>{min(experiment.magnitudes)}.",
     ]
-
     report.add_list(objs)
 
-    report.add_heading("Authoritative Data", level=2)
-
     # Generate catalog plot
+    plot_catalog: dict = plot_handler.parse_plot_config(
+        experiment.postprocess.get("plot_catalog", {})
+    )
+    report.add_heading("Authoritative Data", level=2)
     if experiment.catalog_repo.catalog is not None:
         cat_map_path = os.path.relpath(
             experiment.registry.get_figure_key("main_catalog_map"), report_path.parent
@@ -74,45 +79,88 @@ def generate_report(experiment, timewindow=-1):
             f"Earthquakes are filtered above Mw"
             f" {min(experiment.magnitudes)}.",
             add_ext=True,
+            width=plot_catalog.get("figsize", [4])[0] * 148,
         )
-    test_names = [test.name for test in experiment.tests]
-    report.add_list(test_names)
 
-    report.add_heading("Test results", level=2)
+    # Include forecasts
+    plot_forecasts: dict = plot_handler.parse_plot_config(
+        experiment.postprocess.get("plot_forecasts", {})
+    )
 
-    # Include results from Experiment
-    for test in experiment.tests:
-        fig_path = os.path.relpath(
-            experiment.registry.get_figure_key(timestr, test), report_path.parent
-        )
-        width = test.plot_args[0].get("figsize", [4])[0] * 96
-        report.add_figure(
-            f"{test.name}",
-            fig_path,
-            level=3,
-            caption=test.markdown,
-            add_ext=True,
-            width=width,
-        )
-        for model in experiment.models:
-            try:
-                fig_path = os.path.relpath(
-                    experiment.registry.get_figure_key(timestr, f"{test.name}_{model.name}"),
+    if isinstance(plot_forecasts, dict):
+        report.add_heading("Forecasts", level=2)
+        for tw in windows:
+            tw_str = timewindow2str(tw)
+            if show_tw_heading:
+                report.add_heading(f"Forecasts for {tw_str}", level=3)
+            model_level = 4 if show_tw_heading else 3
+
+            for model in experiment.models:
+                fpath = os.path.relpath(
+                    experiment.registry.get_figure_key(tw_str, "forecasts", model.name),
                     report_path.parent,
                 )
-                width = test.plot_args[0].get("figsize", [4])[0] * 96
                 report.add_figure(
-                    f"{test.name}: {model.name}",
-                    fig_path,
-                    level=3,
-                    caption=test.markdown,
+                    title=f"{model.name}",
+                    relative_filepaths=fpath,
+                    level=model_level,
                     add_ext=True,
-                    width=width,
+                    width=plot_forecasts.get("figsize", [4])[0] * 126,
                 )
-            except KeyError:
-                pass
+
+    # Include results from Experiment
+    report.add_heading("Test results", level=2)
+    for tw in windows:
+        tw_str = timewindow2str(tw)
+        if show_tw_heading:
+            report.add_heading(f"Results for {tw_str}", level=3)
+        test_level = 4 if show_tw_heading else 3
+        model_level = test_level + 1
+
+        for test in experiment.tests:
+            fig_path = os.path.relpath(
+                experiment.registry.get_figure_key(tw_str, test), report_path.parent
+            )
+            width = test.plot_args[0].get("figsize", [4])[0] * 96
+
+            report.add_figure(
+                f"{test.name}",
+                fig_path,
+                level=test_level,
+                caption=test.markdown,
+                add_ext=True,
+                width=width,
+            )
+            for model in experiment.models:
+                try:
+                    model_fig_path = os.path.relpath(
+                        experiment.registry.get_figure_key(tw_str, f"{test.name}_{model.name}"),
+                        report_path.parent,
+                    )
+                    width = test.plot_args[0].get("figsize", [4])[0] * 96
+                    report.add_figure(
+                        f"{model.name}",
+                        model_fig_path,
+                        level=model_level,
+                        caption=test.markdown,
+                        add_ext=True,
+                        width=width,
+                    )
+                except KeyError:
+                    pass
+
     report.table_of_contents()
     report.save(report_path)
+
+    md_text = report.to_markdown()
+    pdf = MarkdownPdf(toc_level=2, optimize=True)
+    section = Section(md_text, root=str(report_path.parent))
+    pdf.add_section(section)
+    pdf.meta["title"] = f"Experiment Report - {experiment.name}"
+    pdf.meta["author"] = "floatCSEP"
+
+    pdf_path = (experiment.registry.run_dir / "report.pdf").as_posix()
+    pdf.save(pdf_path)
 
 
 def reproducibility_report(exp_comparison: "ExperimentComparison"):
@@ -348,39 +396,37 @@ class MarkdownReport:
         else:
             paths = relative_filepaths
 
-        # make "relative path" (to experiment dir) relative to report
-        paths = [p.replace("results/", "") for p in paths]
-
         correct_paths = []
         if add_ext:
             for fp in paths:
-                correct_paths.append(fp + ".png")
+                correct_paths.append(fp if fp.lower().endswith(".png") else fp + ".png")
         else:
             correct_paths = paths
 
         # generate new lists with size ncols
-        formatted_paths = [correct_paths[i : i + ncols] for i in range(0, len(paths), ncols)]
+        formatted_paths = [
+            correct_paths[i : i + ncols] for i in range(0, len(correct_paths), ncols)
+        ]
 
         # convert str into a list, where each potential row is an iter not str
-        def build_header(_row):
-            top = "|"
-            bottom = "|"
-            for i, _ in enumerate(_row):
-                if i == ncols:
-                    break
-                top += " |"
-                bottom += " --- |"
-            return top + "\n" + bottom
+        def build_header(ncols):
+            header = "| " + " | ".join([" "] * ncols) + " |"
+            under = "| " + " | ".join(["---"] * ncols) + " |"
+            return header + "\n" + under
 
-        size_ = bool(width) * f"width={width}"
+        size_attr = f' width="{int(width)}"' if width else ""
+        # size_attr = f' style="width:{int(width)}px;"' if width else ""
+        # size_attr = (
+        #     f' width="{int(width)}" style="width:{int(width)}px;max-width:100%;height:auto;"'
+        #     if width
+        #     else ""
+        # )
 
         def add_to_row(_row):
             if len(_row) == 1:
-                return f'<img src="{_row[0]}" {size_}/>'
-            string = "| "
-            for item in _row:
-                string = string + f'<img src="{item}" width={width}/>'
-            return string
+                return f'<img src="{_row[0]}"{size_attr}/>'
+            cells = [f'<img src="{item}"{size_attr}/>' for item in _row]
+            return "| " + " | ".join(cells) + " |"
 
         level_string = f"{level * '#'}"
         result_cell = []
@@ -390,8 +436,9 @@ class MarkdownReport:
 
         for i, row in enumerate(formatted_paths):
             if i == 0 and not is_single and ncols > 1:
-                result_cell.append(build_header(row))
+                result_cell.append(build_header(len(row)))
             result_cell.append(add_to_row(row))
+
         result_cell.append("\n")
         result_cell.append(f"{caption}")
 
@@ -480,8 +527,37 @@ class MarkdownReport:
         table = "\n".join(table)
         self.markdown.append(table + "\n\n")
 
-    def save(self, out_path):
-        output = list(itertools.chain.from_iterable(self.markdown))
+    def to_markdown(self) -> str:
+        """Return the whole report as a single Markdown string."""
+        return "".join(self.markdown)
 
-        with open(out_path, "w") as f:
-            f.writelines(output)
+    def save(self, out_path):
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("".join(self.markdown))
+
+
+def _scale_img_widths(md_text: str, factor: float) -> str:
+    """
+    Scale <img ... width="N"> (or width='N') by 'factor'.
+    - Case-insensitive on 'width'
+    - Preserves the original quote style and surrounding markup
+    - Only touches numeric width attributes (no CSS)
+
+    Example match: <img src="..." width="384"/>
+    """
+
+    # <img ... width = " 123 " > with optional spaces and single/double quotes
+    pattern = re.compile(
+        r'(?i)(<img\b[^>]*?\bwidth\s*=\s*)(["\'])(\d+(?:\.\d+)?)(\2)', re.IGNORECASE
+    )
+
+    def repl(m: re.Match) -> str:
+        prefix = m.group(1)  # '<img ... width=' (up to the quote)
+        quote = m.group(2)  # the quote char (either " or ')
+        num = float(m.group(3))
+        scaled = max(1, int(round(num * factor)))
+        return f"{prefix}{quote}{scaled}{quote}"
+
+    new_text, n = pattern.subn(repl, md_text)
+
+    return new_text

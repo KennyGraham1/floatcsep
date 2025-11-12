@@ -24,6 +24,7 @@ dependencies = [
     "docker",
     "gitpython",
     "h5py",
+    "markdown-pdf",
     "matplotlib",
     "pandas",
     "packaging",

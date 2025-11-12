@@ -15,11 +15,11 @@ region_config:
   depth_max: 70
 
 run_mode: parallel
+
 force_rerun: True
 catalog: catalog.csv
 model_config: models.yml
 test_config: tests.yml
 
 postprocess:
-  plot_catalog: false
   plot_forecasts: false

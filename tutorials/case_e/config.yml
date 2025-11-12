@@ -19,10 +19,12 @@ models: models.yml
 test_config: tests.yml
 
 postprocess:
+  plot_catalog:
+    markercolor: blue
   plot_forecasts:
     cmap: magma
     region_border: True
-    basemap: stock_img
+    basemap: ESRI_terrain
     clabel_fontsize: 14
     cticks_fontsize: 12
     alpha_exp: 0.8

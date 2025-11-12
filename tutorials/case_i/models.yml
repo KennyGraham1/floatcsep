@@ -6,17 +6,15 @@
     path: models/step
     args_file: step_config.yaml
     build: docker
-    force_stage: true
-    force_build: true
     func: run
     func_kwargs:
       paths:
         catalog_file: catalog.csv
       forecast:
-        min_magnitude: 4.0
+        min_magnitude: 3.0
         region_code: 90
         parameters:
-          a_value: 0
+          a_value: -1.00
           b_value: 1.03
           p_value: 1.07
           c_value: 0.04

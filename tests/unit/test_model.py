@@ -292,7 +292,7 @@ class TestTimeDependentModel(TestModel):
         self.model.get_forecast(tstring)
 
         self.mock_repository_instance.load_forecast.assert_called_once_with(
-            tstring, region=None
+            tstring, name=self.name, region=None
         )
 
     @patch("floatcsep.model.TimeDependentModel.prepare_args")

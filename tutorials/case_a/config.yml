@@ -24,5 +24,4 @@ tests:
 
 postprocess:
   plot_forecasts:
-    cmap: magma
     catalog: True

@@ -85,29 +85,42 @@ def plot_forecasts(experiment: "Experiment") -> None:
     plot_forecast_config["projection"]: ccrs.Projection = parse_projection(
         plot_forecast_config.get("projection")
     )
+    plot_forecast_config["title"] = None
 
     for model in experiment.models:
         for window in time_windows:
             forecast = model.get_forecast(window, region=experiment.region)
             ax = forecast.plot(plot_args=plot_forecast_config)
 
-            # If catalog option is passed, catalog is plotted on top of the forecast
             if plot_forecast_config.get("catalog"):
                 cat_args = plot_forecast_config.get("catalog", {})
                 if cat_args is True:
                     cat_args = {}
-                experiment.catalog_repo.get_test_cat(window).plot(
+                overlay_args = {
+                    **cat_args,
+                    "basemap": plot_forecast_config.get("basemap", None),
+                }
+                ax = experiment.catalog_repo.get_test_cat(window).plot(
                     ax=ax,
                     extent=ax.get_extent(),
-                    plot_args=cat_args.update(
-                        {
-                            "basemap": plot_forecast_config.get("basemap", None),
-                            "title": ax.get_title(),
-                        }
-                    ),
+                    plot_args=overlay_args,
                 )
-            fig_path = experiment.registry.get_figure_key(window, "forecasts", model.name)
-            pyplot.savefig(fig_path, dpi=plot_forecast_config.get("dpi", 300))
+
+            fig = ax.get_figure()
+            fig.canvas.draw()
+
+            dpi = plot_forecast_config.get("dpi", 300)
+            png_path = (
+                experiment.registry.get_figure_key(window, "forecasts", model.name) + ".png"
+            )
+            fig.savefig(
+                png_path,
+                dpi=dpi,
+                bbox_inches="tight",
+                pad_inches=0.02,
+                facecolor="white",
+            )
+            pyplot.close(fig)
 
 
 def plot_catalogs(experiment: "Experiment") -> None:
@@ -171,33 +184,73 @@ def plot_catalogs(experiment: "Experiment") -> None:
     if test_catalog.get_number_of_events() == 0:
         log.debug(f"Catalog has zero events in {experiment_timewindow}")
         return
+    dpi = plot_catalog_config.get("dpi", 300)
 
     # Plot catalog map
     ax = test_catalog.plot(plot_args=plot_catalog_config)
+    fig = ax.get_figure()
+    fig.canvas.draw()
     cat_map_path = experiment.registry.get_figure_key("main_catalog_map")
-    ax.get_figure().savefig(cat_map_path, dpi=plot_catalog_config.get("dpi", 300))
+    fig.savefig(
+        cat_map_path,
+        dpi=dpi,
+        bbox_inches="tight",  # <— trim outer margins
+        pad_inches=0.02,  # <— tiny padding to avoid clipping
+        facecolor="white",
+    )
+    pyplot.close(fig)
 
     # Plot catalog time series vs. magnitude
     ax = magnitude_vs_time(test_catalog)
+    fig = ax.get_figure()
+    fig.canvas.draw()
     cat_time_path = experiment.registry.get_figure_key("main_catalog_time")
-    ax.get_figure().savefig(cat_time_path, dpi=plot_catalog_config.get("dpi", 300))
+    fig.savefig(
+        cat_time_path,
+        dpi=dpi,
+        bbox_inches="tight",
+        pad_inches=0.02,
+        facecolor="white",
+    )
+    pyplot.close(fig)
 
     # If selected, plot the test catalogs for each of the time windows
     if plot_catalog_config.get("all_time_windows"):
         for tw in experiment.time_windows:
-            test_catalog = experiment.catalog_repo.get_test_cat(timewindow2str(tw))
+            tw_str = timewindow2str(tw)
+            test_catalog = experiment.catalog_repo.get_test_cat(tw_str)
 
-            if test_catalog.get_number_of_events() != 0:
-                log.debug(f"Catalog has zero events in {tw}. Skip plotting")
+            if test_catalog.get_number_of_events() == 0:
+                log.debug(f"Catalog has zero events in {tw_str}. Skip plotting")
                 continue
 
+            # Map
             ax = test_catalog.plot(plot_args=plot_catalog_config)
-            cat_map_path = experiment.registry.get_figure_key(tw, "catalog_map")
-            ax.get_figure().savefig(cat_map_path, dpi=plot_catalog_config.get("dpi", 300))
+            fig = ax.get_figure()
+            fig.canvas.draw()
+            cat_map_path = experiment.registry.get_figure_key(tw_str, "catalog_map") + ".png"
+            fig.savefig(
+                cat_map_path,
+                dpi=dpi,
+                bbox_inches="tight",
+                pad_inches=0.02,
+                facecolor="white",
+            )
+            pyplot.close(fig)
 
+            # Time series
             ax = magnitude_vs_time(test_catalog)
-            cat_time_path = experiment.registry.get_figure_key(tw, "catalog_time")
-            ax.get_figure().savefig(cat_time_path, dpi=plot_catalog_config.get("dpi", 300))
+            fig = ax.get_figure()
+            fig.canvas.draw()
+            cat_time_path = experiment.registry.get_figure_key(tw_str, "catalog_time") + ".png"
+            fig.savefig(
+                cat_time_path,
+                dpi=dpi,
+                bbox_inches="tight",
+                pad_inches=0.02,
+                facecolor="white",
+            )
+            pyplot.close(fig)
 
 
 def plot_custom(experiment: "Experiment"):
