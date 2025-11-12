@@ -1,5 +1,6 @@
 import configparser
 import hashlib
+import json
 import logging
 import os
 import platform
@@ -10,10 +11,11 @@ import venv
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Union, List
-
+import re
 import docker
+import yaml
 from docker.errors import ImageNotFound, APIError
-from packaging.specifiers import SpecifierSet
+
 
 log = logging.getLogger("floatLogger")
 
@@ -124,6 +126,107 @@ class CondaManager(EnvironmentManager):
         log.info("Mamba not detected, using conda as package manager.")
         return "conda"
 
+    @staticmethod
+    def _conda_exe() -> str:
+        exe = shutil.which("conda")
+        if not exe:
+            raise RuntimeError("conda not found on PATH")
+        return exe
+
+    def _build_exe(self) -> str:
+        # Use mamba if available, otherwise conda
+        return shutil.which("mamba") or self._conda_exe()
+
+    def detect_python_version(self) -> str:
+        """
+        Determines the required Python version from setup files in the model directory. It
+        checks 'setup.py', 'pyproject.toml', and 'setup.cfg' (in that order), for version
+        specifications.
+
+        Returns:
+            version (str): The build python version.
+        """
+
+        def read_python_requires() -> Union[str, None]:
+            # setup.cfg
+            cfg = os.path.join(self.model_directory, "setup.cfg")
+            if os.path.exists(cfg):
+                cp = configparser.ConfigParser()
+                cp.read(cfg)
+                req = cp.get("options", "python_requires", fallback="").strip()
+                if req:
+                    return req
+
+            # pyproject.toml
+            ppt = os.path.join(self.model_directory, "pyproject.toml")
+            if os.path.exists(ppt):
+                try:
+                    import tomllib  # py3.11+
+
+                    with open(ppt, "rb") as f:
+                        data = tomllib.load(f)
+                    req = (data.get("project", {}) or {}).get("requires-python")
+                    if req:
+                        return str(req).strip()
+                except Exception:
+                    pass
+
+            # setup.py
+            spy = os.path.join(self.model_directory, "setup.py")
+            if os.path.exists(spy):
+                with open(spy, "r", encoding="utf-8") as f:
+                    txt = f.read()
+                m = re.search(r"python_requires\s*=\s*['\"]([^'\"]+)['\"]", txt)
+                if m:
+                    return m.group(1).strip()
+            return None
+
+        def mm_from_str(v: str) -> Union[tuple[int, int], None]:
+            m = re.search(r"(\d+)\.(\d+)", v)
+            return (int(m.group(1)), int(m.group(2))) if m else None
+
+        req = read_python_requires()
+        if not req:
+            return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+        spec = req.replace(" ", "").replace("==", "=")
+        parts = spec.split(",")
+
+        upper_ver, upper_inclusive = None, False
+        for p in parts:
+            if p.startswith("<=") or p.startswith("<"):
+                v = mm_from_str(p)
+                if v:
+                    if (upper_ver is None) or (v < upper_ver):
+                        upper_ver = v
+                        upper_inclusive = p.startswith("<=")
+        if upper_ver:
+            maj, minor = upper_ver
+            if not upper_inclusive:
+                minor = max(0, minor - 1)
+            return f"{maj}.{minor}"
+
+        for p in parts:
+            if p.startswith("="):
+                v = mm_from_str(p)
+                if v:
+                    maj, minor = v
+                    return f"{maj}.{minor}"
+
+        for p in parts:
+            if p.startswith(">=") or p.startswith(">"):
+                v = mm_from_str(p)
+                if v:
+                    maj, minor = v
+                    return f"{maj}.{minor}"
+
+        v = mm_from_str(spec)
+        if v:
+            maj, minor = v
+            return f"{maj}.{minor}"
+
+        return f"{sys.version_info.major}.{sys.version_info.minor}"
+
     def create_environment(self, force=False):
         """
         Creates a conda environment using either an environment.yml file or the specified
@@ -133,49 +236,64 @@ class CondaManager(EnvironmentManager):
         Args:
             force (bool): Whether to forcefully remove an existing environment.
         """
+        build = self._build_exe()
+
         if force and self.env_exists():
-            log.info(f"Removing existing conda environment: {self.env_name}")
-            subprocess.run(
-                [
-                    self.package_manager,
-                    "env",
-                    "remove",
-                    "--name",
-                    self.env_name,
-                    "--yes",
-                ]
+            log.info(f"Removing existing env: {self.env_name}")
+            subprocess.run([build, "env", "remove", "-n", self.env_name, "-y", "-q"])
+
+        if self.env_exists():
+            return
+
+        env_file = os.path.join(self.model_directory, "environment.yml")
+        py_spec = self.detect_python_version()
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            deps = data.get("dependencies") or []
+
+            has_python_key = any(
+                isinstance(d, str) and d.strip().startswith("python") for d in deps
             )
 
-        if not self.env_exists():
-            env_file = os.path.join(self.model_directory, "environment.yml")
-            if os.path.exists(env_file):
-                log.info(f"Creating sub-conda environment {self.env_name} from environment.yml")
-                subprocess.run(
-                    [
-                        self.package_manager,
-                        "env",
-                        "create",
-                        "--name",
-                        self.env_name,
-                        "--file",
-                        env_file,
-                    ]
+            if has_python_key:
+                log.info(f"Creating env {self.env_name} from environment.yml")
+                p = subprocess.Popen(
+                    [build, "env", "create", "-n", self.env_name, "-f", env_file, "-y"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
                 )
             else:
-                python_version = self.detect_python_version()
-                log.info(f"Creating sub-conda env {self.env_name} with Python {python_version}")
+                log.info(f"Creating env {self.env_name} with python={py_spec}")
                 subprocess.run(
-                    [
-                        self.package_manager,
-                        "create",
-                        "--name",
-                        self.env_name,
-                        "--yes",
-                        f"python={python_version}",
-                    ]
+                    [build, "create", "-n", self.env_name, "-y", "-q", f"python={py_spec}"],
                 )
-            log.info(f"\tSub-conda environment created: {self.env_name}")
-            self.install_dependencies()
+
+                log.info(f"Updating env {self.env_name} from environment.yml")
+                p = subprocess.Popen(
+                    [build, "env", "update", "-n", self.env_name, "-f", env_file, "-y"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                )
+        else:
+            log.info(f"Creating env {self.env_name} with python={py_spec}")
+            p = subprocess.Popen(
+                [build, "create", "-n", self.env_name, "-y", f"python={py_spec}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+            )
+        assert p.stdout is not None
+        for line in p.stdout:
+            log.debug(f"[{build.split('/')[-1]}] {line.rstrip()}")
+        p.wait()
+
+        if not self.env_exists():
+            raise RuntimeError(f"Env {self.env_name} was not created successfully")
+
+        self.install_dependencies()
 
     def env_exists(self) -> bool:
         """
@@ -185,92 +303,37 @@ class CondaManager(EnvironmentManager):
         Returns:
             bool: True if the conda environment exists, False otherwise.
         """
-        conda_exe = os.environ.get("CONDA_EXE") or shutil.which("conda")
-        if not conda_exe:
-            return False
-        result = subprocess.run([conda_exe, "env", "list"], stdout=subprocess.PIPE, check=True)
-        return self.env_name in result.stdout.decode()
-
-    def detect_python_version(self) -> str:
-        """
-        Determines the required Python version from setup files in the model directory. It
-        checks 'setup.py', 'pyproject.toml', and 'setup.cfg' (in that order), for version
-        specifications.
-
-        Returns:
-            str: The detected or default Python version.
-        """
-        setup_py = os.path.join(self.model_directory, "setup.py")
-        pyproject_toml = os.path.join(self.model_directory, "pyproject.toml")
-        setup_cfg = os.path.join(self.model_directory, "setup.cfg")
-        current_python_version = (
-            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        conda = self._conda_exe()
+        res = subprocess.run(
+            [conda, "env", "list", "--json"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+            text=True,
         )
-
-        def parse_version(version_str):
-            # Extract the first valid version number
-            import re
-
-            match = re.search(r"\d+(.\d+)*", version_str)
-            return match.group(0) if match else current_python_version
-
-        def is_version_compatible(requirement, current_version):
-            try:
-                specifier = SpecifierSet(requirement)
-                return current_version in specifier
-            except Exception as e:
-                log.error(f"Invalid specifier: {requirement}. Error: {e}")
-                return False
-
-        if os.path.exists(setup_py):
-            with open(setup_py) as f:
-                for line in f:
-                    if "python_requires" in line:
-                        required_version = line.split("=")[1].strip()
-                        if is_version_compatible(required_version, current_python_version):
-                            log.info(f"Using current Python version: {current_python_version}")
-                            return current_python_version
-                        return parse_version(required_version)
-
-        if os.path.exists(pyproject_toml):
-            with open(pyproject_toml) as f:
-                for line in f:
-                    if "python" in line and "=" in line:
-                        required_version = line.split("=")[1].strip()
-                        if is_version_compatible(required_version, current_python_version):
-                            log.info(f"Using current Python version: {current_python_version}")
-                            return current_python_version
-                        return parse_version(required_version)
-
-        if os.path.exists(setup_cfg):
-            config = configparser.ConfigParser()
-            config.read(setup_cfg)
-            if "options" in config and "python_requires" in config["options"]:
-                required_version = config["options"]["python_requires"].strip()
-                if is_version_compatible(required_version, current_python_version):
-                    log.info(f"Using current Python version: {current_python_version}")
-                    return current_python_version
-                return parse_version(required_version)
-
-        return current_python_version
+        envs = json.loads(res.stdout).get("envs", [])
+        return any(p.endswith(os.path.sep + self.env_name) for p in envs)
 
     def install_dependencies(self) -> None:
-        """
-        Installs dependencies in the conda environment using pip, based on the model setup
-        file.
-        """
-        log.info(f"Installing dependencies in conda environment: {self.env_name}")
-        cmd = [
-            self.package_manager,
-            "run",
-            "-n",
-            self.env_name,
-            "pip",
-            "install",
-            "-e",
-            self.model_directory,
-        ]
-        subprocess.run(cmd, check=True)
+
+        conda = self._conda_exe()
+        conda_base = [conda, "run", "--live-stream", "-n", self.env_name]
+        abs_model = os.path.abspath(self.model_directory)
+        log.info(f"Installing pip dependencies in env: {self.env_name}")
+
+        cmd = conda_base + ["python", "-m", "pip", "install", "-e", abs_model]
+
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            log.debug(f"[pip] {line.rstrip()}")
+        rc = process.wait()
+        if rc != 0:
+            raise RuntimeError(
+                f"[{self.base_name}] pip install failed with exit code {rc}: {cmd}"
+            )
 
     def run_command(self, command, **kwargs) -> None:
         """
@@ -279,11 +342,8 @@ class CondaManager(EnvironmentManager):
         Args:
             command (str): The command to be executed in the conda environment.
         """
-        cmd = [
-            "bash",
-            "-c",
-            f"conda run --live-stream -n {self.env_name} {command}",
-        ]
+        conda = self._conda_exe()
+        cmd = [conda, "run", "--live-stream", "-n", self.env_name, command]
 
         process = subprocess.Popen(
             cmd,
@@ -291,10 +351,15 @@ class CondaManager(EnvironmentManager):
             stderr=subprocess.STDOUT,
             universal_newlines=True,
         )
+        assert process.stdout is not None
         for line in process.stdout:
-            stripped_line = line.strip()
-            log.info(f"[{self.base_name}]: " + stripped_line)
-        process.wait()
+            log.debug(f"[{self.base_name}] {line.rstrip()}")
+        rc = process.wait()
+
+        if rc != 0:
+            log.error(f"[{self.base_name}] Command exited with code {rc}: {command}")
+        else:
+            log.debug(f"[{self.base_name}] Command finished successfully.")
 
 
 class VenvManager(EnvironmentManager):
@@ -332,7 +397,7 @@ class VenvManager(EnvironmentManager):
 
         if not self.env_exists():
             log.info(f"Creating virtual environment: {self.env_name}")
-            venv.EnvBuilder(with_pip=True, clear=False, symlinks=False).create(self.env_path)
+            venv.EnvBuilder(with_pip=True, clear=True, symlinks=True).create(self.env_path)
             log.info(f"\tVirtual environment created: {self.env_name}")
             self.install_dependencies()
 

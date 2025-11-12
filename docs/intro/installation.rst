@@ -3,7 +3,7 @@ Installation
 
 .. important::
 
-    This application uses ``3.9 <= python <= 3.11``
+    This application uses ``3.9 <= python <= 3.12``
 
 
 Latest Version
@@ -25,8 +25,8 @@ Then, let ``conda`` automatically install all required dependencies of **floatCS
 
     .. code-block:: console
 
-        $ conda create -n csep_env
-        $ conda activate csep_env
+        $ conda env create -f environment.yml
+        $ conda activate floatcsep
 
 .. note::
 
@@ -47,6 +47,7 @@ Lastly, install **floatCSEP** into the new environment using ``pip``:
 
         .. code-block:: console
 
+            $ git pull
             $ conda env update --file environment.yml
             $ pip install . -U
 
@@ -76,10 +77,11 @@ Having a ``conda`` manager installed (see **Note** box above), type in a console
 
     .. code-block:: console
 
-        $ conda create -n csep_env
-        $ conda activate csep_env
+        $ conda create -n experiment python={PYTHON_VERSION}
+        $ conda activate experiment
         $ conda install -c conda-forge floatcsep
 
+where ``3.9 < {PYTHON_VERSION} <= 3.12`` is at your convenience.
 
 2. From the ``PyPI`` repository
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -111,10 +113,10 @@ It is recommended (not obligatory) to use a ``conda`` environment to make sure y
 
     .. code-block:: console
 
-        $ conda create -n csep_dev
-        $ conda activate csep_dev
+        $ conda create -n floatcsep_dev
+        $ conda activate floatcsep_dev
         $ git clone https://github.com/${your_fork}/floatcsep
         $ cd floatcsep
-        $ pip install .[dev]
+        $ pip install -e .[dev]
 
 This will install and configure all the unit-testing, linting, and documentation packages.

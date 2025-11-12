@@ -11,12 +11,13 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Pablo Iturrieta", email = "pciturri@gfz-potsdam.de" },
 ]
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.9,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "numpy",
@@ -80,7 +81,7 @@ testpaths = [
 [tool.black]
 line-length = 96
 skip-string-normalization = false
-target-version = ["py39", "py310", "py311"]
+target-version = ["py39", "py310", "py311", "py312"]
 
 [tool.flake8]
 ignore = ["E203", "W503", "F401"]
