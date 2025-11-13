@@ -2,7 +2,16 @@ import unittest
 from unittest.mock import patch, MagicMock
 import floatcsep.postprocess.reporting as reporting
 
+try:
+    from markdown_pdf import MarkdownPdf, Section
+    _HAS_MARKDOWN_PDF = True
+except ImportError:
+    MarkdownPdf = None
+    Section = None
+    _HAS_MARKDOWN_PDF = False
 
+
+@unittest.skipIf(not _HAS_MARKDOWN_PDF, "No Markdown PDF available")
 class TestReporting(unittest.TestCase):
 
     @patch("floatcsep.postprocess.reporting.custom_report")
@@ -39,6 +48,7 @@ class TestReporting(unittest.TestCase):
         mock_instance.add_figure.assert_called()
 
 
+@unittest.skipIf(not _HAS_MARKDOWN_PDF, "No Markdown PDF available")
 class TestMarkdownReport(unittest.TestCase):
 
     def test_add_title(self):

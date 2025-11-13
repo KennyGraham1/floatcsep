@@ -4,14 +4,20 @@ import logging
 import os
 from typing import TYPE_CHECKING
 import numpy
-from markdown_pdf import MarkdownPdf, Section
 from floatcsep.experiment import ExperimentComparison
 from floatcsep.utils.helpers import timewindow2str, str2timewindow
 from floatcsep.postprocess import plot_handler
 
+try:
+    from markdown_pdf import MarkdownPdf, Section
+    _HAS_MARKDOWN_PDF = True
+except ImportError:
+    MarkdownPdf = None
+    Section = None
+    _HAS_MARKDOWN_PDF = False
+
 if TYPE_CHECKING:
     from floatcsep.experiment import Experiment
-
 
 log = logging.getLogger("floatLogger")
 
@@ -45,7 +51,7 @@ def generate_report(experiment, timewindow=-1):
 
     show_tw_heading = len(all_windows) > 1
 
-    log.info(f"Saving report into {experiment.registry.run_dir}")
+    log.info(f"Saving Markdown report into {report_path}")
 
     report = MarkdownReport()
     report.add_title(f"Experiment Report - {experiment.name}", "")
@@ -152,15 +158,17 @@ def generate_report(experiment, timewindow=-1):
     report.table_of_contents()
     report.save(report_path)
 
-    md_text = report.to_markdown()
-    pdf = MarkdownPdf(toc_level=2, optimize=True)
-    section = Section(md_text, root=str(report_path.parent))
-    pdf.add_section(section)
-    pdf.meta["title"] = f"Experiment Report - {experiment.name}"
-    pdf.meta["author"] = "floatCSEP"
+    if _HAS_MARKDOWN_PDF:
+        md_text = report.to_markdown()
+        pdf = MarkdownPdf(toc_level=2, optimize=True)
+        section = Section(md_text, root=str(report_path.parent))
+        pdf.add_section(section)
+        pdf.meta["title"] = f"Experiment Report - {experiment.name}"
+        pdf.meta["author"] = "floatCSEP"
 
-    pdf_path = (experiment.registry.run_dir / "report.pdf").as_posix()
-    pdf.save(pdf_path)
+        pdf_path = (experiment.registry.run_dir / "report.pdf").as_posix()
+        log.info(f"Saving PDF report into {pdf_path}")
+        pdf.save(pdf_path)
 
 
 def reproducibility_report(exp_comparison: "ExperimentComparison"):
@@ -403,24 +411,16 @@ class MarkdownReport:
         else:
             correct_paths = paths
 
-        # generate new lists with size ncols
         formatted_paths = [
             correct_paths[i : i + ncols] for i in range(0, len(correct_paths), ncols)
         ]
 
-        # convert str into a list, where each potential row is an iter not str
         def build_header(ncols):
             header = "| " + " | ".join([" "] * ncols) + " |"
             under = "| " + " | ".join(["---"] * ncols) + " |"
             return header + "\n" + under
 
         size_attr = f' width="{int(width)}"' if width else ""
-        # size_attr = f' style="width:{int(width)}px;"' if width else ""
-        # size_attr = (
-        #     f' width="{int(width)}" style="width:{int(width)}px;max-width:100%;height:auto;"'
-        #     if width
-        #     else ""
-        # )
 
         def add_to_row(_row):
             if len(_row) == 1:
