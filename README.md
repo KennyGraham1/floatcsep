@@ -38,6 +38,18 @@
 The core of `floatCSEP` is built around the `pyCSEP`
 package (https://github.com/sceccode/pycsep), which itself contains the core dependencies.
 
+## Latest version
+
+Clone and install the floatCSEP source code using `pip`
+
+```
+conda create -n $NAME -y python=3.12
+conda activate $NAME
+git clone https://github.com/cseptesting/floatcsep
+cd floatcsep
+pip install -e .
+```
+
 ## Stable Release
 
 The simplest way to install `floatCSEP` is by creating a `conda`
@@ -45,21 +57,9 @@ environment (https://conda.io - checkout Anaconda or Miniforge) and install `flo
 from `conda-forge`
 
 ```
-conda create -n $NAME -y
+conda create -n $NAME -y python=3.12
 conda activate $NAME
 conda install -c conda-forge floatcsep -y
-```
-
-## Latest version
-
-Clone and install the floatCSEP source code using `pip`
-
-```
-conda create -n $NAME -y
-conda activate $NAME
-git clone https://github.com/cseptesting/floatcsep
-cd floatcsep
-pip install .
 ```
 
 Please read
@@ -76,7 +76,7 @@ floatcsep run config.yml
 ```
 
 A runtime directory will be created in a `results` folder. The experiment results can be
-visualized in `results/report.md`. **Check out the experiment, models and tests definition in
+visualized in `results/report.md` or `results/report.pdf`. **Check out the experiment, models and tests definition in
 the tutorials**!
 
 # Important Links
