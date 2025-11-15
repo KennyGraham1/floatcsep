@@ -20,4 +20,5 @@ dependencies:
   - pytables
   - xmltodict
   - weasyprint
+  - pango
   - markdown-it-py
