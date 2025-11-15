@@ -31,12 +31,12 @@ Report includes:
 _MD = MarkdownIt("commonmark", {"html": True}).enable("table")
 BASE_TEXT_WIDTH_PX = 800
 
+LOGO_PATH = Path(__file__).resolve().parent / "artifacts" / "logo.png"
+
 
 # ---------------------------------------------------------------------------
 # Main reports
 # ---------------------------------------------------------------------------
-
-
 def generate_report(experiment: "Experiment", timewindow: int = -1) -> None:
     """Create the main experiment report (Markdown + PDF)."""
 
@@ -69,7 +69,8 @@ def generate_report(experiment: "Experiment", timewindow: int = -1) -> None:
     log.info(f"Saving Markdown report into {report_path}")
 
     report = MarkdownReport(root_dir=report_dir)
-    report.add_title(f"Experiment Report - {experiment.name}", "")
+    report.add_title("Experiment Report", experiment.name)
+
     report.add_heading("Objectives", level=2)
     objs = [
         "Describe the predictive skills of posited hypothesis about "
@@ -179,7 +180,7 @@ def reproducibility_report(exp_comparison: "ExperimentComparison") -> None:
     )
 
     report = MarkdownReport(root_dir=report_path.parent)
-    report.add_title(f"Reproducibility Report - {exp_comparison.original.name}", "")
+    report.add_title("Reproducibility Report", exp_comparison.original.name)
 
     report.add_heading("Objectives", level=2)
     objs = [
@@ -320,8 +321,6 @@ def custom_report(report_function: str, experiment: "Experiment") -> None:
 # ---------------------------------------------------------------------------
 # Markdown builder
 # ---------------------------------------------------------------------------
-
-
 class MarkdownReport:
     """Helper class to build a Markdown report."""
 
@@ -331,6 +330,33 @@ class MarkdownReport:
         self.has_title = True
         self.has_introduction = False
         self.markdown = []
+
+    def add_title(self, title, subtitle: str = "") -> None:
+        """
+        Add the main report title.
+
+        Layout:
+            - Left: experiment name (subtitle) as main H1,
+                    title as a slightly smaller line below.
+            - Right: floatCSEP logo, a bit larger.
+        """
+        self.has_title = True
+
+        main_text = title or subtitle
+        secondary_text = subtitle if subtitle else ""
+        locator = main_text.lower().replace(" ", "_")
+
+        logo_path = os.path.relpath(LOGO_PATH, self.root_dir)
+
+        html = (
+            "<div style='overflow:auto;'>\n"
+            f"  <img src='{logo_path}' class='figure-img' "
+            "style='float:right; margin-left:1em; width:130px; height:auto;' />\n"
+            f"  <h1 style='margin:0;'><a id='{locator}'></a>{main_text}</h1>\n"
+            f"  <p style='margin:0; font-size:1.6em;'>{secondary_text}</p>\n"
+            "</div>\n\n"
+        )
+        self.markdown.append(html)
 
     def add_introduction(self, adict) -> str:
         """Generate a document header from a dictionary."""
@@ -374,7 +400,7 @@ class MarkdownReport:
         else:
             paths = [os.path.relpath(i, self.root_dir) for i in fig_path]
 
-        formatted_paths = [paths[i: i + ncols] for i in range(0, len(paths), ncols)]
+        formatted_paths = [paths[i : i + ncols] for i in range(0, len(paths), ncols)]
 
         if width is not None:
             frac = max(0.1, min(1.0, float(width)))
@@ -452,16 +478,11 @@ class MarkdownReport:
         cell = [f"* {item}" for item in items]
         self.markdown.append("\n".join(cell) + "\n\n")
 
-    def add_title(self, title, text) -> None:
-        """Add the main title of the report."""
-        self.has_title = True
-        self.add_heading(title, 1, text, add_toc=False)
-
     def table_of_contents(self) -> None:
         """Generate a Table of Contents based on headings."""
         if not self.toc:
             return
-        toc = ["# Table of Contents"]
+        toc = ["## Table of Contents"]
         for title, level, locator in self.toc:
             space = "   " * (level - 1)
             toc.append(f"{space}1. [{title}](#{locator})")
@@ -508,8 +529,6 @@ class MarkdownReport:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
 def get_image_aspect(img_path: Union[str, Path]) -> Optional[float]:
     """Return width/height aspect ratio for an image, or None on failure."""
     try:
@@ -537,18 +556,18 @@ def width_fraction_from_aspect(aspect: Optional[float], ncols: int = 1) -> float
         return min(1.0, base * 0.85)
 
     if aspect is None:
-        return 0.65
+        return 0.7
 
     # Very tall (height >> width)
     if aspect < 0.8:
-        return 0.45
+        return 0.6
 
     # Roughly square to moderately rectangular
     if aspect < 1.4:
-        return 0.6
+        return 0.75
 
     # Very wide (width >> height)
-    return 0.8
+    return 0.9
 
 
 def markdown_to_pdf(
