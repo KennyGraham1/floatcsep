@@ -110,11 +110,16 @@ the [license file](https://github.com/cseptesting/floatcsep/blob/main/LICENSE) f
 information.
 
 ## Support
+     
+| <img src="https://i.postimg.cc/rFKQ0vRL/GFZ-Wortbildmarke-EN-Helmholtzdunkelblau-RGB.png" alt="GFZ logo" height="50"/> | <img src="https://i.postimg.cc/CLc5tQcZ/Geo-INQUIRE-logo.png" alt="GeoInquire logo" height="72"/> | <img src="https://i.postimg.cc/tC1LdjYf/scec.png" alt="SCEC logo" height="90"/> |
+|:----------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------:|
 
-<div style="max-width: 100px; margin: auto;">
 
-| <img src="https://i.postimg.cc/tC1LdjYf/scec.png" width="150"/>                                                                                                                                                                                           | <img src="https://i.postimg.cc/2S7ThcFM/eu-flag.jpg" width="150"/>                                                                                                                                                                                                                                                               |
-|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <div style="text-align: left;">This research was supported by the <a href="https://www.scec.org/">Statewide California Earthquake Center</a>. SCEC is funded by NSF Cooperative Agreement EAR-2225216 and USGS Cooperative Agreement G24AC00072-00.</div> | <div style="text-align: left;">The work in this repository has received funding from the European Union’s Horizon research and innovation programme under grant agreements No.s 101058518 and 821115 of the projects <a href="https://www.geo-inquire.eu/">GeoInquire</a> and <a href="https://www.rise-eu.org/">RISE</a>.</div> |
+- The work in this repository has received funding from the European Union’s Horizon research and innovation programme  
+  under grant agreements No.s 101058518 and 821115 of the projects [GeoInquire](https://www.geo-inquire.eu/) and [RISE](https://www.rise-eu.org/).
+  
+- This research was supported by the [Statewide California Earthquake Center](https://www.scec.org/).  
+  SCEC is funded by NSF Cooperative Agreement EAR-2225216 and USGS Cooperative Agreement G24AC00072-00.
 
-</div>
+
+
