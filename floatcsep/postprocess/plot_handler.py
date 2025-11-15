@@ -110,9 +110,7 @@ def plot_forecasts(experiment: "Experiment") -> None:
             fig.canvas.draw()
 
             dpi = plot_forecast_config.get("dpi", 300)
-            png_path = (
-                experiment.registry.get_figure_key(window, "forecasts", model.name) + ".png"
-            )
+            png_path = experiment.registry.get_figure_key(window, "forecasts", model.name)
             fig.savefig(
                 png_path,
                 dpi=dpi,

@@ -19,3 +19,5 @@ dependencies:
   - seaborn
   - pytables
   - xmltodict
+  - weasyprint
+  - markdown-it-py

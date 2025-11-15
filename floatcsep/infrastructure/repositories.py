@@ -123,6 +123,7 @@ class CatalogRepository:
             except json.JSONDecodeError:
                 self._catalog = csep.load_catalog(self.registry.abs(cat))
             self.cat_path = self.registry.rel(cat)
+            self.name = cat
         else:
             query_function = parse_csep_func(cat)
             bounds = {
@@ -144,6 +145,7 @@ class CatalogRepository:
 
             self._catalog = query_function(catalog_id="catalog", **bounds)
             self.cat_path = self.registry.rel("catalog.json")
+            self.name = cat
             writer = getattr(CatalogSerializer, "json")
             writer(catalog=self._catalog, filename=self.registry.abs(self.cat_path))
 

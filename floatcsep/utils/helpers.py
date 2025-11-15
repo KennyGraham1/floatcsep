@@ -43,60 +43,6 @@ _UNITS = ["years", "months", "weeks", "days"]
 _PD_FORMAT = ["YS", "MS", "W", "D"]
 
 
-DEFAULT_PLOT_ARGS = {
-    # General figure/axes handling
-    "figsize": None,
-    "tight_layout": True,
-    "grid": True,
-    "title": None,
-    "title_fontsize": 16,
-    "xlabel": None,
-    "ylabel": None,
-    "xlabel_fontsize": 12,
-    "ylabel_fontsize": 12,
-    "xlabel_rotation": 90,
-    "xticks_fontsize": 12,
-    "yticks_fontsize": 12,
-    "xlim": None,
-    "ylim": None,
-    "legend": True,
-    "legend_loc": "best",
-    "legend_fontsize": 10,
-    "legend_title": None,
-    "legend_titlesize": None,
-    "legend_labelspacing": 1,
-    "legend_borderpad": 0.4,
-    "legend_framealpha": None,
-    # Line/Scatter parameters
-    "color": "steelblue",
-    "secondary_color": "red",
-    "alpha": 0.8,
-    "linewidth": 1,
-    "linestyle": "-",
-    "size": 5,
-    "marker": "o",
-    "markersize": 5,
-    "markercolor": "steelblue",
-    "markeredgecolor": "black",
-    # Time-Series
-    "datetime_locator": AutoDateLocator(),
-    "datetime_formatter": DateFormatter("%Y-%m-%d"),
-    # Consistency and Comparison tests
-    "capsize": 2,
-    "hbars": True,
-    # Spatial plotting
-    "grid_labels": True,
-    "grid_fontsize": 8,
-    "region_color": "black",
-    "coastline": True,
-    "coastline_color": "black",
-    "coastline_linewidth": 1.5,
-    "borders_color": "black",
-    "borders_linewidth": 1.5,
-    # Color bars
-    "colorbar_labelsize": 12,
-    "colorbar_ticksize": 10,
-}
 log = logging.getLogger("floatLogger")
 
 
@@ -858,6 +804,28 @@ def magnitude_vs_time(
     """
     # Initialize plot
 
+    DEFAULT_PLOT_ARGS = {
+        # General figure/axes handling
+        "figsize": (8, 4),
+        "tight_layout": True,
+        "grid": True,
+        "title": None,
+        "title_fontsize": 16,
+        "xlabel": None,
+        "ylabel": None,
+        "xlabel_fontsize": 12,
+        "ylabel_fontsize": 12,
+        # Line/Scatter parameters
+        "color": "steelblue",
+        "alpha": 0.8,
+        "size": 5,
+        "marker": "o",
+        "markersize": 5,
+        "markercolor": "steelblue",
+        "markeredgecolor": "black",
+        "datetime_locator": AutoDateLocator(),
+        "datetime_formatter": DateFormatter("%Y-%m-%d"),
+    }
     plot_args = {**DEFAULT_PLOT_ARGS, **kwargs.get("plot_args", {}), **kwargs}
     fig, ax = pyplot.subplots(figsize=plot_args["figsize"]) if ax is None else (ax.figure, ax)
 
