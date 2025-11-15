@@ -70,7 +70,7 @@ zip-safe = false
 include = ["floatcsep*"]
 
 [tool.setuptools.package-data]
-"floatcsep.postprocess" = ["assets/*.png"]
+"floatcsep.postprocess" = ["assets/*.png", "assets/*.tff"]
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
