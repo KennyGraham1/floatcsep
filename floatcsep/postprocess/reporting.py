@@ -32,6 +32,8 @@ _MD = MarkdownIt("commonmark", {"html": True}).enable("table")
 BASE_TEXT_WIDTH_PX = 800
 
 LOGO_PATH = Path(__file__).resolve().parent / "artifacts" / "logo.png"
+FONT_REGULAR_PATH = Path(__file__).resolve().parent / "artifacts" / "NotoSans-Regular.ttf"
+FONT_BOLD_PATH = Path(__file__).resolve().parent / "artifacts" / "NotoSans-Bold.ttf"
 
 
 # ---------------------------------------------------------------------------
@@ -70,14 +72,40 @@ def generate_report(experiment: "Experiment", timewindow: int = -1) -> None:
 
     report = MarkdownReport(root_dir=report_dir)
     report.add_title("Experiment Report", experiment.name)
+    report.add_text(
+        [
+            "This experiment evaluates the performance of earthquake forecast models "
+            "within a fully specified and reproducible testing framework. This report "
+            "summarizes the main results."
+        ]
+    )
+
+    model_names = ", ".join(m.name for m in experiment.models)
+    test_names = ", ".join(t.name for t in experiment.tests)
+    meta = {
+        "Start date": str(experiment.start_date),
+        "End date": str(experiment.end_date),
+        "Class": (
+            "Time-Dependent"
+            if experiment.exp_class in ("td", "time-dependent")
+            else "Time-Independent"
+        ),
+        "Magnitude range": f"{experiment.mag_min} ≤ Mw ≤ {experiment.mag_max}",
+        "Region": getattr(experiment.region, "name", str(experiment.region)),
+        "Catalog": getattr(experiment.catalog_repo, "name", "unknown"),
+        "Models": model_names,
+        "Evaluations": test_names,
+    }
+    report.add_heading("Experiment metadata", level=2)
+    report.add_introduction(meta)
 
     report.add_heading("Objectives", level=2)
-    objs = [
-        "Describe the predictive skills of posited hypothesis about "
-        "seismogenesis with earthquakes of"
-        f" M>{min(experiment.magnitudes)}.",
-    ]
-    report.add_list(objs)
+    report.add_list(
+        [
+            "Ensure transparent and reproducible evaluation of submitted models.",
+            "Compare forecasts against authoritative seismicity observations.",
+        ]
+    )
 
     # Authoritative data / catalog plots
     plot_catalog: dict = plot_handler.parse_plot_config(
@@ -358,19 +386,21 @@ class MarkdownReport:
         )
         self.markdown.append(html)
 
-    def add_introduction(self, adict) -> str:
-        """Generate a document header from a dictionary."""
-        first = (
-            f"# CSEP Testing Results: {adict['simulation_name']}  \n"
-            f"**Forecast Name:** {adict['forecast_name']}  \n"
-            f"**Simulation Start Time:** {adict['origin_time']}  \n"
-            f"**Evaluation Time:** {adict['evaluation_time']}  \n"
-            f"**Catalog Source:** {adict['catalog_source']}  \n"
-            f"**Number Simulations:** {adict['num_simulations']}\n"
-        )
+    def add_introduction(self, meta: dict) -> str:
+        """
+        Add an experiment metadata block from a dictionary.
+
+        Expects a mapping like:
+            {"Start date": "...", "End date": "...", ...}
+        """
+        lines = []
+        for key, value in meta.items():
+            lines.append(f"- **{key}:** {value}")
+        block = "\n".join(lines) + "\n\n"
+
         self.has_introduction = True
-        self.markdown.append(first)
-        return first
+        self.markdown.append(block)
+        return block
 
     def add_text(self, text) -> None:
         """Add a paragraph from a list of lines."""
@@ -479,13 +509,21 @@ class MarkdownReport:
         self.markdown.append("\n".join(cell) + "\n\n")
 
     def table_of_contents(self) -> None:
-        """Generate a Table of Contents based on headings."""
+        """Generate a Table of Contents from top-level headings (H2)."""
         if not self.toc:
             return
+
+        max_level = 2  # include only headings with level <= 2
+        entries = [
+            (title, level, locator) for title, level, locator in self.toc if level <= max_level
+        ]
+        if not entries:
+            return
+
         toc = ["## Table of Contents"]
-        for title, level, locator in self.toc:
-            space = "   " * (level - 1)
-            toc.append(f"{space}1. [{title}](#{locator})")
+        for title, level, locator in entries:
+            toc.append(f"1. [{title}](#{locator})")
+
         insert_loc = 1 if self.has_title else 0
         self.markdown.insert(insert_loc, "\n".join(toc) + "\n\n")
 
@@ -596,6 +634,10 @@ def markdown_to_pdf(
         base_url = pdf_path.parent
     base_url = Path(base_url)
 
+    # Relative paths to the bundled fonts, normalized to POSIX-style
+    font_regular_rel = os.path.relpath(FONT_REGULAR_PATH, base_url).replace(os.sep, "/")
+    font_bold_rel = os.path.relpath(FONT_BOLD_PATH, base_url).replace(os.sep, "/")
+
     body_html = _MD.render(markdown_text)
 
     full_html = (
@@ -604,9 +646,37 @@ def markdown_to_pdf(
         "<head>\n"
         "  <meta charset='utf-8'>\n"
         "  <style>\n"
+        "    @page {\n"
+        "      size: A4;\n"
+        "        margin: 1.5cm 1.8cm 1.8cm 1.8cm;;\n"
+        "    }\n"
+        "    @font-face {\n"
+        "      font-family: 'FloatSans';\n"
+        f"      src: url('{font_regular_rel}') format('truetype');\n"
+        "      font-weight: 400;\n"
+        "      font-style: normal;\n"
+        "    }\n"
+        "    @font-face {\n"
+        "      font-family: 'FloatSans';\n"
+        f"      src: url('{font_bold_rel}') format('truetype');\n"
+        "      font-weight: 700;\n"
+        "      font-style: normal;\n"
+        "    }\n"
+        "    body {\n"
+        "      font-family: 'FloatSans',\n"
+        "        -apple-system, BlinkMacSystemFont,\n"
+        "        'Segoe UI', 'Helvetica Neue', Helvetica, Arial,\n"
+        "         sans-serif;\n"
+        "      font-size: 11pt;\n"
+        "      line-height: 1.4;\n"
+        "    }\n"
         "    img { max-width: 100%; height: auto; }\n"
         "    img.figure-img { display: block; margin: 0.5em auto; }\n"
-        "    body { margin: 1.5cm; }\n"
+        "    h1 { font-size: 18pt; margin: 0 0 0.4em 0; font-weight: 700; }\n"
+        "    h2 { font-size: 14pt; margin: 1.0em 0 0.4em 0; font-weight: 700; }\n"
+        "    h3 { font-size: 12pt; margin: 0.8em 0 0.3em 0; font-weight: 700; }\n"
+        "    table { width: 100%; border-collapse: collapse; }\n"
+        "    th, td { padding: 0.25em 0.4em; }\n"
         "  </style>\n"
         "</head>\n"
         "<body>\n"
