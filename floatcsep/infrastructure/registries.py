@@ -606,15 +606,15 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
         test_catalogs = {win: join(win, "catalog", "test_catalog.json") for win in windows}
 
         figures = {
-            "main_catalog_map": "catalog",
-            "main_catalog_time": "events",
+            "main_catalog_map": Path("catalog.png"),
+            "main_catalog_time": Path("events.png"),
             **{
                 win: {
-                    **{test: join(win, "figures", f"{test}") for test in tests},
-                    "catalog_map": join(win, "figures", "catalog_map"),
-                    "catalog_time": join(win, "figures", "catalog_time"),
+                    **{test: Path(win, "figures", f"{test}.png") for test in tests},
+                    "catalog_map": Path(win, "figures", "catalog_map.png"),
+                    "catalog_time": Path(win, "figures", "catalog_time.png"),
                     "forecasts": {
-                        model: join(win, "figures", f"forecast_{model}") for model in models
+                        model: Path(win, "figures", f"forecast_{model}.png") for model in models
                     },
                 }
                 for win in windows
