@@ -36,6 +36,8 @@ dependencies = [
     "seaborn",
     "tables",
     "xmltodict",
+    "weasyprint",
+    "markdown-it-py",
 ]
 dynamic = ["version"]
 
