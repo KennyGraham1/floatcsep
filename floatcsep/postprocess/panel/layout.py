@@ -6,12 +6,11 @@ from panel.layout import VSpacer, HSpacer
 from panel import indicators
 
 from .manifest import Manifest
-from .build_views import (
-    build_experiment_view,
-    build_catalogs_view,
-    build_forecasts_view,
-    build_results_view,
-)
+from .views.exp import build_experiment_view
+from .views.cats import build_catalogs_view
+from .views.forecasts import build_forecasts_view
+from .views.results import build_results_view
+
 
 from floatcsep import __version__ as FLOATCSEP_VERSION
 
@@ -37,8 +36,8 @@ DASHBOARD_CSS = """
   --design-background-color: #020617;        /* page background */
   --design-background-text-color: #e5e7eb;
 
-  --design-surface-color: #020617;           /* cards / surfaces */
-  --design-surface-text-color: #e5e7eb;
+  --design-surface-color: #020617;           /* background of cards / surfaces / buttons */ 
+  --design-surface-text-color: #e5e7eb;      /* text of cards / surfaces / buttons */    
 
   --design-primary-color: #14b8a6;
   --design-primary-text-color: #020617;
@@ -66,6 +65,7 @@ h1, h2, h3 {
   font-weight: 700;
 }
 
+
 """
 
 
@@ -81,7 +81,7 @@ def _build_tabs(manifest: Manifest) -> pn.Tabs:
         ("Forecasts", tab_forecasts),
         ("Results", tab_results),
         tabs_location="left",
-        sizing_mode="stretch_both",
+        sizing_mode="fixed",
     )
     return tabs
 
@@ -228,18 +228,13 @@ def _build_footer(manifest: Manifest) -> pn.Row:
         link_url="https://www.geo-inquire.eu/",
     )
 
-    logos_row = pn.Row(
+    footer = pn.Row(
+        version,
+        HSpacer(),
         gi_logo,
         github_logo,
         rtd_logo,
         csep_logo,
-        sizing_mode="fixed",
-    )
-
-    footer = pn.Row(
-        version,
-        HSpacer(),
-        logos_row,
         sizing_mode="stretch_width",
         margin=(4, 8, 4, 8),
     )
@@ -279,9 +274,7 @@ def make_template_app(manifest: Manifest) -> MaterialTemplate:
 
     tabs_surface = pn.Column(
         tabs,
-        VSpacer(),
-        footer,
-        sizing_mode="stretch_both",
+        sizing_mode="fixed",
         styles={
             "background-color": "#0b1120",
             "border-radius": "10px",
@@ -297,7 +290,9 @@ def make_template_app(manifest: Manifest) -> MaterialTemplate:
             pn.layout.Divider(),
             meta_bar,
             tabs_surface,
-            sizing_mode="stretch_both",
+            VSpacer(),
+            footer,
+            sizing_mode="stretch_width",
         )
     ]
     template.config.raw_css.append(DASHBOARD_CSS)
