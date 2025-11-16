@@ -33,6 +33,7 @@ dependencies = [
     "h5py",
     "matplotlib",
     "pandas",
+    "panel",
     "packaging",
     "pycsep",
     "pyyaml",

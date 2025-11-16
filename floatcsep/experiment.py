@@ -352,6 +352,9 @@ class Experiment:
 
         return tests
 
+    def set_tree(self):
+        self.registry.build_tree(self.time_windows, self.models, self.tests, self.run_mode)
+
     def set_tasks(self) -> None:
         """
         Lazy definition of the experiment core tasks by wrapping instances,
@@ -369,8 +372,7 @@ class Experiment:
 
         """
 
-        # Set the file path structure
-        self.registry.build_tree(self.time_windows, self.models, self.tests, self.run_mode)
+        self.set_tree()
 
         log.debug("Pre-run forecast summary")
         log_models_tree(log, self.registry, self.time_windows)

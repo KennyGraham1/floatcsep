@@ -11,6 +11,7 @@ from floatcsep.postprocess.plot_handler import (
     plot_custom,
 )
 from floatcsep.postprocess.reporting import generate_report, reproducibility_report
+from floatcsep.postprocess.panel import run_app
 
 setup_logger()
 log = logging.getLogger("floatLogger")
@@ -126,8 +127,39 @@ def plot(config: str, **kwargs) -> None:
     plot_custom(experiment=exp)
 
     generate_report(experiment=exp)
-
     log.debug("")
+
+
+def view(config: str, **kwargs) -> None:
+    """
+    Launch an interactive Panel-based data viewer for an existing experiment.
+
+    This function loads the experiment configuration, reconstructs the model and
+    evaluation file tree, and starts a Panel server so that the user can explore the
+    catalogs, forecasts, and test results in a web browser.
+
+    Example usage from a terminal:
+    ::
+
+        floatcsep view <config>
+
+    Args
+    ----
+    config : str
+        Path to the experiment configuration file (YAML format).
+    **kwargs :
+        Additional configuration parameters forwarded to `Experiment.from_yml`.
+
+    Returns
+    -------
+    None
+    """
+    log.info(f"floatCSEP v{__version__} | View")
+    exp = Experiment.from_yml(config_yml=config, **kwargs)
+    exp.stage_models()
+    exp.set_tree()
+
+    run_app(experiment=exp)
 
 
 def reproduce(config: str, **kwargs) -> None:
@@ -193,7 +225,7 @@ def floatcsep() -> None:
     parser.add_argument(
         "func",
         type=str,
-        choices=["run", "stage", "plot", "reproduce"],
+        choices=["run", "stage", "plot", "view", "reproduce"],
         help="Run a calculation",
     )
     parser.add_argument("config", type=str, help="Experiment Configuration file")
