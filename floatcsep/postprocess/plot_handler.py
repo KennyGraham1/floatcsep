@@ -17,20 +17,72 @@ if TYPE_CHECKING:
 log = logging.getLogger("floatLogger")
 
 
-def plot_results(experiment: "Experiment") -> None:
+def plot_results(experiment: "Experiment", dpi: int = 300, show: bool = False) -> None:
     """
-    Plots all evaluation results, according to the plotting function given in the tests
-    configuration file.
+    Plots all evaluation results, according to the plotting functions
+    given in the tests configuration file.
 
     Args:
         experiment: The experiment instance, whose results were already calculated.
-
+        dpi: The resolution of the plots.
+        show: Whether to show the plots.
     """
     log.info("Plotting evaluation results")
     time_windows = timewindow2str(experiment.time_windows)
+    models = experiment.models
+    registry = experiment.registry
 
     for test in experiment.tests:
-        test.plot_results(time_windows, experiment.models, experiment.registry)
+        log.info("Plotting results for test '%s'", test.name)
+        for func, fargs, fkwargs, mode in zip(
+            test.plot_func,
+            test.plot_args,
+            test.plot_kwargs,
+            test.plot_modes,
+        ):
+            if mode in ("aggregate", "per_model") and test.type in [
+                "consistency",
+                "comparative",
+            ]:
+                for time_str in time_windows:
+                    results = test.read_results(time_str, models)
+
+                    if mode == "aggregate":
+                        fig_path = registry.get_figure_key(time_str, test.name)
+                        ax = func(results, plot_args=fargs, **(fkwargs or {}))
+                        if "code" in (fargs or {}):
+                            exec(fargs["code"])
+                        pyplot.savefig(fig_path, dpi=dpi)
+                        if show:
+                            pyplot.show()
+
+                    elif mode == "per_model":
+
+                        for result, model in zip(results, models):
+                            fig_key = f"{test.name}_{model.name}"
+                            fig_path = registry.get_figure_key(time_str, fig_key)
+                            ax = func(result, plot_args=fargs, **(fkwargs or {}), show=False)
+                            if "code" in (fargs or {}):
+                                exec(fargs["code"])
+                            fig = ax.get_figure()
+                            fig.savefig(fig_path, dpi=dpi)
+                            if show:
+                                pyplot.show()
+
+            elif mode == "sequential" or test.type in [
+                "sequential",
+                "sequential_comparative",
+                "batch",
+            ]:
+                time_key = time_windows[-1]
+                results = test.read_results(time_key, models)
+                fig_path = registry.get_figure_key(time_key, test.name)
+                ax = func(results, plot_args=fargs, **(fkwargs or {}))
+                if "code" in (fargs or {}):
+                    exec(fargs["code"])
+                pyplot.savefig(fig_path, dpi=dpi)
+                if show:
+                    pyplot.show()
 
 
 def plot_forecasts(experiment: "Experiment") -> None:

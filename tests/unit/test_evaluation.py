@@ -28,6 +28,7 @@ class TestEvaluation(unittest.TestCase):
             "plot_func": None,
             "plot_args": None,
             "plot_kwargs": None,
+            "plot_modes": [],
             "markdown": "",
             "_type": None,
             "results_repo": None,
