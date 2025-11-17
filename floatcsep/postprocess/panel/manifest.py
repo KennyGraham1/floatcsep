@@ -83,6 +83,7 @@ def _timedelta_to_str(value: Any) -> Optional[str]:
 
 def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     reg = experiment.registry
+    cat_repo = experiment.catalog_repo
     if app_root is None:
         app_root = reg.abs(reg.run_dir)
 
@@ -143,6 +144,8 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     try:
         cat_map = reg.get_figure_key("main_catalog_map") + ".png"
         cat_time = reg.get_figure_key("main_catalog_time") + ".png"
+        cat_path = _rel(reg.run_dir / cat_repo.cat_path, app_root)
+        catalog["path"] = cat_path
         catalog["map"] = _rel(cat_map, app_root)
         catalog["time"] = _rel(cat_time, app_root)
     except Exception:

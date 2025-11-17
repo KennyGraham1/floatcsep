@@ -281,6 +281,7 @@ def make_template_app(manifest: Manifest) -> MaterialTemplate:
             "padding": "8px 8px 8px 0",
             "box-shadow": "0 10px 30px rgba(0, 0, 0, 0.4)",
             "min-height": "400px",
+            "width": "100%",  # force full width inside MaterialTemplate
         },
         margin=(10, 0, 0, 0),
     )

@@ -1,16 +1,22 @@
 import panel as pn
 from ..manifest import Manifest
 
+from .utils import (
+    build_region_basemap,
+    parse_time_window_strings,
+    build_time_windows_figure,
+)
+
 
 def _experiment_overview_block(manifest: Manifest) -> pn.panel:
+    """Title block at the top of the Experiment tab."""
     name = manifest.name or "Experiment"
-
     text = f"## {name}"
-
     return pn.pane.Markdown(text, sizing_mode="stretch_width")
 
 
 def _temporal_section(manifest: Manifest) -> pn.Column:
+    """Markdown summary for the temporal configuration."""
     start_date = manifest.start_date
     end_date = manifest.end_date
     n_intervals = getattr(manifest, "n_intervals", None)
@@ -18,7 +24,7 @@ def _temporal_section(manifest: Manifest) -> pn.Column:
     horizon = getattr(manifest, "horizon", None)
     offset = getattr(manifest, "offset", None)
     growth = getattr(manifest, "growth", None)
-    time_windows = getattr(manifest, "time_windows", None)
+    time_windows = getattr(manifest, "time_windows", None) or []
 
     lines = []
 
@@ -33,26 +39,22 @@ def _temporal_section(manifest: Manifest) -> pn.Column:
     lines.append(f"**End Date:** {end_date}")
 
     if horizon:
-        lines.append(f"*Forcast Horizon:* {horizon}")
+        lines.append(f"**Forecast Horizon:** {horizon}")
     if offset:
         lines.append(f"**Window Offset:** {offset}")
     if growth:
         lines.append(f"**Window Growth:** {growth}")
 
     tw_str = f"**Time Windows:** {n_intervals}\n"
-    for i in time_windows:
-        tw_str += f" - {i}"
+    for tw in time_windows:
+        tw_str += f" - {tw}\n\n"
     lines.append(tw_str)
 
     section = pn.pane.Markdown(
         "\n\n".join(lines),
         sizing_mode="stretch_width",
-        styles={
-            "font-size": "11px",
-            "line-height": "0.6",
-        },
+        styles={"font-size": "11px", "line-height": "0.6"},
     )
-
     return pn.Column(section, margin=(0, 0, 0, 8))
 
 
@@ -183,27 +185,64 @@ def _run_config_section(manifest: Manifest) -> pn.pane.Markdown:
     return pn.pane.Markdown("\n".join(lines), sizing_mode="stretch_width")
 
 
+def _build_region_panel(manifest: Manifest) -> pn.pane.Bokeh:
+    """Region tab: basemap with experiment region overlay."""
+    region = getattr(manifest, "region", None)
+    fig = build_region_basemap(region)
+    return pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+
+
+def _build_time_windows_panel(manifest: Manifest) -> pn.Column:
+    """Time windows tab: interactive timeline of forecast intervals."""
+    tw_strings = getattr(manifest, "time_windows", None) or []
+    parsed = parse_time_window_strings(tw_strings)
+    n_intervals = getattr(manifest, "n_intervals", None)
+
+    header_lines = []
+    if n_intervals is not None:
+        header_lines.append(f"Number of windows: **{n_intervals}**")
+
+    header_md = pn.pane.Markdown(
+        "\n\n".join(header_lines),
+        sizing_mode="stretch_width",
+        styles={"font-size": "11px"},
+    )
+
+    fig = build_time_windows_figure(parsed, height=180)
+    fig_pane = pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+
+    return pn.Column(
+        header_md,
+        pn.Spacer(height=4),
+        fig_pane,
+        sizing_mode="stretch_width",
+    )
+
+
+def _build_right_tabs(manifest: Manifest) -> pn.Tabs:
+    """Right-hand panel: Region | Time Windows tabs."""
+    region_panel = _build_region_panel(manifest)
+    time_panel = _build_time_windows_panel(manifest)
+
+    return pn.Tabs(
+        ("Region", region_panel),
+        ("Time Windows", time_panel),
+        sizing_mode="stretch_width",
+    )
+
+
 def build_experiment_view(manifest: Manifest) -> pn.layout.Panel:
     """Build the Experiment tab view.
 
-    Left: metadata (overview + collapsible sections).
-    Right: placeholder panel for future context-dependent content.
+    Left: metadata (overview + accordion sections).
+    Right: region map and time-window timeline.
     """
-    # --- LEFT PANEL: overview + grouped, collapsible sections ---
     overview = _experiment_overview_block(manifest)
 
-    temporal = _temporal_section(manifest)
-    temporal_panel = pn.Column(temporal, margin=(4, 0, 4, 4))
-
-    spatial = _spatial_section(manifest)
-    spatial_panel = pn.Column(spatial, margin=(4, 0, 4, 4))
-
-    models = _models_section(manifest)
-    models_panel = pn.Column(models, margin=(4, 0, 4, 4))
-
-    tests = _tests_section(manifest)
-    tests_panel = pn.Column(tests, margin=(4, 0, 4, 4))
-
+    temporal_panel = pn.Column(_temporal_section(manifest), margin=(4, 0, 4, 4))
+    spatial_panel = pn.Column(_spatial_section(manifest), margin=(4, 0, 4, 4))
+    models_panel = pn.Column(_models_section(manifest), margin=(4, 0, 4, 4))
+    tests_panel = pn.Column(_tests_section(manifest), margin=(4, 0, 4, 4))
     run_cfg = _run_config_section(manifest)
 
     sections = pn.Accordion(
@@ -218,34 +257,19 @@ def build_experiment_view(manifest: Manifest) -> pn.layout.Panel:
         header_color="#e5e7eb",
         styles={"stroke": "#e5e7eb"},
     )
-    # sections.active = [0]  # open temporal by default
 
     left = pn.Column(
         overview,
         pn.layout.Divider(),
         sections,
-        # sizing_mode="stretch_both",
         width=380,
     )
 
-    # --- RIGHT PANEL: placeholder for now ---
-    right_placeholder = pn.pane.Markdown(
-        "### Experiment details\n\n"
-        "This area will display detailed views, figures, or controls\n"
-        "depending on what you select in the left panel.\n\n"
-        "- For example: time-window plots when you expand *Temporal configuration*.\n"
-        "- Or region map preview when you expand *Spatial & magnitude*.\n",
-        sizing_mode="stretch_both",
-    )
+    right = _build_right_tabs(manifest)
 
-    right = pn.Column(
-        right_placeholder,
-        # sizing_mode="stretch_both",
-    )
-
-    # Row: left metadata panel + right detail panel
     return pn.Row(
         left,
+        pn.Spacer(width=25),
         right,
         sizing_mode="stretch_both",
     )
