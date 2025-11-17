@@ -132,6 +132,7 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
                 "fmt": getattr(model, "fmt", None),
                 "registry": model_registry,
                 "forecasts": model_forecasts,
+                "forecast_class": model.repository.__class__.__name__,
             }
         )
 

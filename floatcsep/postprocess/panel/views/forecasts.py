@@ -14,7 +14,7 @@ from bokeh.palettes import Magma256
 
 from ..manifest import Manifest
 from .utils import build_region_basemap, lonlat_to_mercator
-from floatcsep.utils.file_io import GriddedForecastParsers
+from floatcsep.utils.file_io import GriddedForecastParsers, CatalogForecastParsers
 import logging
 
 logger = logging.getLogger(__name__)
@@ -53,13 +53,51 @@ def make_magma_alpha_palette(
     return palette
 
 
+def load_catalog_forecast_as_grid(
+    path: Path,
+    region: Any,
+    nsims: Optional[int] = None,
+) -> tuple[np.ndarray, Any, np.ndarray]:
+    """
+    Load a catalog-based forecast file and return a gridded representation:
+
+        rates  : (n_cells, n_mags) float32 array of expected rates
+        region : the region associated with the forecast (CartesianGrid2D)
+        mags   : 1D array of magnitude bin edges
+
+    This uses pyCSEP's CatalogForecast + get_expected_rates under the hood,
+    but exposes only raw arrays to the dashboard.
+    """
+    if region is None:
+        raise ValueError("Region is required to load a catalog-based forecast.")
+
+    cf = CatalogForecastParsers.csv(
+        path.as_posix(),
+        region=region,
+        filter_spatial=True,
+        apply_filters=True,
+        store=False,
+    )
+
+    if nsims is not None:
+        cf.n_cat = nsims
+
+    gf = cf.get_expected_rates(verbose=False)
+
+    rates = np.asarray(gf.data, dtype="float32")
+    region_out = getattr(gf, "region", region)
+    mags = np.asarray(getattr(gf, "magnitudes", []))
+
+    return rates, region_out, mags
+
+
 def load_gridded_forecast(
     manifest: Manifest,
     model_index: int,
     timewindow_str: str,
 ) -> Dict[str, Any]:
     """
-    Load and preprocess a gridded forecast for the dashboard.
+    Load and preprocess a gridded *or catalog-based* forecast for the dashboard.
 
     Returns a dict with:
         x, y:         cell centers (Web Mercator)
@@ -96,24 +134,48 @@ def load_gridded_forecast(
     fc_path = (app_root / fc_rel).resolve()
     suffix = fc_path.suffix.lower()
 
+    func_kwargs = model_cfg.get("func_kwargs") or {}
+    # Heuristic / convention: catalog-based forecasts
+    is_catalog_fc = (
+        model_cfg.get("forecast_class", "GriddedForecastRepository")
+        == "CatalogForecastRepository"
+    )
     try:
-        if suffix == ".dat":
-            rates, region, mags = GriddedForecastParsers.dat(fc_path.as_posix())
-        elif suffix in (".xml", ".gml"):
-            rates, region, mags = GriddedForecastParsers.xml(fc_path.as_posix())
-        elif suffix in (".csv", ".txt"):
-            rates, region, mags = GriddedForecastParsers.csv(fc_path.as_posix())
-        elif suffix in (".h5", ".hdf5"):
-            rates, region, mags = GriddedForecastParsers.hdf5(fc_path.as_posix())
-        else:
-            logger.warning(
-                "Unsupported forecast file extension '%s' for '%s'. " "Skipping this forecast.",
-                suffix,
+        if is_catalog_fc:
+            # --- Catalog forecast path: use CatalogForecast + expected rates ---
+            region = getattr(manifest, "region", None)
+            if region is None:
+                raise ValueError(
+                    f"Cannot load catalog forecast '{fc_path}': manifest.region is None."
+                )
+
+            nsims = func_kwargs.get("n_sims")
+            rates, region, mags = load_catalog_forecast_as_grid(
                 fc_path,
+                region=region,
+                nsims=nsims,
             )
-            data = dict(x=[], y=[], width=[], height=[], log10_rate=[], mapper_meta=None)
-            _FORECAST_CACHE[cache_key] = data
-            return data
+
+        else:
+            # --- Classic gridded forecast path ---
+            if suffix == ".dat":
+                rates, region, mags = GriddedForecastParsers.dat(fc_path.as_posix())
+            elif suffix in (".xml", ".gml"):
+                rates, region, mags = GriddedForecastParsers.xml(fc_path.as_posix())
+            elif suffix in (".csv", ".txt"):
+                rates, region, mags = GriddedForecastParsers.csv(fc_path.as_posix())
+            elif suffix in (".h5", ".hdf5"):
+                rates, region, mags = GriddedForecastParsers.hdf5(fc_path.as_posix())
+            else:
+                logger.warning(
+                    "Unsupported forecast file extension '%s' for '%s'. Skipping this forecast.",
+                    suffix,
+                    fc_path,
+                )
+                data = dict(x=[], y=[], width=[], height=[], log10_rate=[], mapper_meta=None)
+                _FORECAST_CACHE[cache_key] = data
+                return data
+
     except Exception as exc:
         logger.warning(
             "Failed to load forecast from '%s' (model '%s', window '%s'): %s",
@@ -126,6 +188,7 @@ def load_gridded_forecast(
         _FORECAST_CACHE[cache_key] = data
         return data
 
+    # From here on, treat both catalog-based and classic gridded forecasts identically
     total_rates = rates.sum(axis=1).astype("float32")
 
     origins = region.origins()
