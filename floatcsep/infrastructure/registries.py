@@ -610,9 +610,14 @@ class ExperimentFileRegistry(ExperimentRegistry, FilepathMixin):
             "main_catalog_time": Path("events.png"),
             **{
                 win: {
-                    **{test: Path(win, "figures", f"{test}.png") for test in tests},
                     "catalog_map": Path(win, "figures", "catalog_map.png"),
                     "catalog_time": Path(win, "figures", "catalog_time.png"),
+                    **{test: Path(win, "figures", f"{test}.png") for test in tests},
+                    **{
+                        f"{test}_{model}": Path(win, "figures", f"{test}_{model}.png")
+                        for test in tests
+                        for model in models
+                    },
                     "forecasts": {
                         model: Path(win, "figures", f"forecast_{model}.png") for model in models
                     },

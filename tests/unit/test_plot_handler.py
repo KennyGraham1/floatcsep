@@ -10,15 +10,23 @@ class TestPlotHandler(unittest.TestCase):
     def test_plot_results(self, mock_timewindow2str, mock_savefig):
         mock_experiment = MagicMock()
         mock_test = MagicMock()
+        mock_plot_func = MagicMock()
+        print("BBB", mock_plot_func)
+        mock_test.read_results = MagicMock(return_value=1)
+
+        mock_test.type = "consistency"
+        mock_test.plot_func = [mock_plot_func]
+        mock_test.plot_modes = ["aggregate"]
+        mock_test.plot_args = [""]
+        mock_test.plot_kwargs = [""]
+
         mock_experiment.tests = [mock_test]
-        mock_timewindow2str.return_value = ["2021-01-01", "2021-12-31"]
+        mock_timewindow2str.return_value = [["2021-01-01", "2021-12-31"]]
 
         plot_handler.plot_results(mock_experiment)
 
         mock_timewindow2str.assert_called_once_with(mock_experiment.time_windows)
-        mock_test.plot_results.assert_called_once_with(
-            ["2021-01-01", "2021-12-31"], mock_experiment.models, mock_experiment.registry
-        )
+        mock_plot_func.assert_called_once_with(1, plot_args=mock_test.plot_args[0])
 
     @patch("matplotlib.pyplot.close")
     @patch("floatcsep.postprocess.plot_handler.parse_plot_config")

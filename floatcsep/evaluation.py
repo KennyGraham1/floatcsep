@@ -47,6 +47,26 @@ class Evaluation:
         "sequential_information_gain": "sequential_comparative",
     }
 
+    "plot_sequential_likelihood"
+    "plot_matrix_comparative_test"
+
+    _PLOTS = {
+        "csep.utils.plots.plot_consistency_test": "aggregate",
+        "csep.utils.plots.plot_poisson_consistency_test": "aggregate",
+        "csep.utils.plots.plot_comparison_test": "aggregate",
+        "floatcsep.utils.helpers.plot_matrix_comparative_test": "aggregate",
+        "csep.utils.plots.plot_number_test": "per_model",
+        "csep.utils.plots.plot_magnitude_test": "per_model",
+        "csep.utils.plots.plot_distribution_test": "per_model",
+        "csep.utils.plots.plot_likelihood_test": "per_model",
+        "csep.utils.plots.plot_spatial_test": "per_model",
+        "csep.utils.plots.plot_calibration_test": "per_model",
+        "csep.utils.plots.plot_concentration_ROC_diagram": "per_model",
+        "csep.utils.plots.plot_ROC_diagram": "per_model",
+        "csep.utils.plots.plot_Molchan_diagram": "per_model",
+        "floatcsep.utils.helpers.plot_sequential_likelihood": "sequential",
+    }
+
     def __init__(
         self,
         name: str,
@@ -68,7 +88,7 @@ class Evaluation:
         self.plot_func = None
         self.plot_args = None
         self.plot_kwargs = None
-
+        self.plot_modes = []
         self.parse_plots(plot_func, plot_args, plot_kwargs)
 
         self.markdown = markdown
@@ -138,6 +158,19 @@ class Evaluation:
             self.plot_kwargs = [
                 i[j].get("plot_kwargs", {}) for i, j in zip(plot_func, func_names)
             ]
+        else:
+            return
+        for func_obj in self.plot_func:
+            func_name = f"{func_obj.__module__}.{func_obj.__name__}"
+            mode = self._PLOTS[func_name]
+
+            if mode is None:
+                if self.type in ["sequential", "sequential_comparative", "batch"]:
+                    mode = "sequential"
+                else:
+                    mode = "aggregate"
+
+            self.plot_modes.append(mode)
 
     def prepare_args(
         self,
@@ -260,73 +293,6 @@ class Evaluation:
         test_results = self.results_repo.load_results(self, window, models)
 
         return test_results
-
-    def plot_results(
-        self,
-        timewindow: Union[str, List],
-        models: List[Model],
-        registry: ExperimentRegistry,
-        dpi: int = 300,
-        show: bool = False,
-    ) -> None:
-        """
-        Plots all evaluation results.
-
-        Args:
-            timewindow: string representing the desired timewindow to plot
-            models: a list of :class:`floatcsep:models.Model`
-            registry: a :class:`floatcsep:models.PathTree` containing path of the results
-            dpi: Figure resolution with which to save
-            show: show in runtime
-        """
-        if isinstance(timewindow, str):
-            timewindow = [timewindow]
-
-        for func, fargs, fkwargs in zip(self.plot_func, self.plot_args, self.plot_kwargs):
-            if self.type in ["consistency", "comparative"]:
-                # Regular consistency/comparative test plots (e.g., many models)
-                try:
-                    for time_str in timewindow:
-                        fig_path = registry.get_figure_key(time_str, self.name)
-                        results = self.read_results(time_str, models)
-                        ax = func(results, plot_args=fargs, **fkwargs)
-                        if "code" in fargs:
-                            exec(fargs["code"])
-                        pyplot.savefig(fig_path, dpi=dpi)
-                        if show:
-                            pyplot.show()
-                # Single model test plots (e.g., test distribution)
-                # todo: handle this more elegantly
-                except AttributeError:
-                    if self.type in ["consistency", "comparative"]:
-                        for time_str in timewindow:
-                            results = self.read_results(time_str, models)
-                            for result, model in zip(results, models):
-                                fig_name = f"{self.name}_{model.name}"
-
-                                registry.figures[time_str][fig_name] = os.path.join(
-                                    time_str, "figures", fig_name
-                                )
-                                fig_path = registry.get_figure_key(time_str, fig_name)
-                                ax = func(result, plot_args=fargs, **fkwargs, show=False)
-                                if "code" in fargs:
-                                    exec(fargs["code"])
-                                fig = ax.get_figure()
-                                fig.savefig(fig_path, dpi=dpi)
-
-                                if show:
-                                    pyplot.show()
-
-            elif self.type in ["sequential", "sequential_comparative", "batch"]:
-                fig_path = registry.get_figure_key(timewindow[-1], self.name)
-                results = self.read_results(timewindow[-1], models)
-                ax = func(results, plot_args=fargs, **fkwargs)
-
-                if "code" in fargs:
-                    exec(fargs["code"])
-                pyplot.savefig(fig_path, dpi=dpi)
-                if show:
-                    pyplot.show()
 
     def as_dict(self) -> dict:
         """
