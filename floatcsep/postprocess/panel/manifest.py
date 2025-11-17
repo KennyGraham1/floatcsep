@@ -126,11 +126,21 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
 
     tests: List[Dict] = []
     for test in getattr(experiment, "tests", []):
+        func_obj = getattr(test, "func", None)
+        mod_name = getattr(func_obj, "__module__", None)
+        func_name = getattr(func_obj, "__name__", None)
+
+        if mod_name is not None and func_name is not None:
+            func_str = f"{mod_name}.{func_name}"
+        elif func_name is not None:
+            func_str = func_name
+        else:
+            func_str = None
+
         tests.append(
             {
                 "name": getattr(test, "name", None),
-                "func": f"{getattr(getattr(test, "func", None), "__module__", None)}."
-                f"{getattr(getattr(test, "func", None), "__name__", None)}",
+                "func": func_str,
                 "func_kwargs": getattr(test, "func_kwargs", None),
                 "ref_model": getattr(test, "ref_model", None),
                 "plot_func": getattr(test, "plot_func", None),
