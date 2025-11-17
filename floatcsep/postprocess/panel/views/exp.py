@@ -100,27 +100,27 @@ def _models_section(manifest: Manifest) -> pn.Column:
 
     lines = []
     for model in models:
-        lines.append(f"### {model["name"]}")
+        lines.append(f"### {model['name']}")
         if model.get("forecast_unit", False):
-            lines.append(f" - **Forecast Unit:** {model["forecast_unit"]} years")
+            lines.append(f" - **Forecast Unit:** {model['forecast_unit']} years")
         if model.get("path", False):
-            lines.append(f" - **Path:** {model["path"]}")
+            lines.append(f" - **Path:** {model['path']}")
         if model.get("giturl", False):
-            lines.append(f" - **Git URL:** {model["giturl"]}")
+            lines.append(f" - **Git URL:** {model['giturl']}")
         if model.get("git_hash", False):
-            lines.append(f" - **Git Hash:** {model["git_hash"]}")
+            lines.append(f" - **Git Hash:** {model['git_hash']}")
         if model.get("zenodo_id", False):
-            lines.append(f" - **Zenodo ID:** {model["zenodo_id"]}")
+            lines.append(f" - **Zenodo ID:** {model['zenodo_id']}")
         if model.get("authors", False):
-            lines.append(f" - **Authors:** {model["authors"]}")
+            lines.append(f" - **Authors:** {model['authors']}")
         if model.get("doi", False):
-            lines.append(f" - **DOI:** {model["doi"]}")
+            lines.append(f" - **DOI:** {model['doi']}")
         if model.get("func", False):
-            lines.append(f" - **Call Function:** {model["func"]}")
+            lines.append(f" - **Call Function:** {model['func']}")
         if model.get("func_kwargs", False):
-            lines.append(f" - **Function Arguments:** {model["func_kwargs"]}")
+            lines.append(f" - **Function Arguments:** {model['func_kwargs']}")
         if model.get("fmt", False):
-            lines.append(f" - **Forecast Format:** {model["fmt"]}")
+            lines.append(f" - **Forecast Format:** {model['fmt']}")
 
     section = pn.pane.Markdown(
         "\n\n".join(lines),
@@ -139,13 +139,13 @@ def _tests_section(manifest: Manifest) -> pn.Column:
 
     lines = []
     for test in tests:
-        lines.append(f"### {test["name"]}")
+        lines.append(f"### {test['name']}")
         if test.get("func", False):
-            lines.append(f" - **Function:** {test["func"]}")
+            lines.append(f" - **Function:** {test['func']}")
         if test.get("func_kwargs", False):
-            lines.append(f" - **Function Arguments:** {test["func_kwargs"]}")
+            lines.append(f" - **Function Arguments:** {test['func_kwargs']}")
         if test.get("ref_model", False):
-            lines.append(f" - **Reference Model:** {test["ref_model"]}")
+            lines.append(f" - **Reference Model:** {test['ref_model']}")
 
     section = pn.pane.Markdown(
         "\n\n".join(lines),
