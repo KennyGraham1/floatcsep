@@ -3,10 +3,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from floatcsep.utils.helpers import timewindow2str
-from floatcsep.utils.helpers import timewindow2str  # you already use this
 
 import datetime
-from typing import Any, Dict, List, Optional, Tuple
 
 
 def _rel(path: Union[os.PathLike, str], base: Union[os.PathLike, str]) -> str:
@@ -28,7 +26,6 @@ class Manifest:
     time_windows: List[str]
 
     catalog: Dict[str, str]
-    forecasts: Dict[Tuple[str, str], str]
     results_main: Dict[Tuple[str, str], str]
     results_model: Dict[Tuple[str, str, str], str]
     app_root: str
@@ -100,19 +97,35 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     magnitudes = list(getattr(experiment, "magnitudes", []))
     region = getattr(experiment, "region", None)
 
-    # Time windows as strings
+    # --- Time windows ---
+    tw_raw: List[Any] = list(getattr(experiment, "time_windows", []))
     tw_all: List[str] = []
-    for tw in getattr(experiment, "time_windows", []):
+    for tw in tw_raw:
         tw_all.append(timewindow2str(tw).replace("_", " to "))
 
-    # Models & tests
-    models: List[Dict] = []
+    # --- Models & tests -----------------------------------------------------
+    models: List[Dict[str, Any]] = []
     for model in getattr(experiment, "models", []):
+        model_registry = model.registry
+
+        # NEW: forecast files per model (pretty tw -> path relative to app_root)
+        model_forecasts: Dict[str, str] = {}
+        for tw_obj, tw_str in zip(tw_raw, tw_all):
+            try:
+                fc_path = model_registry.get_forecast_key(tw_obj)
+            except Exception:
+                # No forecast for this window / registry not built, etc.
+                continue
+
+            # Use the same _rel helper you already use for figures & catalog
+            rel_fc = _rel(fc_path, app_root)
+            model_forecasts[tw_str] = rel_fc
+
         models.append(
             {
                 "name": getattr(model, "name", None),
                 "forecast_unit": getattr(model, "forecast_unit", None),
-                "path": model.registry.rel(model.registry.path) or None,
+                "path": model_registry.rel(model_registry.path) or None,
                 "giturl": getattr(model, "giturl", None),
                 "git_hash": getattr(model, "repo_hash", None),
                 "zenodo_id": getattr(model, "zenodo_id", None),
@@ -121,6 +134,8 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
                 "func": getattr(model, "func", None),
                 "func_kwargs": getattr(model, "func_kwargs", None),
                 "fmt": getattr(model, "fmt", None),
+                "registry": model_registry,
+                "forecasts": model_forecasts,  # <--- now RELATIVE paths
             }
         )
 
@@ -160,15 +175,6 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
         catalog["time"] = _rel(cat_time, app_root)
     except Exception:
         pass
-
-    forecasts: Dict[Tuple[str, str], str] = {}
-    for tw_str in tw_all:
-        for model_name in models:
-            try:
-                p = reg.get_figure_key(tw_str, "forecasts", model_name)
-                forecasts[(tw_str, model_name)] = _rel(p, app_root)
-            except Exception:
-                continue
 
     results_main: Dict[Tuple[str, str], str] = {}
     results_model: Dict[Tuple[str, str, str], str] = {}
@@ -223,7 +229,6 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
         tests=tests,
         time_windows=tw_all,
         catalog=catalog,
-        forecasts=forecasts,
         results_main=results_main,
         results_model=results_model,
         app_root=str(app_root),

@@ -158,7 +158,7 @@ def view(config: str, **kwargs) -> None:
     exp = Experiment.from_yml(config_yml=config, **kwargs)
     exp.stage_models()
     exp.set_tree()
-
+    log.info(f"Creating Panel App")
     run_app(experiment=exp)
 
 

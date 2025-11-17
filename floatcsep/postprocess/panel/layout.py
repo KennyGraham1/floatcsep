@@ -43,7 +43,7 @@ DASHBOARD_CSS = """
   --design-primary-text-color: #020617;
 
   --design-secondary-color: #f59e0b;
-  --design-secondary-text-color: #020617;
+  --design-secondary-text-color: #e5e7eb;
 }
 
 /* Base font */
