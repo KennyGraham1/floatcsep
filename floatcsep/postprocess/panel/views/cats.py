@@ -39,7 +39,7 @@ SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
 def _make_window_label(i: int) -> str:
-    """Return a time-window label like 'T₁', 'T₂', ... for index i."""
+    """Return a time-window label like for index i."""
     idx = str(i + 1).translate(SUBSCRIPT_DIGITS)
     return f"T{idx}"
 
@@ -144,7 +144,7 @@ def _build_spatial_catalog_figure(manifest: Manifest, height: int = 350):
     region = getattr(manifest, "region", None)
     catalog = _load_csep_catalog_from_manifest(manifest)
 
-    fig = build_region_basemap(
+    fig, *_ = build_region_basemap(
         region, basemap="WorldTerrain", min_height=height, plot_cells=False
     )
 
@@ -300,7 +300,7 @@ def _build_spatial_catalog_panel(manifest: Manifest) -> pn.panel:
     return pn.Column(
         pn.pane.Bokeh(fig, sizing_mode="stretch_width"),
         legend_md,
-        sizing_mode="stretch_width",
+        sizing_mode="stretch_both",
     )
 
 

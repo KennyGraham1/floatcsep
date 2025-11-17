@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from datetime import datetime, timedelta
 
@@ -14,9 +16,16 @@ from shapely.geometry import Polygon, LineString, LinearRing, MultiLineString
 from shapely.ops import unary_union
 
 
-# ----------------------------------------------------------------------
-# Coordinate / region helpers
-# ----------------------------------------------------------------------
+def fmt_coord(x: Optional[float], ndigits: int = 3) -> str:
+    """Format a coordinate with sensible precision and no trailing zeros."""
+    if x is None:
+        return "?"
+    try:
+        s = f"{round(float(x), ndigits):.{ndigits}f}"
+        s = s.rstrip("0").rstrip(".")
+        return s
+    except Exception:
+        return str(x)
 
 
 def lonlat_to_mercator(lon, lat):
@@ -35,7 +44,7 @@ def add_region_cells(fig, region, to_mercator=True, alpha=0.2):
     ys_all = []
 
     for cell in region.polygons:
-        pts = np.asarray(cell.points)  # shape (4, 2)
+        pts = np.asarray(cell.points)
         xs, ys = pts[:, 0], pts[:, 1]
         if to_mercator:
             xs, ys = lonlat_to_mercator(xs, ys)
@@ -64,7 +73,7 @@ def add_region_outline(
     """Draw outline of a CartesianGrid2D region, including holes."""
     cell_polys = [Polygon(np.round(cell.points, precision)) for cell in region.polygons]
     merged = unary_union(cell_polys)
-    boundary = merged.boundary  # LineString, LinearRing, or MultiLineString
+    boundary = merged.boundary
 
     if isinstance(boundary, (LineString, LinearRing)):
         lines = [boundary]
@@ -153,13 +162,10 @@ def build_region_basemap(region, basemap="WorldTerrain", min_height=300, plot_ce
         if plot_cells:
             if n_cells is not None and n_cells <= 50_000:
                 add_region_cells(fig, region, to_mercator=True)
-
-    return fig
-
-
-# ----------------------------------------------------------------------
-# Time window helpers
-# ----------------------------------------------------------------------
+    if region is not None:
+        return fig, n_cells, region.dh, [xmin, xmax], [ymin, ymax]
+    else:
+        return fig, None, None, (None, None), (None, None)
 
 
 def parse_time_window_strings(tw_strings):

@@ -39,7 +39,7 @@ def make_magma_alpha_palette(
     if alpha_0 is not None:
         a_arr = np.full(n, int(np.clip(alpha_0, 0.0, 1.0) * 255), dtype=int)
     elif alpha_exp != 0.0:
-        a_arr = (np.linspace(0.0, 1.0, n) ** alpha_exp * 255).astype(int)
+        a_arr = (np.linspace(0.05, 1.0, n) ** alpha_exp * 255).astype(int)
     else:
         a_arr = np.full(n, 255, dtype=int)
 
@@ -192,7 +192,7 @@ def build_timewindow_options(manifest: Manifest) -> Dict[str, str]:
     tw_strings = getattr(manifest, "time_windows", []) or []
     options: Dict[str, str] = {}
     for tw in tw_strings:
-        label = tw.split("to")[0].strip()
+        label = tw
         options[label] = tw
     return options
 
@@ -226,7 +226,7 @@ def build_spatial_figure(manifest: Manifest, height: int = 350):
     """Create a basemap figure and an empty forecast overlay with colorbar."""
     region = getattr(manifest, "region", None)
 
-    fig = build_region_basemap(
+    fig, *_ = build_region_basemap(
         region,
         basemap="WorldTerrain",
         min_height=height,
@@ -295,22 +295,17 @@ def build_spatial_figure(manifest: Manifest, height: int = 350):
     return fig, source
 
 
-def build_spatial_panel(manifest: Manifest) -> pn.Column:
-    """Build the spatial forecast panel with controls, map, and interactive color range."""
-    model_options = build_model_options(manifest)
-    tw_options = build_timewindow_options(manifest)
+def build_spatial_panel(
+    manifest: Manifest,
+    model_select: pn.widgets.Select,
+    timewindow_select: pn.widgets.Select,
+) -> pn.Column:
+    """
+    Build the spatial forecast panel with map and interactive color range.
 
-    model_select = pn.widgets.Select(
-        name="",
-        options=model_options,
-        sizing_mode="stretch_width",
-    )
-    timewindow_select = pn.widgets.Select(
-        name="",
-        options=tw_options,
-        sizing_mode="stretch_width",
-    )
-
+    The model/timewindow selectors are provided by the caller and are typically
+    displayed in the left metadata panel.
+    """
     color_range = pn.widgets.RangeSlider(
         name="",
         start=-5.0,
@@ -322,7 +317,7 @@ def build_spatial_panel(manifest: Manifest) -> pn.Column:
     )
 
     fig, source = build_spatial_figure(manifest, height=350)
-    fig_pane = pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+    fig_pane = pn.pane.Bokeh(fig, sizing_mode="stretch_both")
 
     def apply_color_range(event=None):
         color_mapper = getattr(fig, "_forecast_color_mapper", None)
@@ -395,17 +390,10 @@ def build_spatial_panel(manifest: Manifest) -> pn.Column:
 
     update_forecast()
 
-    controls_row = pn.Row(
-        model_select,
-        timewindow_select,
-        sizing_mode="stretch_width",
-    )
-
     return pn.Column(
-        controls_row,
         fig_pane,
         color_range,
-        sizing_mode="stretch_width",
+        sizing_mode="stretch_both",
     )
 
 
@@ -457,24 +445,112 @@ def forecast_metadata_section(manifest: Manifest) -> pn.panel:
     )
 
 
-def build_metadata_panel(manifest: Manifest) -> pn.Column:
+def build_model_metadata_pane(
+    manifest: Manifest,
+    model_select: pn.widgets.Select,
+) -> pn.pane.Markdown:
+    """
+    Build a small metadata block describing the currently selected model.
+
+    This is updated whenever the model_select widget changes.
+    """
+    models = getattr(manifest, "models", []) or []
+    time_windows = getattr(manifest, "time_windows", []) or []
+
+    pane = pn.pane.Markdown(
+        "",
+        sizing_mode="stretch_width",
+        styles={"font-size": "11px"},
+    )
+
+    def _update(event=None):
+        idx = model_select.value
+        if idx is None or not models or idx < 0 or idx >= len(models):
+            pane.object = "_No model selected._"
+            return
+
+        m = models[idx]
+        name = m.get("name", f"Model {idx+1}")
+        unit = m.get("forecast_unit", "—")
+        giturl = m.get("giturl") or None
+        doi = m.get("doi") or None
+        fc_map = m.get("forecasts", {}) or {}
+
+        n_tw_total = len(time_windows)
+        n_avail = sum(1 for tw in time_windows if fc_map.get(tw) is not None)
+
+        lines: List[str] = []
+        lines.append("### Selected Model\n")
+        lines.append(f"- **Name:** {name}")
+        lines.append(f"- **Forecast unit:** {unit}")
+        if giturl:
+            lines.append(f"- **Source repo:** {giturl}")
+        if doi:
+            lines.append(f"- **DOI:** {doi}")
+        lines.append(f"- **Forecast coverage:** {n_avail}/{n_tw_total} time windows")
+
+        pane.object = "\n".join(lines)
+
+    # Initial fill + watcher
+    _update()
+    model_select.param.watch(_update, "value")
+
+    return pane
+
+
+def build_metadata_panel(
+    manifest: Manifest,
+    model_select: pn.widgets.Select,
+    timewindow_select: pn.widgets.Select,
+) -> pn.Column:
     """Build the left-side metadata panel for the Forecasts tab."""
     overview = forecast_overview_block(manifest)
-    metadata = forecast_metadata_section(manifest)
+
+    model_metadata = build_model_metadata_pane(manifest, model_select)
+
+    summary_metadata = forecast_metadata_section(manifest)
+
+    summary = pn.Accordion(
+        ("Summary", summary_metadata),
+        sizing_mode="stretch_width",
+        active_header_background="#0b1120",
+        header_background="#0b1120",
+        header_color="#e5e7eb",
+        styles={"stroke": "#e5e7eb"},
+    )
 
     return pn.Column(
         overview,
         pn.layout.Divider(),
-        metadata,
+        summary,
+        pn.layout.Divider(),
+        model_select,
+        timewindow_select,
+        model_metadata,
         width=380,
     )
 
 
 def build_forecasts_view(manifest: Manifest) -> pn.layout.Panel:
     """Build the Forecasts tab view."""
-    left = build_metadata_panel(manifest)
 
-    spatial_panel = build_spatial_panel(manifest)
+    model_options = build_model_options(manifest)
+    tw_options = build_timewindow_options(manifest)
+
+    model_select = pn.widgets.Select(
+        name="",
+        options=model_options,
+        sizing_mode="stretch_width",
+    )
+    timewindow_select = pn.widgets.Select(
+        name="",
+        options=tw_options,
+        sizing_mode="stretch_width",
+    )
+
+    left = build_metadata_panel(manifest, model_select, timewindow_select)
+
+    spatial_panel = build_spatial_panel(manifest, model_select, timewindow_select)
     spatial_panel.sizing_mode = "stretch_both"
 
     return pn.Row(

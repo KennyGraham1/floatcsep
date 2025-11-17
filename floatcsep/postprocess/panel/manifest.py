@@ -84,7 +84,6 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     if app_root is None:
         app_root = reg.abs(reg.run_dir)
 
-    # Basic identifiers
     name = getattr(experiment, "name", "Experiment")
     start = getattr(experiment, "start_date", None)
     end = getattr(experiment, "end_date", None)
@@ -97,27 +96,24 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     magnitudes = list(getattr(experiment, "magnitudes", []))
     region = getattr(experiment, "region", None)
 
-    # --- Time windows ---
     tw_raw: List[Any] = list(getattr(experiment, "time_windows", []))
     tw_all: List[str] = []
     for tw in tw_raw:
         tw_all.append(timewindow2str(tw).replace("_", " to "))
 
-    # --- Models & tests -----------------------------------------------------
     models: List[Dict[str, Any]] = []
+    model_objs = getattr(experiment, "models", [])
+    model_names = [i.name for i in model_objs]
     for model in getattr(experiment, "models", []):
         model_registry = model.registry
 
-        # NEW: forecast files per model (pretty tw -> path relative to app_root)
         model_forecasts: Dict[str, str] = {}
         for tw_obj, tw_str in zip(tw_raw, tw_all):
             try:
                 fc_path = model_registry.get_forecast_key(tw_obj)
             except Exception:
-                # No forecast for this window / registry not built, etc.
                 continue
 
-            # Use the same _rel helper you already use for figures & catalog
             rel_fc = _rel(fc_path, app_root)
             model_forecasts[tw_str] = rel_fc
 
@@ -135,12 +131,14 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
                 "func_kwargs": getattr(model, "func_kwargs", None),
                 "fmt": getattr(model, "fmt", None),
                 "registry": model_registry,
-                "forecasts": model_forecasts,  # <--- now RELATIVE paths
+                "forecasts": model_forecasts,
             }
         )
 
     tests: List[Dict] = []
-    for test in getattr(experiment, "tests", []):
+    test_objs = getattr(experiment, "tests", [])
+    test_names = [i.name for i in getattr(experiment, "tests", [])]
+    for test, test_name in zip(test_objs, test_names):
         func_obj = getattr(test, "func", None)
         mod_name = getattr(func_obj, "__module__", None)
         func_name = getattr(func_obj, "__name__", None)
@@ -154,7 +152,7 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
 
         tests.append(
             {
-                "name": getattr(test, "name", None),
+                "name": test_name,
                 "func": func_str,
                 "func_kwargs": getattr(test, "func_kwargs", None),
                 "ref_model": getattr(test, "ref_model", None),
@@ -164,11 +162,10 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
             }
         )
 
-    # --- Figures: catalog, forecasts, results ---
     catalog: Dict[str, str] = {}
     try:
-        cat_map = reg.get_figure_key("main_catalog_map") + ".png"
-        cat_time = reg.get_figure_key("main_catalog_time") + ".png"
+        cat_map = reg.get_figure_key("main_catalog_map")
+        cat_time = reg.get_figure_key("main_catalog_time")
         cat_path = _rel(reg.run_dir / cat_repo.cat_path, app_root)
         catalog["path"] = cat_path
         catalog["map"] = _rel(cat_map, app_root)
@@ -178,21 +175,22 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
 
     results_main: Dict[Tuple[str, str], str] = {}
     results_model: Dict[Tuple[str, str, str], str] = {}
-    for tw_str in tw_all:
-        for test_name in tests:
+
+    for tw_obj, tw_str in zip(tw_raw, tw_all):
+        for test_name in test_names:
             try:
-                p = reg.get_figure_key(tw_str, test_name)
+                p = reg.get_figure_key(tw_obj, test_name)
                 results_main[(tw_str, test_name)] = _rel(p, app_root)
             except Exception:
                 pass
-            for model_name in models:
+            for model_name in model_names:
                 try:
-                    p = reg.get_figure_key(tw_str, f"{test_name}_{model_name}")
-                    results_model[(tw_str, test_name, model_name)] = _rel(p, app_root)
+                    p = reg.get_figure_key(tw_obj, f"{test_name}_{model_name}")
+                    if reg.file_exists("figures", tw_obj, f"{test_name}_{model_name}"):
+                        results_model[(tw_str, test_name, model_name)] = _rel(p, app_root)
                 except Exception:
                     continue
 
-    # --- Detailed metadata from time_config / region_config / experiment ---
     time_cfg: Dict[str, Any] = getattr(experiment, "time_config", {}) or {}
     region_cfg: Dict[str, Any] = getattr(experiment, "region_config", {}) or {}
 

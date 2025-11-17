@@ -5,6 +5,7 @@ from .utils import (
     build_region_basemap,
     parse_time_window_strings,
     build_time_windows_figure,
+    fmt_coord,
 )
 
 
@@ -185,11 +186,46 @@ def _run_config_section(manifest: Manifest) -> pn.pane.Markdown:
     return pn.pane.Markdown("\n".join(lines), sizing_mode="stretch_width")
 
 
-def _build_region_panel(manifest: Manifest) -> pn.pane.Bokeh:
-    """Region tab: basemap with experiment region overlay."""
+def _build_region_panel(manifest: Manifest) -> pn.Column:
+    """Region tab: basemap with experiment region overlay + compact metadata."""
     region = getattr(manifest, "region", None)
-    fig = build_region_basemap(region)
-    return pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+    fig, n_cells, dh, (lon_min, lon_max), (lat_min, lat_max) = build_region_basemap(region)
+    fig_pane = pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+
+    line1_parts = []
+    if n_cells is not None:
+        line1_parts.append(f"**Cells:** {n_cells}")
+    if dh is not None:
+        line1_parts.append(f"**Δh:** {dh}")
+
+    line2_parts = []
+    if lon_min is not None and lon_max is not None:
+        line2_parts.append(f"**Longitude range:** [{fmt_coord(lon_min)}, {fmt_coord(lon_max)}]")
+    if lat_min is not None and lat_max is not None:
+        line2_parts.append(f"**Latitude range:** [{fmt_coord(lat_min)}, {fmt_coord(lat_max)}]")
+
+    if not line1_parts and not line2_parts:
+        meta_text = "_No region metadata available._"
+    else:
+        meta_lines = []
+        meta_lines.append("  ".join(line1_parts) if line1_parts else "")
+        meta_lines.append("  ".join(line2_parts) if line2_parts else "")
+        meta_text = "\n\n".join(l for l in meta_lines if l)
+
+    meta_pane = pn.pane.Markdown(
+        meta_text,
+        sizing_mode="stretch_width",
+        styles={
+            "font-size": "09px",
+            "line-height": "0.8",
+        },
+    )
+
+    return pn.Column(
+        fig_pane,
+        meta_pane,
+        sizing_mode="stretch_both",
+    )
 
 
 def _build_time_windows_panel(manifest: Manifest) -> pn.Column:
