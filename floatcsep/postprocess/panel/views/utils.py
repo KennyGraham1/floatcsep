@@ -16,6 +16,17 @@ from shapely.geometry import Polygon, LineString, LinearRing, MultiLineString
 from shapely.ops import unary_union
 
 
+def make_doi_badge(doi: str, height: int = 14) -> str:
+    """Return an inline HTML <a><img> snippet for a Zenodo-style DOI badge."""
+    doi = doi.strip()
+    return (
+        f'<a href="https://doi.org/{doi}" target="_blank" rel="noopener noreferrer">'
+        f'<img src="https://zenodo.org/badge/DOI/{doi}.svg" '
+        f'alt="DOI" style="height:{height}px;vertical-align:middle;">'
+        f"</a>"
+    )
+
+
 def fmt_coord(x: Optional[float], ndigits: int = 3) -> str:
     """Format a coordinate with sensible precision and no trailing zeros."""
     if x is None:

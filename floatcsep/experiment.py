@@ -94,6 +94,16 @@ class Experiment:
     def __init__(
         self,
         name: str = None,
+        doi: str = None,
+        authors: str = None,
+        journal: str = None,
+        manuscript_doi: str = None,
+        catalog_doi: str = None,
+        last_run: str = None,
+        floatcsep_version: str = None,
+        pycsep_version: str = None,
+        exp_time: str = None,
+        LICENSE: str = None,
         time_config: dict = None,
         region_config: dict = None,
         catalog: str = None,
@@ -121,6 +131,17 @@ class Experiment:
         os.makedirs(Path(workdir, run_dir), exist_ok=True)
 
         self.name = name if name else "floatingExp"
+        self.authors = authors if authors else None
+        self.doi = doi if doi else None
+        self.journal = journal if journal else None
+        self.manuscript_doi = manuscript_doi if manuscript_doi else None
+        self.catalog_doi = catalog_doi if catalog_doi else None
+        self.last_run = last_run if last_run else None
+        self.floatcsep_version = floatcsep_version if floatcsep_version else None
+        self.pycsep_version = pycsep_version if pycsep_version else None
+        self.exp_time = exp_time if exp_time else None
+        self.LICENSE = LICENSE if LICENSE else None
+
         self.registry = ExperimentRegistry.factory(workdir=workdir, run_dir=run_dir)
         self.results_repo = ResultsRepository(self.registry)
         self.catalog_repo = CatalogRepository(self.registry)

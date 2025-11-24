@@ -13,7 +13,7 @@ from bokeh.models import (
 from bokeh.palettes import Magma256
 
 from ..manifest import Manifest
-from .utils import build_region_basemap, lonlat_to_mercator
+from .utils import build_region_basemap, lonlat_to_mercator, make_doi_badge
 from floatcsep.utils.file_io import GriddedForecastParsers, CatalogForecastParsers
 import logging
 
@@ -534,23 +534,36 @@ def build_model_metadata_pane(
 
         m = models[idx]
         name = m.get("name", f"Model {idx+1}")
+
+        model_class = (
+            "Gridded Forecast"
+            if m.get("forecast_class") == "GriddedForecastRepository"
+            else "Catalog Forecast"
+        )
+
         unit = m.get("forecast_unit", "—")
         giturl = m.get("giturl") or None
         doi = m.get("doi") or None
         fc_map = m.get("forecasts", {}) or {}
-
+        fmt = m.get("fmt", None)
         n_tw_total = len(time_windows)
         n_avail = sum(1 for tw in time_windows if fc_map.get(tw) is not None)
 
         lines: List[str] = []
         lines.append("### Selected Model\n")
         lines.append(f"- **Name:** {name}")
+        lines.append(f"- **Forecast Type:** {model_class}")
         lines.append(f"- **Forecast unit:** {unit}")
         if giturl:
             lines.append(f"- **Source repo:** {giturl}")
         if doi:
-            lines.append(f"- **DOI:** {doi}")
-        lines.append(f"- **Forecast coverage:** {n_avail}/{n_tw_total} time windows")
+            badge = make_doi_badge(doi)
+            lines.append(f"- **DOI:** {badge}")
+        if fmt:
+            lines.append(f"- **Format:** {fmt}")
+
+        badge = f"<span style='color: #22c55e; font-size:14px;'>●</span>"
+        lines.append(f"- **Forecast coverage:** {n_avail}/{n_tw_total} time windows {badge}")
 
         pane.object = "\n".join(lines)
 

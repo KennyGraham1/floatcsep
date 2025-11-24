@@ -135,8 +135,10 @@ class Evaluation:
 
         """
         if isinstance(plot_func, str):
-
-            self.plot_func = [parse_csep_func(plot_func)]
+            try:
+                self.plot_func = [parse_csep_func(plot_func)]
+            except AttributeError:
+                self.plot_func = [None]
             self.plot_args = [plot_args] if plot_args else [{}]
             self.plot_kwargs = [plot_kwargs] if plot_kwargs else [{}]
 
@@ -161,16 +163,17 @@ class Evaluation:
         else:
             return
         for func_obj in self.plot_func:
-            func_name = f"{func_obj.__module__}.{func_obj.__name__}"
-            mode = self._PLOTS[func_name]
+            if func_obj is not None:
+                func_name = f"{func_obj.__module__}.{func_obj.__name__}"
+                mode = self._PLOTS[func_name]
 
-            if mode is None:
-                if self.type in ["sequential", "sequential_comparative", "batch"]:
-                    mode = "sequential"
-                else:
-                    mode = "aggregate"
+                if mode is None:
+                    if self.type in ["sequential", "sequential_comparative", "batch"]:
+                        mode = "sequential"
+                    else:
+                        mode = "aggregate"
 
-            self.plot_modes.append(mode)
+                self.plot_modes.append(mode)
 
     def prepare_args(
         self,

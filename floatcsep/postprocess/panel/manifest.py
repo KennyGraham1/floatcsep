@@ -18,6 +18,16 @@ class Manifest:
     name: str
     start_date: str
     end_date: str
+    authors: str
+    doi: str
+    journal: str
+    manuscript_doi: str
+    exp_time: str
+    floatcsep_version: str
+    pycsep_version: str
+    last_run: str
+    catalog_doi: str
+    license: str
     date_range: str
     magnitudes: List[float]
     region: Optional[Any]  # Region object (e.g. CartesianGrid2D)
@@ -87,6 +97,15 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     name = getattr(experiment, "name", "Experiment")
     start = getattr(experiment, "start_date", None)
     end = getattr(experiment, "end_date", None)
+    authors = getattr(experiment, "authors", None)
+    doi = getattr(experiment, "doi", None)
+    catalog_doi = getattr(experiment, "catalog_doi", None)
+    license_ = getattr(experiment, "LICENSE", None)
+    if authors:
+        if isinstance(authors, (list, tuple)):
+            authors = ", ".join(str(a) for a in authors)
+        else:
+            authors = str(authors)
 
     if isinstance(start, datetime.datetime) and isinstance(end, datetime.datetime):
         date_range = f"{start.date()} — {end.date()}"
@@ -216,11 +235,20 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     config_file = getattr(experiment, "config_file", None)
     model_config_path = getattr(experiment, "model_config", None)
     test_config_path = getattr(experiment, "test_config", None)
-
     return Manifest(
         name=name,
         start_date=start.date().isoformat(),
         end_date=end.date().isoformat(),
+        authors=authors,
+        journal=getattr(experiment, "journal", None),
+        manuscript_doi=getattr(experiment, "manuscript_doi", None),
+        floatcsep_version=getattr(experiment, "floatcsep_version", None),
+        pycsep_version=getattr(experiment, "pycsep_version", None),
+        last_run=getattr(experiment, "last_run", None),
+        exp_time=getattr(experiment, "exp_time", None),
+        doi=doi,
+        catalog_doi=catalog_doi,
+        license=license_,
         date_range=date_range,
         magnitudes=magnitudes,
         region=region,

@@ -81,6 +81,7 @@ def _build_tabs(manifest: Manifest) -> pn.Tabs:
         ("Forecasts", tab_forecasts),
         ("Results", tab_results),
         tabs_location="left",
+        dynamic=True,
         sizing_mode="fixed",
     )
     return tabs
@@ -162,9 +163,6 @@ def _build_meta_bar(manifest: Manifest, busy_spinner: pn.viewable.Viewable) -> p
     if getattr(manifest, "date_range", None):
         items.append(_chip(f"**Time frame**: {manifest.date_range}"))
 
-    if getattr(manifest, "region", None):
-        items.append(_chip(f"**Region**: {manifest.region.name}"))
-
     if getattr(manifest, "magnitudes", None):
         m_min = min(manifest.magnitudes)
         m_max = max(manifest.magnitudes)
@@ -177,6 +175,19 @@ def _build_meta_bar(manifest: Manifest, busy_spinner: pn.viewable.Viewable) -> p
         items.append(_chip(f"**Tests**: {len(manifest.tests)}"))
 
     items.append(_status_chip(manifest))
+
+    if getattr(manifest, "doi", None):
+        doi = manifest.doi.strip()
+        doi_badge_html = (
+            '<div style="display:flex;align-items:center;height:100%;">'
+            f'<a href="https://doi.org/{doi}">'
+            f'<img src="https://zenodo.org/badge/DOI/{doi}.svg" '
+            f'alt="DOI" style="height:16px; vertical-align:middle;">'
+            f"</a>"
+        )
+        items.append(
+            pn.pane.HTML(doi_badge_html, margin=(6, 0, 0, 0), styles={"opacity": "0.85"})
+        )
 
     if not items:
         return pn.Row()

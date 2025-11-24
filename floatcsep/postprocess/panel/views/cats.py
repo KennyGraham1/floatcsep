@@ -14,7 +14,12 @@ from bokeh.models import (
 from bokeh.plotting import figure
 
 from ..manifest import Manifest
-from .utils import build_region_basemap, lonlat_to_mercator, parse_time_window_strings
+from .utils import (
+    build_region_basemap,
+    lonlat_to_mercator,
+    parse_time_window_strings,
+    make_doi_badge,
+)
 from floatcsep.utils.file_io import CatalogParser
 
 
@@ -654,6 +659,10 @@ def _catalog_metadata_section(manifest: Manifest) -> pn.panel:
     if name != cat_path:
         lines.append(f"- **Name:** {name}")
 
+    provider = getattr(manifest, "catalog_provided", None)
+    if provider:
+        lines.append(f"- **Provider:** `{provider}`")
+
     lines.append(f"- **Event count:** {csep_cat.event_count}")
 
     start_time = getattr(csep_cat, "start_time", None)
@@ -696,6 +705,11 @@ def _catalog_metadata_section(manifest: Manifest) -> pn.panel:
     filters = getattr(csep_cat, "filters", None)
     if filters:
         lines.append(f"- **Filters:** `{filters}`")
+    # Experiment DOI (e.g. Zenodo for the experiment bundle)
+    doi = getattr(manifest, "catalog_doi", None)
+    if doi:
+        badge = make_doi_badge(doi)
+        lines.append(f"- **DOI:** {badge}")
 
     date_accessed = getattr(csep_cat, "date_accessed", None)
     if date_accessed:

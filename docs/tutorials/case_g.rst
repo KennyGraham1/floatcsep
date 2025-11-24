@@ -14,6 +14,13 @@ Here, we set up a time-dependent model from its **source code** for an experimen
         $ floatcsep run config.yml
 
     After the calculation is complete, the results will be summarized in ``results/report.md``.
+    The experiment region, catalog, forecasts and results can be viewed in the **Experiment Dashboard** with:
+
+    .. code-block:: console
+
+            $ floatcsep view config.yml
+
+
     For troubleshooting, run the experiment with:
 
     .. code-block:: console

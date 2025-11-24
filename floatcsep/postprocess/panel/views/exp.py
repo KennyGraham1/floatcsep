@@ -6,6 +6,7 @@ from .utils import (
     parse_time_window_strings,
     build_time_windows_figure,
     fmt_coord,
+    make_doi_badge,
 )
 
 
@@ -14,6 +15,78 @@ def _experiment_overview_block(manifest: Manifest) -> pn.panel:
     name = manifest.name or "Experiment"
     text = f"## {name}"
     return pn.pane.Markdown(text, sizing_mode="stretch_width")
+
+
+def _metadata_section(manifest: Manifest) -> pn.Column:
+    """High-level experiment metadata: authors, DOIs, journal, versions, etc."""
+    lines = []
+
+    # EXP CLASS
+    exp_time = getattr(manifest, "exp_time", None)
+    if exp_time:
+        lines.append(f"**Experiment Class:** `{exp_time}`")
+
+    # EXP CLASS
+    model_type = getattr(manifest, "exp_class", None)
+    if model_type:
+        lines.append(f"**Model Type:** `{model_type}`")
+
+    # Authors
+    authors = getattr(manifest, "authors", None)
+    if authors:
+        if isinstance(authors, (list, tuple)):
+            authors_str = ", ".join(str(a) for a in authors)
+        else:
+            authors_str = str(authors)
+        lines.append(f"**Authors:** {authors_str}")
+
+    # Experiment DOI (e.g. Zenodo for the experiment bundle)
+    doi = getattr(manifest, "doi", None)
+    if doi:
+        badge = make_doi_badge(doi)
+        lines.append(f"**DOI:** {badge}")
+
+    # Manuscript / paper DOI
+    manuscript_doi = getattr(manifest, "manuscript_doi", None)
+    if manuscript_doi:
+        lines.append(f"**Manuscript DOI:** `{manuscript_doi}`")
+
+    # Journal name, if present
+    journal = getattr(manifest, "journal", None)
+    if journal:
+        lines.append(f"**Journal:** {journal}")
+
+    # Last run timestamp
+    last_run = getattr(manifest, "last_run", None)
+    if last_run:
+        lines.append(f"**Last run:** {last_run}")
+
+    # floatCSEP version: prefer manifest override, else package
+    fc_ver = getattr(manifest, "floatcsep_version", None)
+    if fc_ver:
+        lines.append(f"**floatCSEP version:** `{fc_ver}`")
+
+    # pyCSEP version: prefer manifest override, else package
+    pycsep_ver = getattr(manifest, "pycsep_version", None)
+    if pycsep_ver:
+        lines.append(f"**pyCSEP version:** `{pycsep_ver}`")
+
+    license_ = getattr(manifest, "license", None)
+    if license:
+        lines.append(f"**LICENSE:** `{license_}`")
+
+    if len(lines) == 1:
+        lines.append("_No experiment metadata available._")
+
+    section = pn.pane.Markdown(
+        "\n\n".join(lines),
+        sizing_mode="stretch_width",
+        styles={
+            "font-size": "11px",
+            "line-height": "1",
+        },
+    )
+    return pn.Column(section, margin=(4, 0, 4, 4))
 
 
 def _temporal_section(manifest: Manifest) -> pn.Column:
@@ -105,17 +178,18 @@ def _models_section(manifest: Manifest) -> pn.Column:
         if model.get("forecast_unit", False):
             lines.append(f" - **Forecast Unit:** {model['forecast_unit']} years")
         if model.get("path", False):
-            lines.append(f" - **Path:** {model['path']}")
+            lines.append(f" - **Path:** `{model['path']}`")
         if model.get("giturl", False):
-            lines.append(f" - **Git URL:** {model['giturl']}")
+            lines.append(f" - **Git URL:** `{model['giturl']}`")
         if model.get("git_hash", False):
-            lines.append(f" - **Git Hash:** {model['git_hash']}")
+            lines.append(f" - **Git Hash:** `{model['git_hash']}`")
         if model.get("zenodo_id", False):
             lines.append(f" - **Zenodo ID:** {model['zenodo_id']}")
         if model.get("authors", False):
             lines.append(f" - **Authors:** {model['authors']}")
-        if model.get("doi", False):
-            lines.append(f" - **DOI:** {model['doi']}")
+        if model.get("doi"):
+            badge = make_doi_badge(model["doi"])
+            lines.append(f"- **DOI:** {badge}")
         if model.get("func", False):
             lines.append(f" - **Call Function:** {model['func']}")
         if model.get("func_kwargs", False):
@@ -124,11 +198,11 @@ def _models_section(manifest: Manifest) -> pn.Column:
             lines.append(f" - **Forecast Format:** {model['fmt']}")
 
     section = pn.pane.Markdown(
-        "\n\n".join(lines),
+        "\n".join(lines),
         sizing_mode="stretch_width",
         styles={
             "font-size": "11px",
-            "line-height": "0.6",
+            "line-height": "1",
         },
     )
 
@@ -179,6 +253,8 @@ def _run_config_section(manifest: Manifest) -> pn.pane.Markdown:
         lines.append(f"- **Models config:** `{model_config}`")
     if test_config:
         lines.append(f"- **Tests config:** `{test_config}`")
+
+    lines.append(f"- **Host:** `local`")
 
     if len(lines) == 1:
         lines.append("_No run/config information available._")
@@ -275,6 +351,7 @@ def build_experiment_view(manifest: Manifest) -> pn.layout.Panel:
     """
     overview = _experiment_overview_block(manifest)
 
+    meta_panel = pn.Column(_metadata_section(manifest), margin=(4, 0, 4, 4))
     temporal_panel = pn.Column(_temporal_section(manifest), margin=(4, 0, 4, 4))
     spatial_panel = pn.Column(_spatial_section(manifest), margin=(4, 0, 4, 4))
     models_panel = pn.Column(_models_section(manifest), margin=(4, 0, 4, 4))
@@ -282,6 +359,7 @@ def build_experiment_view(manifest: Manifest) -> pn.layout.Panel:
     run_cfg = _run_config_section(manifest)
 
     sections = pn.Accordion(
+        ("Metadata", meta_panel),
         ("Temporal Configuration", temporal_panel),
         ("Region Definition", spatial_panel),
         ("Models", models_panel),

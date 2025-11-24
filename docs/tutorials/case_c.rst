@@ -16,6 +16,12 @@ The following example shows an experiment with **multiple time windows**.
         $ floatcsep run config.yml
 
     After the calculation is complete, the results will be summarized in ``results/report.md``.
+    The experiment region, catalog, forecasts and results can be viewed in the **Experiment Dashboard** with:
+
+    .. code-block:: console
+
+            $ floatcsep view config.yml
+
 
 .. contents:: Contents
     :local:
