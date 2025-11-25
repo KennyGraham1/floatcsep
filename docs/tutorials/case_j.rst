@@ -21,6 +21,19 @@ producing daily gridded forecasts and evaluating them with a Poisson N-test. The
         $ floatcsep run config.yml
 
     After the calculation is complete, the results will be summarized in ``results/report.md``.
+    The experiment region, catalog, forecasts and results can be viewed in the **Experiment Dashboard** with:
+
+    .. code-block:: console
+
+            $ floatcsep view config.yml
+
+
+    For troubleshooting, run the experiment with:
+
+    .. code-block:: console
+
+        $ floatcsep run config.yml --debug
+
 
 .. currentmodule:: floatcsep
 

@@ -21,7 +21,7 @@ def main(experiment):
     timestr = timewindow2str(timewindow)
 
     # Instantiates a Report object and adds a title and objectives
-    report = MarkdownReport()
+    report = MarkdownReport(root_dir=experiment.registry.run_dir)
     report.add_title(f"Experiment Report - {experiment.name}", "")
     report.add_heading("Objectives", level=2)
 
