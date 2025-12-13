@@ -1,0 +1,267 @@
+'use client';
+
+import { useManifest } from '@/lib/contexts/ManifestContext';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import dynamic from 'next/dynamic';
+
+const ForecastMap = dynamic(() => import('@/components/forecasts/ForecastMap'), {
+  ssr: false,
+  loading: () => <div className="w-full h-[500px] bg-surface rounded-lg border border-border animate-pulse" />,
+});
+
+const ColorbarLegend = dynamic(() => import('@/components/forecasts/ColorbarLegend'), {
+  ssr: false,
+  loading: () => <div className="w-full h-16 bg-surface rounded-lg border border-border animate-pulse" />,
+});
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+export default function ForecastsPage() {
+  const { manifest, isLoading: manifestLoading } = useManifest();
+  const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
+  const [selectedTimeWindowIndex, setSelectedTimeWindowIndex] = useState<number>(0);
+  const [colorbarMin, setColorbarMin] = useState<number | undefined>(undefined);
+  const [colorbarMax, setColorbarMax] = useState<number | undefined>(undefined);
+
+  const selectedModel = manifest?.models?.[selectedModelIndex] || null;
+  const selectedTimeWindow = manifest?.time_windows?.[selectedTimeWindowIndex] || null;
+
+  // Build forecast path
+  const forecastPath = useMemo(() => {
+    if (!selectedModel || !selectedTimeWindow) return null;
+    return selectedModel.forecast_paths?.[selectedTimeWindowIndex] || null;
+  }, [selectedModel, selectedTimeWindow, selectedTimeWindowIndex]);
+
+  const isCatalogFc = selectedModel?.is_catalog_forecast || false;
+
+  // Fetch forecast data
+  const { data: forecastData, error: forecastError, isLoading: forecastLoading } = useSWR(
+    forecastPath && manifest
+      ? `/api/forecasts/data?path=${encodeURIComponent(forecastPath)}&modelIndex=${selectedModelIndex}&timeWindow=${selectedTimeWindowIndex}&isCatalogFc=${isCatalogFc}&region=${encodeURIComponent(JSON.stringify(manifest.region))}`
+      : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 300000, // 5 minutes
+    }
+  );
+
+  // Reset colorbar range when forecast changes
+  useMemo(() => {
+    if (forecastData) {
+      setColorbarMin(undefined);
+      setColorbarMax(undefined);
+    }
+  }, [forecastData]);
+
+  if (manifestLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading manifest...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!manifest || !manifest.models || manifest.models.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-gray-400">No forecast models available</p>
+      </div>
+    );
+  }
+
+  const effectiveMin = colorbarMin !== undefined ? colorbarMin : (forecastData?.vmin || 0);
+  const effectiveMax = colorbarMax !== undefined ? colorbarMax : (forecastData?.vmax || 0);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Left Column: Controls */}
+      <div className="lg:col-span-1 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Forecasts</h1>
+          <p className="text-sm text-gray-400">Interactive forecast visualization</p>
+        </div>
+
+        {/* Model Selector */}
+        <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
+          <h2 className="text-lg font-semibold">Model</h2>
+          <select
+            value={selectedModelIndex}
+            onChange={(e) => setSelectedModelIndex(Number(e.target.value))}
+            className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {manifest.models.map((model, idx) => (
+              <option key={idx} value={idx}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedModel && (
+            <div className="text-xs text-gray-400 space-y-1 pt-2">
+              <p>
+                <span className="font-semibold">Type:</span>{' '}
+                {selectedModel.is_catalog_forecast ? 'Catalog-based' : 'Gridded'}
+              </p>
+              {selectedModel.zenodo_id && (
+                <p>
+                  <span className="font-semibold">Zenodo:</span>{' '}
+                  <code className="bg-background px-1 py-0.5 rounded">{selectedModel.zenodo_id}</code>
+                </p>
+              )}
+              {selectedModel.doi && (
+                <p>
+                  <span className="font-semibold">DOI:</span>{' '}
+                  <a
+                    href={`https://doi.org/${selectedModel.doi}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {selectedModel.doi}
+                  </a>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Time Window Selector */}
+        <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
+          <h2 className="text-lg font-semibold">Time Window</h2>
+          <select
+            value={selectedTimeWindowIndex}
+            onChange={(e) => setSelectedTimeWindowIndex(Number(e.target.value))}
+            className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {manifest.time_windows.map((tw, idx) => (
+              <option key={idx} value={idx}>
+                T{idx + 1}: {tw}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Colorbar Range Controls */}
+        {forecastData && (
+          <div className="bg-surface p-6 rounded-lg border border-border space-y-4">
+            <h2 className="text-lg font-semibold">Color Range</h2>
+
+            <div className="space-y-2">
+              <label className="text-xs text-gray-400">Min (log10)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={effectiveMin}
+                onChange={(e) => setColorbarMin(Number(e.target.value))}
+                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-gray-400">Max (log10)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={effectiveMax}
+                onChange={(e) => setColorbarMax(Number(e.target.value))}
+                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                setColorbarMin(undefined);
+                setColorbarMax(undefined);
+              }}
+              className="w-full bg-background hover:bg-border border border-border rounded px-3 py-2 text-sm transition-colors"
+            >
+              Reset to Data Range
+            </button>
+
+            <div className="text-xs text-gray-400 pt-2">
+              <p>
+                <span className="font-semibold">Data range:</span>{' '}
+                [{forecastData.vmin.toFixed(2)}, {forecastData.vmax.toFixed(2)}]
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Statistics */}
+        {forecastData && (
+          <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
+            <h3 className="text-sm font-semibold">Statistics</h3>
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="text-gray-400">Grid cells:</span>{' '}
+                <span className="font-semibold">{forecastData.cells?.length || 0}</span>
+              </p>
+              <p>
+                <span className="text-gray-400">Rate range:</span>{' '}
+                {Math.pow(10, forecastData.vmin).toExponential(2)} -{' '}
+                {Math.pow(10, forecastData.vmax).toExponential(2)}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Right Column: Visualization */}
+      <div className="lg:col-span-3 space-y-6">
+        {forecastLoading && (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-gray-400">Loading forecast data...</p>
+            </div>
+          </div>
+        )}
+
+        {forecastError && (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center text-red-400">
+              <p className="text-xl font-semibold mb-2">Error loading forecast</p>
+              <p className="text-sm">{forecastError.message}</p>
+            </div>
+          </div>
+        )}
+
+        {forecastData && forecastData.cells && (
+          <>
+            <div className="bg-surface p-6 rounded-lg border border-border">
+              <h2 className="text-lg font-semibold mb-4">Forecast Map</h2>
+              <ForecastMap
+                cells={forecastData.cells}
+                bbox={manifest.region?.bbox ?? undefined}
+                vmin={forecastData.vmin}
+                vmax={forecastData.vmax}
+                colorbarMin={colorbarMin}
+                colorbarMax={colorbarMax}
+              />
+            </div>
+
+            <ColorbarLegend vmin={effectiveMin} vmax={effectiveMax} title="log10(Rate)" />
+
+            <div className="text-xs text-gray-400">
+              <p>
+                <span className="font-semibold">Note:</span> Forecast rates are displayed in log10 scale.
+                Hover over cells for detailed information.
+              </p>
+            </div>
+          </>
+        )}
+
+        {!forecastLoading && !forecastError && !forecastData && (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <p className="text-gray-400">Select a model and time window to view forecast</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
