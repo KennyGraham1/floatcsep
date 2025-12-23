@@ -229,7 +229,7 @@ class Evaluation:
     ) -> Union[CSEPCatalog, List[CSEPCatalog]]:
         """
         Reads the catalog(s) from the given path(s). References the catalog region to the
-        forecast region.
+        forecast region and filters events to ensure they fall within the forecast region.
 
         Args:
             timewindow (str): Time window of the testing catalog
@@ -243,6 +243,9 @@ class Evaluation:
             # eval_cat = CSEPCatalog.load_json(catalog_path)
             eval_cat = self.catalog_repo.get_test_cat(timewindow)
             eval_cat.region = getattr(forecast, "region")
+            # Filter catalog to forecast region to prevent spatial test failures
+            if forecast.region is not None:
+                eval_cat.filter_spatial(region=forecast.region, in_place=True)
 
         else:
             eval_cat = [self.catalog_repo.get_test_cat(i) for i in timewindow]
@@ -250,6 +253,9 @@ class Evaluation:
                 raise IndexError("Amount of passed catalogs and forecasts must " "be the same")
             for cat, fc in zip(eval_cat, forecast):
                 cat.region = getattr(fc, "region", None)
+                # Filter catalog to forecast region
+                if fc.region is not None:
+                    cat.filter_spatial(region=fc.region, in_place=True)
 
         return eval_cat
 
