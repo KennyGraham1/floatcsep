@@ -53,15 +53,13 @@ def load_catalog_data(catalog_path: str, app_root: str) -> Dict[str, Any]:
         min_lon = float(np.min(lons))
         max_lon = float(np.max(lons))
         
-        # Debug: log lon range to stderr
-        import sys
-        print(f"DEBUG: lon range [{min_lon:.2f}, {max_lon:.2f}], lat range [{min_lat:.2f}, {max_lat:.2f}]", file=sys.stderr)
+
         
         # Check if data crosses the antimeridian (has both very positive and very negative lons)
         has_positive = any(lon > 90 for lon in lons)
         has_negative = any(lon < -90 for lon in lons)
         
-        print(f"DEBUG: has_positive={has_positive}, has_negative={has_negative}", file=sys.stderr)
+
         
         if has_positive and has_negative:
             # Data crosses antimeridian
@@ -76,12 +74,10 @@ def load_catalog_data(catalog_path: str, app_root: str) -> Dict[str, Any]:
                 west = float(min(positive_lons))
                 east = float(max(negative_lons))
                 bbox = [west, min_lat, east, max_lat]
-                print(f"DEBUG: antimeridian bbox = {bbox}", file=sys.stderr)
             else:
                 bbox = [min_lon, min_lat, max_lon, max_lat]
         else:
             bbox = [min_lon, min_lat, max_lon, max_lat]
-            print(f"DEBUG: normal bbox = {bbox}", file=sys.stderr)
     else:
         bbox = None
 

@@ -106,7 +106,7 @@ export default function TimeWindowsTimeline({ timeWindows }: TimeWindowsTimeline
 
   return (
     <div className="w-full">
-      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} />
+      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} immutable={true} />
       <p className="text-xs text-gray-400 mt-2">
         <span className="font-semibold">Time Windows:</span> {timeWindows.length}
       </p>

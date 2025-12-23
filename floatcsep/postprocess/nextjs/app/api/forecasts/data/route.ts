@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Check cache
     const cacheKey = `${modelIndex}|${timeWindow}`;
     if (forecastCache.has(cacheKey)) {
-      console.log(`Cache hit for forecast: ${cacheKey}`);
+
       return NextResponse.json(forecastCache.get(cacheKey), {
         headers: {
           'Cache-Control': 'public, max-age=3600',
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     const command = `python "${pythonScript}" load_forecast "${forecastPath}" "${appRoot}" "${tempFilePath}" "${isCatalogFc}"`;
 
-    console.log(`Loading forecast: ${cacheKey}`);
+
     const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 50 }); // Enable large buffer
 
     if (stderr) {
@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
 
     // Cache result
     forecastCache.set(cacheKey, data);
-    console.log(`Cached forecast: ${cacheKey} (${data.cells?.length || 0} cells)`);
 
     return NextResponse.json(data, {
       headers: {

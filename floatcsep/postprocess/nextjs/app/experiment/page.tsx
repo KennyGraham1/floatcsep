@@ -1,17 +1,10 @@
 'use client';
 
+import { Manifest, Model, Test } from '@/lib/types';
 import { useManifest } from '@/lib/contexts/ManifestContext';
 import RegionMap from '@/components/experiment/RegionMap';
-
-// Safe render helper
-function safe(value: any): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') {
-    if (Array.isArray(value)) return value.join(', ');
-    return JSON.stringify(value);
-  }
-  return String(value);
-}
+import { safeRender } from '@/lib/utils';
+import MetadataCard from '@/components/ui/MetadataCard';
 
 export default function ExperimentPage() {
   const { manifest, isLoading, error } = useManifest();
@@ -49,51 +42,44 @@ export default function ExperimentPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">{safe(manifest.name)}</h1>
-        <p className="text-gray-400">{safe(manifest.date_range)}</p>
+        <h1 className="text-3xl font-bold mb-2">{safeRender(manifest.name)}</h1>
+        <p className="text-gray-400">{safeRender(manifest.date_range)}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
+
           {/* Metadata */}
-          <div className="bg-surface p-6 rounded-lg border border-border">
-            <h2 className="text-xl font-semibold mb-4">Metadata</h2>
-            <div className="space-y-2 text-sm">
-              {manifest.authors && (
-                <p><span className="text-gray-400">Authors:</span> {safe(manifest.authors)}</p>
-              )}
-              {manifest.exp_class && (
-                <p><span className="text-gray-400">Class:</span> {safe(manifest.exp_class)}</p>
-              )}
-              <p><span className="text-gray-400">Start:</span> {safe(manifest.start_date)}</p>
-              <p><span className="text-gray-400">End:</span> {safe(manifest.end_date)}</p>
-            </div>
-          </div>
+          <MetadataCard
+            title="Metadata"
+            data={[
+              { label: 'Authors', value: manifest.authors },
+              { label: 'Class', value: manifest.exp_class },
+              { label: 'Start', value: manifest.start_date },
+              { label: 'End', value: manifest.end_date },
+            ]}
+          />
 
           {/* Region */}
-          <div className="bg-surface p-6 rounded-lg border border-border">
-            <h2 className="text-xl font-semibold mb-4">Region</h2>
-            <div className="space-y-2 text-sm">
-              {manifest.region?.name && (
-                <p><span className="text-gray-400">Name:</span> {safe(manifest.region.name)}</p>
-              )}
-              <p><span className="text-gray-400">Magnitude:</span> [{safe(manifest.mag_min)}, {safe(manifest.mag_max)}]</p>
-              {manifest.depth_min !== null && (
-                <p><span className="text-gray-400">Depth:</span> [{safe(manifest.depth_min)}, {safe(manifest.depth_max)}] km</p>
-              )}
-            </div>
-          </div>
+          <MetadataCard
+            title="Region"
+            data={[
+              { label: 'Name', value: manifest.region?.name },
+              { label: 'Magnitude', value: `[${safeRender(manifest.mag_min)}, ${safeRender(manifest.mag_max)}]` },
+              { label: 'Depth', value: manifest.depth_min !== null ? `[${safeRender(manifest.depth_min)}, ${safeRender(manifest.depth_max)}] km` : null },
+            ]}
+          />
 
           {/* Models */}
           <div className="bg-surface p-6 rounded-lg border border-border">
             <h2 className="text-xl font-semibold mb-4">Models ({manifest.models?.length || 0})</h2>
             <div className="space-y-3">
-              {manifest.models?.filter((m: any) => m && typeof m === 'object' && m.name).map((model: any, idx: number) => (
+              {manifest.models?.filter(m => m && m.name).map((model: Model, idx: number) => (
                 <div key={idx} className="border-l-2 border-primary pl-3">
-                  <h3 className="font-semibold text-sm">{safe(model.name)}</h3>
+                  <h3 className="font-semibold text-sm">{safeRender(model.name)}</h3>
                   {model.doi && (
-                    <p className="text-xs text-gray-400">DOI: {safe(model.doi)}</p>
+                    <p className="text-xs text-gray-400">DOI: {safeRender(model.doi)}</p>
                   )}
                 </div>
               ))}
@@ -104,11 +90,11 @@ export default function ExperimentPage() {
           <div className="bg-surface p-6 rounded-lg border border-border">
             <h2 className="text-xl font-semibold mb-4">Tests ({manifest.tests?.length || 0})</h2>
             <div className="space-y-3">
-              {manifest.tests?.filter((t: any) => t && typeof t === 'object' && t.name).map((test: any, idx: number) => (
+              {manifest.tests?.filter(t => t && t.name).map((test: Test, idx: number) => (
                 <div key={idx} className="border-l-2 border-secondary pl-3">
-                  <h3 className="font-semibold text-sm">{safe(test.name)}</h3>
+                  <h3 className="font-semibold text-sm">{safeRender(test.name)}</h3>
                   {test.func && (
-                    <p className="text-xs text-gray-400 font-mono">{safe(test.func)}</p>
+                    <p className="text-xs text-gray-400 font-mono">{safeRender(test.func)}</p>
                   )}
                 </div>
               ))}
@@ -136,7 +122,7 @@ export default function ExperimentPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
           {manifest.time_windows?.filter((tw: any) => tw && typeof tw === 'string').map((tw: string, idx: number) => (
             <div key={idx} className="bg-background p-2 rounded">
-              <span className="text-primary font-semibold">T{idx + 1}:</span> {safe(tw)}
+              <span className="text-primary font-semibold">T{idx + 1}:</span> {safeRender(tw)}
             </div>
           ))}
         </div>

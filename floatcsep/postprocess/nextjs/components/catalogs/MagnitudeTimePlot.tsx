@@ -140,7 +140,7 @@ export default function MagnitudeTimePlot({
 
   return (
     <div className="w-full">
-      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} />
+      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} immutable={true} />
     </div>
   );
 }

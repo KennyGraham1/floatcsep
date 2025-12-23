@@ -219,14 +219,6 @@ const LeafletSpatialMap = ({ events, bbox, startDate }: SpatialMapProps) => {
         [events]
     );
 
-    if (events.length === 0) {
-        return (
-            <div className="w-full h-[450px] rounded-lg border border-border flex items-center justify-center bg-background">
-                <p className="text-gray-400">No events to display</p>
-            </div>
-        );
-    }
-
     // Default bounds centered on New Zealand
     const defaultBounds = L.latLngBounds([[-47, 165], [-34, 179]]);
 
@@ -245,6 +237,14 @@ const LeafletSpatialMap = ({ events, bbox, startDate }: SpatialMapProps) => {
         }
         return bbox;
     }, [events, bbox, crossingAntimeridian]);
+
+    if (events.length === 0) {
+        return (
+            <div className="w-full h-[450px] rounded-lg border border-border flex items-center justify-center bg-background">
+                <p className="text-gray-400">No events to display</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-3">

@@ -34,7 +34,7 @@ interface ForecastMapProps {
     colorbarMax?: number;
 }
 
-// Component to render the GeoJSON layer using the native Leaflet API
+// Optimized Canvas Layer for rendering thousands of grid cells
 function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
     cells: ForecastCell[];
     vmin: number;
@@ -43,92 +43,183 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
     colorbarMax?: number;
 }) {
     const map = useMap();
-    const layerRef = useRef<L.GeoJSON | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const tooltipRef = useRef<L.Tooltip | null>(null);
 
     const effectiveMin = colorbarMin !== undefined ? colorbarMin : vmin;
     const effectiveMax = colorbarMax !== undefined ? colorbarMax : vmax;
 
+    // Derived grid properties for hit testing
+    const gridProps = useMemo(() => {
+        if (cells.length === 0) return null;
+
+        const lons = cells.map(c => c.lon);
+        const lats = cells.map(c => c.lat);
+
+        // Find unique sorted coords to determine step size
+        // Use a small epsilon for float comparison
+        const uniqueLons = [...new Set(lons)].sort((a, b) => a - b);
+        const uniqueLats = [...new Set(lats)].sort((a, b) => a - b);
+
+        const minLon = uniqueLons[0];
+        const minLat = uniqueLats[0];
+
+        // Calculate step size (dh)
+        const dLon = uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 0.1;
+        const dLat = uniqueLats.length > 1 ? uniqueLats[1] - uniqueLats[0] : 0.1;
+
+        // Create a spatial lookup map: key="latIndex,lonIndex" -> cell
+        const lookup = new Map<string, ForecastCell>();
+        cells.forEach(cell => {
+            const lonIdx = Math.round((cell.lon - minLon) / dLon);
+            const latIdx = Math.round((cell.lat - minLat) / dLat);
+            lookup.set(`${latIdx},${lonIdx}`, cell);
+        });
+
+        return { minLon, minLat, dLon, dLat, lookup };
+    }, [cells]);
+
     useEffect(() => {
-        // Remove existing layer
-        if (layerRef.current) {
-            map.removeLayer(layerRef.current);
+        if (!gridProps) return;
+
+        const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated') as HTMLCanvasElement;
+        canvas.style.zIndex = '100'; // Above tiles
+        canvas.style.pointerEvents = 'auto'; // allow mouse events
+
+        // Add to overlay pane
+        map.getPanes().overlayPane.appendChild(canvas);
+        canvasRef.current = canvas;
+
+        // Tooltip instance
+        const tooltip = L.tooltip({
+            direction: 'top',
+            sticky: true,
+            className: 'leaflet-tooltip-own',
+            opacity: 0.9,
+        });
+        tooltipRef.current = tooltip;
+
+        function draw() {
+            if (!canvas || !map) return;
+
+            const size = map.getSize();
+            const bounds = map.getBounds();
+            const zoom = map.getZoom();
+
+            // Handle high DPI
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = size.x * dpr;
+            canvas.height = size.y * dpr;
+            canvas.style.width = size.x + 'px';
+            canvas.style.height = size.y + 'px';
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            ctx.scale(dpr, dpr);
+
+            // Transform origin to match leaflet's overlay pane position
+            const topLeft = map.containerPointToLayerPoint([0, 0]);
+            L.DomUtil.setPosition(canvas, topLeft);
+
+            // Clear canvas
+            ctx.clearRect(0, 0, size.x, size.y);
+
+            const { dLon, dLat } = gridProps!;
+            const hw = dLon / 2;
+            const hh = dLat / 2;
+
+            // Batch drawing
+            cells.forEach(cell => {
+                // Optimization: Skip if outside bounds
+                // Simple check
+                if (cell.lon + hw < bounds.getWest() || cell.lon - hw > bounds.getEast() ||
+                    cell.lat + hh < bounds.getSouth() || cell.lat - hh > bounds.getNorth()) {
+                    return;
+                }
+
+                // Project corners to pixel coords
+                // We draw a rectangle defined by (lon-hw, lat+hh) [top-left] to (lon+hw, lat-hh) [bottom-right]
+                const p1 = map.latLngToContainerPoint([cell.lat + hh, cell.lon - hw]);
+                const p2 = map.latLngToContainerPoint([cell.lat - hh, cell.lon + hw]);
+
+                const w = Math.ceil(p2.x - p1.x); // Ceil to avoid gaps
+                const h = Math.ceil(p2.y - p1.y);
+
+                const logRate = Math.log10(cell.rate);
+                const range = effectiveMax - effectiveMin;
+                const normalized = range > 0 ? (logRate - effectiveMin) / range : 0.5;
+                const clamped = Math.max(0, Math.min(1, normalized));
+                const colorIdx = Math.floor(clamped * (VIRIDIS_COLORS.length - 1));
+
+                ctx.fillStyle = VIRIDIS_COLORS[colorIdx];
+                ctx.fillRect(Math.floor(p1.x), Math.floor(p1.y), w, h);
+            });
         }
 
-        if (cells.length === 0) return;
+        function handleMouseMove(e: MouseEvent) {
+            if (!gridProps || !map) return;
 
-        // Infer cell size from first two unique coordinates
-        const uniqueLons = [...new Set(cells.map(c => c.lon))].sort((a, b) => a - b);
-        const uniqueLats = [...new Set(cells.map(c => c.lat))].sort((a, b) => a - b);
-        const cellWidth = uniqueLons.length > 1 ? Math.abs(uniqueLons[1] - uniqueLons[0]) : 0.1;
-        const cellHeight = uniqueLats.length > 1 ? Math.abs(uniqueLats[1] - uniqueLats[0]) : 0.1;
+            // Convert mouse event to container point
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
 
-        // Half width/height for creating bounds from center
-        const hw = cellWidth / 2;
-        const hh = cellHeight / 2;
+            const latlng = map.containerPointToLatLng([x, y]);
 
-        const features = cells.map(cell => {
-            const logRate = Math.log10(cell.rate);
-            const range = effectiveMax - effectiveMin;
-            const normalized = range > 0 ? (logRate - effectiveMin) / range : 0.5;
-            const clampedNormalized = Math.max(0, Math.min(1, normalized));
-            const colorIndex = Math.floor(clampedNormalized * (VIRIDIS_COLORS.length - 1));
-            const color = VIRIDIS_COLORS[colorIndex];
+            // Hit test
+            const { minLon, minLat, dLon, dLat, lookup } = gridProps;
 
-            return {
-                type: 'Feature' as const,
-                properties: {
-                    rate: cell.rate,
-                    logRate: logRate,
-                    color: color
-                },
-                geometry: {
-                    type: 'Polygon' as const,
-                    coordinates: [[
-                        [cell.lon - hw, cell.lat - hh],
-                        [cell.lon + hw, cell.lat - hh],
-                        [cell.lon + hw, cell.lat + hh],
-                        [cell.lon - hw, cell.lat + hh],
-                        [cell.lon - hw, cell.lat - hh]
-                    ]]
-                }
-            };
-        });
+            // Calculate expected index
+            const lonIdx = Math.round((latlng.lng - minLon) / dLon);
+            const latIdx = Math.round((latlng.lat - minLat) / dLat);
 
-        const geoJsonData = {
-            type: 'FeatureCollection' as const,
-            features: features
-        };
+            const cell = lookup.get(`${latIdx},${lonIdx}`);
 
-        // Create new layer using native Leaflet API
-        const geoJsonLayer = L.geoJSON(geoJsonData, {
-            style: (feature) => ({
-                stroke: true, // Enable stroke to fill sub-pixel gaps
-                weight: 1,    // Small weight to overlap slightly
-                color: feature?.properties?.color || '#440154', // Match fill color
-                opacity: 1.0,
-                fillColor: feature?.properties?.color || '#440154',
-                fillOpacity: 1.0,
-            }),
-            onEachFeature: (feature, layer) => {
-                if (feature.properties) {
-                    layer.bindTooltip(
-                        `<div style="font-size: 11px;">log<sub>10</sub> λ: ${feature.properties.logRate.toFixed(2)}</div>`,
-                        { sticky: true, direction: 'top' }
-                    );
+            // Check if within bounds of that specific cell (rect detection)
+            if (cell) {
+                const hw = dLon / 2;
+                const hh = dLat / 2;
+                if (latlng.lng >= cell.lon - hw && latlng.lng <= cell.lon + hw &&
+                    latlng.lat >= cell.lat - hh && latlng.lat <= cell.lat + hh) {
+
+                    tooltip.setLatLng(latlng)
+                        .setContent(`<div style="font-size: 11px;">log<sub>10</sub> λ: ${Math.log10(cell.rate).toFixed(2)}</div>`)
+                        .addTo(map);
+                    canvas.style.cursor = 'crosshair';
+                    return;
                 }
             }
-        });
 
-        geoJsonLayer.addTo(map);
-        layerRef.current = geoJsonLayer;
+            map.closeTooltip(tooltip);
+            canvas.style.cursor = 'grab';
+        }
 
-        // Cleanup on unmount
+        // Event listeners
+        map.on('move', draw);
+        map.on('zoom', draw);
+        map.on('viewreset', draw);
+
+        // Mouse interaction on the canvas itself
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseleave', () => map.closeTooltip(tooltip));
+
+        // Initial draw
+        draw();
+
         return () => {
-            if (layerRef.current) {
-                map.removeLayer(layerRef.current);
+            map.off('move', draw);
+            map.off('zoom', draw);
+            map.off('viewreset', draw);
+            if (canvasRef.current) {
+                canvasRef.current.removeEventListener('mousemove', handleMouseMove);
+                canvasRef.current.parentNode?.removeChild(canvasRef.current);
+            }
+            if (tooltipRef.current) {
+                map.removeLayer(tooltipRef.current);
             }
         };
-    }, [map, cells, effectiveMin, effectiveMax]);
+    }, [map, gridProps, effectiveMin, effectiveMax]);
 
     return null;
 }

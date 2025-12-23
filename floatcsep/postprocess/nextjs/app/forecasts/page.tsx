@@ -165,48 +165,24 @@ export default function ForecastsPage() {
         </div>
 
         {/* Colorbar Range Controls */}
+        {/* Colorbar Range Controls removed - moved to legend slider */}
         {forecastData && (
           <div className="bg-surface p-6 rounded-lg border border-border space-y-4">
-            <h2 className="text-lg font-semibold">Color Range</h2>
-
-            <div className="space-y-2">
-              <label className="text-xs text-gray-400">Min (log10)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={effectiveMin}
-                onChange={(e) => setColorbarMin(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Color Range</h2>
+              <button
+                onClick={() => {
+                  setColorbarMin(undefined);
+                  setColorbarMax(undefined);
+                }}
+                className="text-xs text-primary hover:underline"
+              >
+                Reset
+              </button>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-xs text-gray-400">Max (log10)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={effectiveMax}
-                onChange={(e) => setColorbarMax(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-
-            <button
-              onClick={() => {
-                setColorbarMin(undefined);
-                setColorbarMax(undefined);
-              }}
-              className="w-full bg-background hover:bg-border border border-border rounded px-3 py-2 text-sm transition-colors"
-            >
-              Reset to Data Range
-            </button>
-
-            <div className="text-xs text-gray-400 pt-2">
-              <p>
-                <span className="font-semibold">Data range:</span>{' '}
-                [{forecastData.vmin.toFixed(2)}, {forecastData.vmax.toFixed(2)}]
-              </p>
-            </div>
+            <p className="text-xs text-gray-400">
+              Use the slider below the map to adjust the color scale.
+            </p>
           </div>
         )}
 
@@ -263,7 +239,17 @@ export default function ForecastsPage() {
               />
             </div>
 
-            <ColorbarLegend vmin={effectiveMin} vmax={effectiveMax} title="log10 λ" />
+            <ColorbarLegend
+              vmin={effectiveMin}
+              vmax={effectiveMax}
+              dataMin={forecastData.vmin}
+              dataMax={forecastData.vmax}
+              title="log10 λ"
+              onRangeChange={([min, max]) => {
+                setColorbarMin(min);
+                setColorbarMax(max);
+              }}
+            />
 
             <div className="text-xs text-gray-400">
               <p>
