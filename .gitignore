@@ -5,6 +5,8 @@ version
 tutorials/case*/results/
 tutorials/case*/models/
 
+notes.kg
+
 # Next.js
 floatcsep/postprocess/nextjs/.next/
 floatcsep/postprocess/nextjs/node_modules/
