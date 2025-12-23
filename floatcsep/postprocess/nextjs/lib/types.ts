@@ -43,6 +43,7 @@ export interface Region {
   name: string | null;
   bbox: [number, number, number, number] | null; // [west, south, east, north]
   dh: number | null;
+  origins: [number, number][] | null;
 }
 
 export interface Model {

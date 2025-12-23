@@ -18,12 +18,6 @@
   }
 }
 
-@layer components {
-  .leaflet-container {
-    @apply bg-surface;
-  }
-}
-
 @layer utilities {
   /* Screen reader only - visually hidden but accessible */
   .sr-only {

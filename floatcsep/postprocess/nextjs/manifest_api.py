@@ -45,9 +45,44 @@ def load_catalog_data(catalog_path: str, app_root: str) -> Dict[str, Any]:
             "event_id": str(event_ids[i]) if isinstance(event_ids[i], (bytes, bytearray)) else event_ids[i].decode('utf-8') if hasattr(event_ids[i], 'decode') else str(event_ids[i]),
         })
 
-    try:
-        bbox = list(catalog.get_bbox())
-    except Exception:
+    # Calculate bbox manually to handle antimeridian correctly
+    # Standard format: [west/min_lon, south/min_lat, east/max_lon, north/max_lat]
+    if len(lons) > 0 and len(lats) > 0:
+        min_lat = float(np.min(lats))
+        max_lat = float(np.max(lats))
+        min_lon = float(np.min(lons))
+        max_lon = float(np.max(lons))
+        
+        # Debug: log lon range to stderr
+        import sys
+        print(f"DEBUG: lon range [{min_lon:.2f}, {max_lon:.2f}], lat range [{min_lat:.2f}, {max_lat:.2f}]", file=sys.stderr)
+        
+        # Check if data crosses the antimeridian (has both very positive and very negative lons)
+        has_positive = any(lon > 90 for lon in lons)
+        has_negative = any(lon < -90 for lon in lons)
+        
+        print(f"DEBUG: has_positive={has_positive}, has_negative={has_negative}", file=sys.stderr)
+        
+        if has_positive and has_negative:
+            # Data crosses antimeridian
+            # Find the "west" boundary (largest positive lon, e.g., 165)
+            # Find the "east" boundary (smallest negative lon, e.g., -175)
+            positive_lons = [lon for lon in lons if lon > 0]
+            negative_lons = [lon for lon in lons if lon < 0]
+            
+            if positive_lons and negative_lons:
+                # West is the minimum positive lon (closest to 180 from west)
+                # East is the maximum negative lon (closest to -180 from east)
+                west = float(min(positive_lons))
+                east = float(max(negative_lons))
+                bbox = [west, min_lat, east, max_lat]
+                print(f"DEBUG: antimeridian bbox = {bbox}", file=sys.stderr)
+            else:
+                bbox = [min_lon, min_lat, max_lon, max_lat]
+        else:
+            bbox = [min_lon, min_lat, max_lon, max_lat]
+            print(f"DEBUG: normal bbox = {bbox}", file=sys.stderr)
+    else:
         bbox = None
 
     return {
@@ -185,7 +220,13 @@ if __name__ == "__main__":
             sys.exit(1)
         forecast_path = sys.argv[2]
         app_root = sys.argv[3]
-        region_data = json.loads(sys.argv[4])
+        region_arg = sys.argv[4]
+        if Path(region_arg).exists():
+            with open(region_arg, 'r') as f:
+                region_data = json.load(f)
+        else:
+            region_data = json.loads(region_arg)
+
         is_catalog_fc = sys.argv[5].lower() == "true"
         result = load_forecast_data(forecast_path, app_root, region_data, is_catalog_fc)
         print(json.dumps(result))

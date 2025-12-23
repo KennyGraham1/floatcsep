@@ -1,6 +1,7 @@
 'use client';
 
 import { useManifest } from '@/lib/contexts/ManifestContext';
+import RegionMap from '@/components/experiment/RegionMap';
 
 // Safe render helper
 function safe(value: any): string {
@@ -53,62 +54,78 @@ export default function ExperimentPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Metadata */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-semibold mb-4">Metadata</h2>
-          <div className="space-y-2 text-sm">
-            {manifest.authors && (
-              <p><span className="text-gray-400">Authors:</span> {safe(manifest.authors)}</p>
-            )}
-            {manifest.exp_class && (
-              <p><span className="text-gray-400">Class:</span> {safe(manifest.exp_class)}</p>
-            )}
-            <p><span className="text-gray-400">Start:</span> {safe(manifest.start_date)}</p>
-            <p><span className="text-gray-400">End:</span> {safe(manifest.end_date)}</p>
+        {/* Left Column */}
+        <div className="space-y-6">
+          {/* Metadata */}
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-semibold mb-4">Metadata</h2>
+            <div className="space-y-2 text-sm">
+              {manifest.authors && (
+                <p><span className="text-gray-400">Authors:</span> {safe(manifest.authors)}</p>
+              )}
+              {manifest.exp_class && (
+                <p><span className="text-gray-400">Class:</span> {safe(manifest.exp_class)}</p>
+              )}
+              <p><span className="text-gray-400">Start:</span> {safe(manifest.start_date)}</p>
+              <p><span className="text-gray-400">End:</span> {safe(manifest.end_date)}</p>
+            </div>
+          </div>
+
+          {/* Region */}
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-semibold mb-4">Region</h2>
+            <div className="space-y-2 text-sm">
+              {manifest.region?.name && (
+                <p><span className="text-gray-400">Name:</span> {safe(manifest.region.name)}</p>
+              )}
+              <p><span className="text-gray-400">Magnitude:</span> [{safe(manifest.mag_min)}, {safe(manifest.mag_max)}]</p>
+              {manifest.depth_min !== null && (
+                <p><span className="text-gray-400">Depth:</span> [{safe(manifest.depth_min)}, {safe(manifest.depth_max)}] km</p>
+              )}
+            </div>
+          </div>
+
+          {/* Models */}
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-semibold mb-4">Models ({manifest.models?.length || 0})</h2>
+            <div className="space-y-3">
+              {manifest.models?.filter((m: any) => m && typeof m === 'object' && m.name).map((model: any, idx: number) => (
+                <div key={idx} className="border-l-2 border-primary pl-3">
+                  <h3 className="font-semibold text-sm">{safe(model.name)}</h3>
+                  {model.doi && (
+                    <p className="text-xs text-gray-400">DOI: {safe(model.doi)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tests */}
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-semibold mb-4">Tests ({manifest.tests?.length || 0})</h2>
+            <div className="space-y-3">
+              {manifest.tests?.filter((t: any) => t && typeof t === 'object' && t.name).map((test: any, idx: number) => (
+                <div key={idx} className="border-l-2 border-secondary pl-3">
+                  <h3 className="font-semibold text-sm">{safe(test.name)}</h3>
+                  {test.func && (
+                    <p className="text-xs text-gray-400 font-mono">{safe(test.func)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Region */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-semibold mb-4">Region</h2>
-          <div className="space-y-2 text-sm">
-            {manifest.region?.name && (
-              <p><span className="text-gray-400">Name:</span> {safe(manifest.region.name)}</p>
-            )}
-            <p><span className="text-gray-400">Magnitude:</span> [{safe(manifest.mag_min)}, {safe(manifest.mag_max)}]</p>
-            {manifest.depth_min !== null && (
-              <p><span className="text-gray-400">Depth:</span> [{safe(manifest.depth_min)}, {safe(manifest.depth_max)}] km</p>
-            )}
-          </div>
-        </div>
-
-        {/* Models */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-semibold mb-4">Models ({manifest.models?.length || 0})</h2>
-          <div className="space-y-3">
-            {manifest.models?.filter((m: any) => m && typeof m === 'object' && m.name).map((model: any, idx: number) => (
-              <div key={idx} className="border-l-2 border-primary pl-3">
-                <h3 className="font-semibold text-sm">{safe(model.name)}</h3>
-                {model.doi && (
-                  <p className="text-xs text-gray-400">DOI: {safe(model.doi)}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Tests */}
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-xl font-semibold mb-4">Tests ({manifest.tests?.length || 0})</h2>
-          <div className="space-y-3">
-            {manifest.tests?.filter((t: any) => t && typeof t === 'object' && t.name).map((test: any, idx: number) => (
-              <div key={idx} className="border-l-2 border-secondary pl-3">
-                <h3 className="font-semibold text-sm">{safe(test.name)}</h3>
-                {test.func && (
-                  <p className="text-xs text-gray-400 font-mono">{safe(test.func)}</p>
-                )}
-              </div>
-            ))}
+        {/* Right Column - Region Map */}
+        <div className="space-y-6">
+          <div className="bg-surface p-6 rounded-lg border border-border">
+            <h2 className="text-xl font-semibold mb-4">Test Region</h2>
+            <RegionMap
+              bbox={manifest.region?.bbox || undefined}
+              regionName={manifest.region?.name || null}
+              dh={manifest.region?.dh || undefined}
+              origins={manifest.region?.origins || undefined}
+            />
           </div>
         </div>
       </div>

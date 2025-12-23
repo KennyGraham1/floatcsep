@@ -3,6 +3,8 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 
+export const dynamic = 'force-dynamic';
+
 const execAsync = promisify(exec);
 
 export async function GET(request: NextRequest) {
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data, {
       headers: {
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
   } catch (error) {

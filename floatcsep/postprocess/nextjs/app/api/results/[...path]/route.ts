@@ -10,7 +10,8 @@ export async function GET(
     const appRoot = process.env.APP_ROOT || '.';
 
     // Reconstruct file path from params
-    const filePath = path.join(appRoot, 'results', ...params.path);
+    // Note: paths from manifest already include 'results/', so don't add it again
+    const filePath = path.join(appRoot, ...params.path);
 
     // Security check: ensure path is within app root
     const resolvedPath = path.resolve(filePath);

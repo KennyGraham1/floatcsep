@@ -232,6 +232,7 @@ def serialize_manifest(manifest: Any) -> dict:
             "name": getattr(manifest.region, "name", None),
             "bbox": list(manifest.region.get_bbox()) if manifest.region and hasattr(manifest.region, 'get_bbox') else None,
             "dh": float(manifest.region.dh) if manifest.region and hasattr(manifest.region, 'dh') else None,
+            "origins": manifest.region.origins().tolist() if manifest.region and hasattr(manifest.region, 'origins') else None,
         } if manifest.region else None,
         "models": serialize_value(manifest.models),
         "tests": serialize_value(manifest.tests),

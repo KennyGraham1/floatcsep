@@ -40,17 +40,32 @@ export default function ResultsPage() {
   const selectedModel = manifest?.models?.[selectedModelIndex] || null;
   const selectedTimeWindow = manifest?.time_windows?.[selectedTimeWindowIndex] || null;
 
-  // Build image path based on floatCSEP results structure
-  // results/{test_name}/{model_name}_{time_window_index}.png
+  // Look up image path from manifest's results_model dictionary
+  // The manifest maps (time_window|test|model) -> actual file path
   const imagePath = useMemo(() => {
-    if (!selectedTest || !selectedModel || selectedTimeWindow === null) return null;
+    if (!manifest || !selectedTest || !selectedModel || selectedTimeWindow === null) return null;
 
     const testName = selectedTest.name;
     const modelName = selectedModel.name;
-    const fileName = `${modelName}_${selectedTimeWindowIndex}.png`;
 
-    return `/api/results/${testName}/${fileName}`;
-  }, [selectedTest, selectedModel, selectedTimeWindow, selectedTimeWindowIndex]);
+    // Build the lookup key: "time_window|test_name|model_name"
+    const lookupKey = `${selectedTimeWindow}|${testName}|${modelName}`;
+
+    // Check if we have a per-model result
+    if (manifest.results_model && manifest.results_model[lookupKey]) {
+      const relativePath = manifest.results_model[lookupKey];
+      return `/api/results/${relativePath}`;
+    }
+
+    // Fall back to main results (test-level, not per-model)
+    const mainKey = `${selectedTimeWindow}|${testName}`;
+    if (manifest.results_main && manifest.results_main[mainKey]) {
+      const relativePath = manifest.results_main[mainKey];
+      return `/api/results/${relativePath}`;
+    }
+
+    return null;
+  }, [manifest, selectedTest, selectedModel, selectedTimeWindow]);
 
   if (manifestLoading) {
     return (
@@ -269,7 +284,12 @@ export default function ResultsPage() {
 
           {!imagePath && (
             <div className="flex items-center justify-center min-h-[400px]">
-              <p className="text-gray-400">Select time window, test, and model to view results</p>
+              <div className="text-center text-gray-400">
+                <p className="mb-2">No result image available for this combination</p>
+                <p className="text-xs">
+                  This test may not have been run for the selected model and time window.
+                </p>
+              </div>
             </div>
           )}
         </div>

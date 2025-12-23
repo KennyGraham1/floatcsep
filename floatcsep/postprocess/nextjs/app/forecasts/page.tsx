@@ -15,7 +15,19 @@ const ColorbarLegend = dynamic(() => import('@/components/forecasts/ColorbarLege
   loading: () => <div className="w-full h-16 bg-surface rounded-lg border border-border animate-pulse" />,
 });
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (params: [string, any]) => {
+  const [url, body] = params;
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then((res) => {
+    if (!res.ok) {
+      throw new Error('Failed to fetch forecast data');
+    }
+    return res.json();
+  });
+};
 
 export default function ForecastsPage() {
   const { manifest, isLoading: manifestLoading } = useManifest();
@@ -38,7 +50,13 @@ export default function ForecastsPage() {
   // Fetch forecast data
   const { data: forecastData, error: forecastError, isLoading: forecastLoading } = useSWR(
     forecastPath && manifest
-      ? `/api/forecasts/data?path=${encodeURIComponent(forecastPath)}&modelIndex=${selectedModelIndex}&timeWindow=${selectedTimeWindowIndex}&isCatalogFc=${isCatalogFc}&region=${encodeURIComponent(JSON.stringify(manifest.region))}`
+      ? ['/api/forecasts/data', {
+        path: forecastPath,
+        modelIndex: selectedModelIndex,
+        timeWindow: selectedTimeWindowIndex,
+        isCatalogFc,
+        region: manifest.region
+      }]
       : null,
     fetcher,
     {
@@ -245,7 +263,7 @@ export default function ForecastsPage() {
               />
             </div>
 
-            <ColorbarLegend vmin={effectiveMin} vmax={effectiveMax} title="log10(Rate)" />
+            <ColorbarLegend vmin={effectiveMin} vmax={effectiveMax} title="log10 λ" />
 
             <div className="text-xs text-gray-400">
               <p>

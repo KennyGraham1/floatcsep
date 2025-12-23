@@ -14,8 +14,10 @@ export function useCatalogData(catalogPath: string | null) {
     catalogPath ? `/api/catalog/data?path=${encodeURIComponent(catalogPath)}` : null,
     fetcher,
     {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000, // 1 minute
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 0, // No deduping - always fetch fresh
+      refreshInterval: 0,
     }
   );
 }

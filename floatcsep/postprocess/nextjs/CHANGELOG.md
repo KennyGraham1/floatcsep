@@ -2,6 +2,31 @@
 
 All notable changes to the floatCSEP Next.js Dashboard.
 
+## [1.1.0] - 2025
+
+### Changed
+- **BREAKING**: Migrated all map visualizations from Leaflet to Highcharts
+- Replaced Leaflet maps with Highcharts equivalents:
+  - SpatialMap: Now uses Highcharts Maps with **OpenStreetMap tile basemap** for realistic geography
+  - ForecastMap: Now uses Highcharts heatmap with Magma color palette
+  - RegionMap: Now uses Highcharts line chart for boundary visualization
+- Removed Leaflet dependencies (leaflet, @types/leaflet)
+- Added proj4 for geographic coordinate support
+- Unified all visualizations under a single charting library (Highcharts)
+- Maintained all interactive features (tooltips, zoom, pan)
+- Preserved dark theme styling across all new visualizations
+- **Instant map rendering** - Maps now render immediately at the correct zoom and position (no delay or animation from world view)
+- **Added automatic zoom to data extent** - Maps automatically calculate optimal zoom level based on data spread
+- **Added antimeridian (180°) crossing support** - Special handling for NZ and Pacific data with intelligent centering
+- **Smart map centering** - Regions crossing the antimeridian (like New Zealand) are properly centered instead of being pushed to edges
+- **Using real basemap tiles** - OpenStreetMap provides actual detailed coastlines, roads, and geographic features
+
+### Benefits
+- Single charting library reduces bundle size and complexity
+- Consistent API and interaction patterns across all visualizations
+- Better TypeScript support and type safety
+- Improved customization and theming capabilities
+
 ## [1.0.0] - 2024
 
 ### Added
@@ -17,7 +42,7 @@ All notable changes to the floatCSEP Next.js Dashboard.
 
 #### Phase 2: Experiment Tab
 - Interactive metadata accordion (Radix UI)
-- Leaflet region map with bounding box overlay
+- Region map with bounding box overlay
 - Highcharts time windows timeline (x-range chart)
 - DOI badges and version display
 - Model and test configuration panels
@@ -31,7 +56,7 @@ All notable changes to the floatCSEP Next.js Dashboard.
 
 #### Phase 4: Forecasts Tab
 - Forecast data API endpoint with in-memory caching
-- Interactive forecast map with Leaflet
+- Interactive forecast heatmap visualization
 - Magma color palette for rate visualization (log10 scale)
 - Adjustable color range controls (min/max)
 - Model and time window selectors
@@ -65,8 +90,7 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - **Frontend**: Next.js 14, React 18, TypeScript 5.3
 - **Styling**: Tailwind CSS, custom dark theme
 - **UI Components**: shadcn/ui (Radix UI), Accordion
-- **Maps**: Leaflet 1.9 with dark Stadia basemaps
-- **Charts**: Highcharts 11.2
+- **Visualizations**: Highcharts 11.2 (scatter plots, heatmaps, line charts)
 - **Data Fetching**: SWR 2.2
 - **Backend**: Node.js 20, Python subprocess integration
 - **Caching**: Multi-level (SWR + in-memory + HTTP headers)

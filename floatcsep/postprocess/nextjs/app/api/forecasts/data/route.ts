@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { promises as fs } from 'fs';
+import os from 'os';
+import crypto from 'crypto';
+
+export const dynamic = 'force-dynamic';
 
 const execAsync = promisify(exec);
 
 // In-memory cache for forecast data
 const forecastCache = new Map<string, any>();
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
+  let tempFilePath: string | null = null;
   try {
-    const { searchParams } = new URL(request.url);
-    const forecastPath = searchParams.get('path');
-    const modelIndex = searchParams.get('modelIndex');
-    const timeWindow = searchParams.get('timeWindow');
-    const isCatalogFc = searchParams.get('isCatalogFc') === 'true';
-    const regionData = searchParams.get('region');
+    const body = await request.json();
+    const { path: forecastPath, modelIndex, timeWindow, isCatalogFc, region: regionData } = body;
 
     if (!forecastPath) {
       return NextResponse.json(
@@ -38,11 +40,18 @@ export async function GET(request: NextRequest) {
     // Call Python subprocess
     const appRoot = process.env.APP_ROOT || '.';
     const pythonScript = path.join(process.cwd(), 'manifest_api.py');
+    const regionStr = JSON.stringify(regionData || {});
 
-    const command = `python "${pythonScript}" load_forecast "${forecastPath}" "${appRoot}" '${regionData || '{}'}' "${isCatalogFc}"`;
+    // Write region data to temp file to avoid command line length limits
+    const tempDir = os.tmpdir();
+    const tempFileName = `region-${crypto.randomUUID()}.json`;
+    tempFilePath = path.join(tempDir, tempFileName);
+    await fs.writeFile(tempFilePath, regionStr);
+
+    const command = `python "${pythonScript}" load_forecast "${forecastPath}" "${appRoot}" "${tempFilePath}" "${isCatalogFc}"`;
 
     console.log(`Loading forecast: ${cacheKey}`);
-    const { stdout, stderr } = await execAsync(command);
+    const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 50 }); // Enable large buffer
 
     if (stderr) {
       console.error('Python stderr:', stderr);
@@ -72,5 +81,14 @@ export async function GET(request: NextRequest) {
       { error: 'Failed to load forecast data', details: String(error) },
       { status: 500 }
     );
+  } finally {
+    // Clean up temp file
+    if (tempFilePath) {
+      try {
+        await fs.unlink(tempFilePath);
+      } catch (err) {
+        console.error('Failed to delete temp file:', err);
+      }
+    }
   }
 }
