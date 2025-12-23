@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ThemeToggle } from '../ThemeToggle';
 
 export default function Header() {
   return (
@@ -11,6 +12,9 @@ export default function Header() {
             <div className="text-2xl font-bold text-primary">floatCSEP</div>
           </Link>
           <span className="text-sm text-gray-400">Experiment Dashboard</span>
+        </div>
+        <div className="flex items-center space-x-4">
+          <ThemeToggle />
         </div>
       </div>
     </header>

@@ -10,17 +10,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: '#020617',
-        foreground: '#e5e7eb',
-        surface: '#0b1120',
-        border: '#1f2933',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        surface: 'hsl(var(--surface))',
+        border: 'hsl(var(--border))',
         primary: {
-          DEFAULT: '#14b8a6',
-          foreground: '#020617',
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
         },
         secondary: {
-          DEFAULT: '#f59e0b',
-          foreground: '#e5e7eb',
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
         },
         input: {
           DEFAULT: '#38bdf8',

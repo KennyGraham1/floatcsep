@@ -1,9 +1,20 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
+import HC_exporting from 'highcharts/modules/exporting';
+import HC_exportData from 'highcharts/modules/export-data';
+import HC_offlineExporting from 'highcharts/modules/offline-exporting';
 import { CatalogEvent } from '@/lib/types';
+
+// Initialize exporting modules
+if (typeof Highcharts === 'object') {
+  HC_exporting(Highcharts);
+  HC_offlineExporting(Highcharts);
+  HC_exportData(Highcharts);
+}
 
 interface MagnitudeTimePlotProps {
   events: CatalogEvent[];
@@ -17,6 +28,16 @@ export default function MagnitudeTimePlot({
   startDate,
 }: MagnitudeTimePlotProps) {
   const chartRef = useRef<HighchartsReact.RefObject>(null);
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    // Ensure modules are initialized on client side
+    if (typeof Highcharts === 'object') {
+      HC_exporting(Highcharts);
+      HC_offlineExporting(Highcharts);
+      HC_exportData(Highcharts);
+    }
+  }, []);
 
   // Categorize events
   const inputEvents = events.filter((e) =>
@@ -32,16 +53,24 @@ export default function MagnitudeTimePlot({
     return {
       from: new Date(parts[0]?.trim() || '').getTime(),
       to: new Date(parts[1]?.trim() || parts[0]?.trim() || '').getTime(),
-      color: 'rgba(56, 189, 248, 0.1)',
+      color: theme === 'dark' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(56, 189, 248, 0.2)',
     };
   });
+
+  const isDark = theme === 'dark';
+  const textColor = isDark ? '#e5e7eb' : '#1f2937';
+  const gridColor = isDark ? '#1f2933' : '#e5e7eb';
+  const backgroundColor = isDark ? '#0b1120' : '#ffffff';
 
   const options = {
     chart: {
       type: 'scatter',
-      backgroundColor: '#0b1120',
+      backgroundColor: backgroundColor,
       zoomType: 'x',
-      height: 350,
+      height: 500,
+      style: {
+        fontFamily: 'var(--font-noto-sans)',
+      },
     },
     title: {
       text: '',
@@ -50,29 +79,29 @@ export default function MagnitudeTimePlot({
       type: 'datetime',
       title: {
         text: 'Time',
-        style: { color: '#e5e7eb' },
+        style: { color: textColor },
       },
       labels: {
-        style: { color: '#e5e7eb', fontSize: '10px' },
+        style: { color: textColor, fontSize: '12px' },
         format: '{value:%Y-%m-%d}',
       },
-      gridLineColor: '#1f2933',
-      lineColor: '#6b7280',
-      tickColor: '#6b7280',
+      gridLineColor: gridColor,
+      lineColor: isDark ? '#6b7280' : '#cbd5e1',
+      tickColor: isDark ? '#6b7280' : '#cbd5e1',
       plotBands: plotBands,
     },
     yAxis: {
       title: {
         text: 'Magnitude',
-        style: { color: '#e5e7eb' },
+        style: { color: textColor },
       },
       labels: {
-        style: { color: '#e5e7eb' },
+        style: { color: textColor },
       },
-      gridLineColor: '#1f2933',
+      gridLineColor: gridColor,
     },
     legend: {
-      itemStyle: { color: '#e5e7eb' },
+      itemStyle: { color: textColor },
     },
     plotOptions: {
       scatter: {
@@ -81,7 +110,7 @@ export default function MagnitudeTimePlot({
           states: {
             hover: {
               enabled: true,
-              lineColor: '#e5e7eb',
+              lineColor: textColor,
             },
           },
         },
@@ -101,7 +130,7 @@ export default function MagnitudeTimePlot({
         data: inputEvents.map((e) => ({
           x: new Date(e.time).getTime(),
           y: e.magnitude,
-          name: e.event_id,
+          name: e.event_id.replace(/^b'|'$/g, ''),
         })),
         color: '#38bdf8',
         marker: {
@@ -114,7 +143,7 @@ export default function MagnitudeTimePlot({
         data: testEvents.map((e) => ({
           x: new Date(e.time).getTime(),
           y: e.magnitude,
-          name: e.event_id,
+          name: e.event_id.replace(/^b'|'$/g, ''),
         })),
         color: '#ef4444',
         marker: {
@@ -123,15 +152,37 @@ export default function MagnitudeTimePlot({
       },
     ],
     tooltip: {
-      backgroundColor: '#1f2937',
-      borderColor: '#374151',
-      style: { color: '#e5e7eb' },
+      backgroundColor: isDark ? '#1f2937' : '#ffffff',
+      borderColor: isDark ? '#374151' : '#e5e7eb',
+      style: { color: textColor },
       formatter: function (this: any) {
         const point = this.point;
         return `<b>${point.name}</b><br/>
                 Time: ${Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', this.x)}<br/>
                 Magnitude: ${this.y?.toFixed(2)}`;
       },
+    },
+    exporting: {
+      enabled: true,
+      buttons: {
+        contextButton: {
+          symbolStroke: textColor,
+          theme: {
+            fill: isDark ? '#1f2937' : '#f3f4f6',
+            stroke: gridColor,
+          }
+        }
+      }
+    },
+    navigation: {
+      buttonOptions: {
+        theme: {
+          stroke: textColor,
+          style: {
+            color: textColor
+          }
+        }
+      }
     },
     credits: {
       enabled: false,
@@ -140,7 +191,7 @@ export default function MagnitudeTimePlot({
 
   return (
     <div className="w-full">
-      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} immutable={true} />
+      <HighchartsReact highcharts={Highcharts} options={options} ref={chartRef} immutable={false} />
     </div>
   );
 }

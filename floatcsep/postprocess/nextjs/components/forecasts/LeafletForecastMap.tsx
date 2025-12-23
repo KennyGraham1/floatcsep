@@ -261,10 +261,22 @@ const LeafletForecastMap = ({ cells, bbox, vmin, vmax, colorbarMin, colorbarMax 
                     scrollWheelZoom={true}
                 >
                     <LayersControl position="topright">
-                        <LayersControl.BaseLayer checked name="OpenStreetMap">
+                        <LayersControl.BaseLayer name="OpenStreetMap">
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                        </LayersControl.BaseLayer>
+                        <LayersControl.BaseLayer name="Dark Mode">
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                            />
+                        </LayersControl.BaseLayer>
+                        <LayersControl.BaseLayer checked name="Light Mode">
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                             />
                         </LayersControl.BaseLayer>
                         <LayersControl.BaseLayer name="Esri WorldImagery">
@@ -283,7 +295,7 @@ const LeafletForecastMap = ({ cells, bbox, vmin, vmax, colorbarMin, colorbarMax 
                     />
                 </MapContainer>
             </div>
-        </div>
+        </div >
     );
 };
 
