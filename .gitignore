@@ -1,7 +1,9 @@
 .idea/
 __pycache__
 version
-tutorials/
+# Only ignore results and models directories within tutorial case folders
+tutorials/case*/results/
+tutorials/case*/models/
 
 # Next.js
 floatcsep/postprocess/nextjs/.next/
