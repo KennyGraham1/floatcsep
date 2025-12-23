@@ -89,6 +89,12 @@ const LeafletMap = ({ bbox, regionName, dh, origins }: RegionMapProps) => {
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
                         </LayersControl.BaseLayer>
+                        <LayersControl.BaseLayer name="Esri WorldImagery">
+                            <TileLayer
+                                attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                            />
+                        </LayersControl.BaseLayer>
 
                         <LayersControl.Overlay checked name="Region Grid">
                             <LayerGroup>
