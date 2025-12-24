@@ -8,6 +8,7 @@ time_config:
 
 region_config:
   region: nz_csep_region
+  strict_region: False
   mag_min: 3.0
   mag_max: 8.0
   mag_bin: 0.1
