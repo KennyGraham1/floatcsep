@@ -42,6 +42,10 @@ class DataTest(unittest.TestCase):
     def get_eval_dist(self):
         pass
 
+    @staticmethod
+    def view_dashboard(cfg_file):
+        main.view(cfg_file, show=True, start=False)
+
 
 @patch("floatcsep.commands.main.plot_forecasts")
 @patch("floatcsep.commands.main.plot_catalogs")
@@ -122,4 +126,25 @@ class ReproduceExamples(DataTest):
     def test_case_f(self, *args):
         cfg = self.get_rerunpath("f")
         self.repr_evaluation(cfg)
+        self.assertEqual(1, 1)
+
+
+@patch("floatcsep.commands.main.plot_forecasts")
+@patch("floatcsep.commands.main.plot_catalogs")
+@patch("floatcsep.commands.main.plot_custom")
+@patch("floatcsep.commands.main.generate_report")
+class ViewExamples(DataTest):
+    def test_case_c(self, *args):
+        cfg = self.get_rerunpath("c")
+        self.view_dashboard(cfg)
+        self.assertEqual(1, 1)
+
+    def test_case_f(self, *args):
+        cfg = self.get_rerunpath("f")
+        self.view_dashboard(cfg)
+        self.assertEqual(1, 1)
+
+    def test_case_g(self, *args):
+        cfg = self.get_rerunpath("g")
+        self.view_dashboard(cfg)
         self.assertEqual(1, 1)

@@ -12,6 +12,8 @@ def run_app(
     address: str = "localhost",
     show: bool = True,
     title: Optional[str] = None,
+    start: bool = True,
+    **kwargs,
 ) -> None:
     pn.extension()
 
@@ -31,4 +33,6 @@ def run_app(
         show=show,
         title=title or manifest.name,
         static_dirs={"artifacts": str(artifacts_dir)},
+        start=start,
+        **kwargs
     )
