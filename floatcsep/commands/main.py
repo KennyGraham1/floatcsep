@@ -159,7 +159,7 @@ def view(config: str, **kwargs) -> None:
     exp.stage_models()
     exp.set_tree()
     log.info(f"Creating Panel App")
-    run_app(experiment=exp)
+    run_app(experiment=exp, **kwargs)
 
 
 def reproduce(config: str, **kwargs) -> None:

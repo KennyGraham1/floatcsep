@@ -86,7 +86,13 @@ def _load_csep_catalog_from_manifest(manifest: Manifest):
     if not path:
         return None
 
+    app_root = Path(getattr(manifest, "app_root", "."))
     path_obj = Path(path)
+
+    if not path_obj.is_absolute():
+        path_obj = (app_root / path_obj).resolve()
+    else:
+        path_obj = path_obj.resolve()
 
     try:
         if path_obj.suffix.lower() == ".json":
