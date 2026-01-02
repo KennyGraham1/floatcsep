@@ -114,7 +114,13 @@ license. Please see
 the [license file](https://github.com/cseptesting/floatcsep/blob/main/LICENSE) for more
 information.
 
-## Support
+## How to cite
+
+If you use **floatCSEP** in your work, please cite it using the **“Cite this repository”** link on the right side of the GitHub page or with:
+
+> Iturrieta, P., Khawaja, A. M., Savran, W. H., & Schorlemmer, D. (2025). floatCSEP: An application to deploy and conduct reproducible and prospective earthquake forecasting (Version 0.3.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.15576250
+
+# Support
      
 | <img src="https://i.postimg.cc/rFKQ0vRL/GFZ-Wortbildmarke-EN-Helmholtzdunkelblau-RGB.png" alt="GFZ logo" height="50"/> | <img src="https://i.postimg.cc/CLc5tQcZ/Geo-INQUIRE-logo.png" alt="GeoInquire logo" height="72"/> | <img src="https://i.postimg.cc/tC1LdjYf/scec.png" alt="SCEC logo" height="90"/> |
 |:----------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------:|
