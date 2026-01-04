@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use floatCSEP in your research, please cite the Zenodo release."
+title: "floatCSEP: An application to deploy and conduct reproducible, prospective earthquake forecasting experiments"
+type: software
+license: "BSD-3-Clause"
+
+repository-code: "https://github.com/cseptesting/floatcsep"
+url: "https://floatcsep.readthedocs.io"
+
+version: "0.3.0"
+doi: "10.5281/zenodo.15576250"
+publisher: "Zenodo"
+
+authors:
+  - family-names: "Iturrieta"
+    given-names: "Pablo"
+    orcid: "https://orcid.org/0000-0002-4787-1343"
+    affiliation: "GFZ Helmholtz Centre for Geosciences, Potsdam, Germany"
+
+  - family-names: "Khawaja"
+    given-names: "Asim M."
+    orcid: "https://orcid.org/0000-0002-6196-4503"
+    affiliation: "GFZ Helmholtz Centre for Geosciences, Potsdam, Germany"
+
+  - family-names: "Savran"
+    given-names: "William H."
+    orcid: "https://orcid.org/0000-0001-5404-0778"
+    affiliation: "University of Nevada, Reno, United States"
+
+  - family-names: "Schorlemmer"
+    given-names: "Danijel"
+    orcid: "https://orcid.org/0000-0003-3969-1059"
+    affiliation: "GFZ Helmholtz Centre for Geosciences, Potsdam, Germany; Swiss Seismological Service at ETH Zürich, Zürich, Switzerland"

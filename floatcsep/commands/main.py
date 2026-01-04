@@ -174,7 +174,7 @@ def view(config: str, ui: str = "panel", **kwargs) -> None:
         from floatcsep.postprocess.nextjs import run_nextjs_app
         run_nextjs_app(experiment=exp)
     else:
-        run_app(experiment=exp)
+        run_app(experiment=exp, **kwargs)
 
 
 def reproduce(config: str, **kwargs) -> None:

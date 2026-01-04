@@ -2,7 +2,7 @@
 
 <img src="https://i.postimg.cc/6p5krRnB/float-CSEP-Logo-CMYK.png" width="320"> 
 
-**An application to deploy reproducible and prospective experiments of earthquake forecasting**
+**An application to deploy and conduct reproducible, prospective earthquake forecasting experiments**
 
 <p left>
 
@@ -68,7 +68,7 @@ documentation for detailed instructions and additional installation methods.
 
 # Run an Experiment
 
-Using the command terminal, navigate to an example experiment in ``floatcsep/tutorials/`` and
+Using the command terminal, navigate to any tutorial experiment in ``floatcsep/tutorials/`` and
 type
 
 ```
@@ -76,8 +76,13 @@ floatcsep run config.yml
 ```
 
 A runtime directory will be created in a `results` folder. The experiment results can be
-visualized in `results/report.md` or `results/report.pdf`. **Check out the experiment, models and tests definition in
-the tutorials**!
+visualized in `results/report.md`, `results/report.pdf` or in a dashboard with:
+
+```
+floatcsep view config.yml
+```
+
+**Check out the experiment, models and tests definition in the tutorials [documentation](https://floatcsep.readthedocs.io/en/latest/tutorials/case_a.html)** or in the configuration files for each case in ``floatcsep/tutorials/``. 
 
 # Important Links
 
@@ -109,7 +114,13 @@ license. Please see
 the [license file](https://github.com/cseptesting/floatcsep/blob/main/LICENSE) for more
 information.
 
-## Support
+## How to cite
+
+If you use **floatCSEP** in your work, please cite it using the **“Cite this repository”** link on the right side of the GitHub page or with:
+
+> Iturrieta, P., Khawaja, A. M., Savran, W. H., & Schorlemmer, D. (2025). floatCSEP: An application to deploy and conduct reproducible and prospective earthquake forecasting (Version 0.3.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.15576250
+
+# Support
      
 | <img src="https://i.postimg.cc/rFKQ0vRL/GFZ-Wortbildmarke-EN-Helmholtzdunkelblau-RGB.png" alt="GFZ logo" height="50"/> | <img src="https://i.postimg.cc/CLc5tQcZ/Geo-INQUIRE-logo.png" alt="GeoInquire logo" height="72"/> | <img src="https://i.postimg.cc/tC1LdjYf/scec.png" alt="SCEC logo" height="90"/> |
 |:----------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------:|
