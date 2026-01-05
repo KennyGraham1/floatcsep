@@ -1,7 +1,7 @@
 'use client';
 
 import { useManifest } from '@/lib/contexts/ManifestContext';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
 
@@ -36,6 +36,10 @@ export default function ForecastsPage() {
   const [colorbarMin, setColorbarMin] = useState<number | undefined>(undefined);
   const [colorbarMax, setColorbarMax] = useState<number | undefined>(undefined);
 
+  // Prefetch state
+  const [prefetchProgress, setPrefetchProgress] = useState<{ current: number; total: number } | null>(null);
+  const prefetchedRef = useRef<Set<string>>(new Set());
+
   const selectedModel = manifest?.models?.[selectedModelIndex] || null;
   const selectedTimeWindow = manifest?.time_windows?.[selectedTimeWindowIndex] || null;
 
@@ -64,6 +68,67 @@ export default function ForecastsPage() {
       dedupingInterval: 300000, // 5 minutes
     }
   );
+
+  // Background prefetch all time windows for current model
+  const prefetchAllTimeWindows = useCallback(async () => {
+    if (!manifest || !selectedModel) return;
+
+    const timeWindows = manifest.time_windows || [];
+    const forecastPaths = selectedModel.forecast_paths || [];
+    const prefetchKey = `model_${selectedModelIndex}`;
+
+    // Skip if already prefetched for this model
+    if (prefetchedRef.current.has(prefetchKey)) return;
+
+    const toPrefetch: number[] = [];
+    for (let i = 0; i < timeWindows.length; i++) {
+      if (i !== selectedTimeWindowIndex && forecastPaths[i]) {
+        toPrefetch.push(i);
+      }
+    }
+
+    if (toPrefetch.length === 0) {
+      prefetchedRef.current.add(prefetchKey);
+      return;
+    }
+
+    setPrefetchProgress({ current: 0, total: toPrefetch.length });
+
+    // Prefetch sequentially to avoid overwhelming the server
+    for (let idx = 0; idx < toPrefetch.length; idx++) {
+      const twIndex = toPrefetch[idx];
+      try {
+        await fetch('/api/forecasts/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: forecastPaths[twIndex],
+            modelIndex: selectedModelIndex,
+            timeWindow: twIndex,
+            isCatalogFc: selectedModel.is_catalog_forecast || false,
+            region: manifest.region
+          }),
+        });
+        setPrefetchProgress({ current: idx + 1, total: toPrefetch.length });
+      } catch (err) {
+        console.error(`Failed to prefetch time window ${twIndex}:`, err);
+      }
+    }
+
+    prefetchedRef.current.add(prefetchKey);
+    setPrefetchProgress(null);
+  }, [manifest, selectedModel, selectedModelIndex, selectedTimeWindowIndex]);
+
+  // Start prefetching after initial data loads
+  useEffect(() => {
+    if (forecastData && !forecastLoading) {
+      // Delay prefetch to not block the initial render
+      const timer = setTimeout(() => {
+        prefetchAllTimeWindows();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [forecastData, forecastLoading, prefetchAllTimeWindows]);
 
   // Reset colorbar range when forecast changes
   useMemo(() => {
@@ -162,7 +227,24 @@ export default function ForecastsPage() {
               </option>
             ))}
           </select>
+
+          {/* Prefetch progress indicator */}
+          {prefetchProgress && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Caching other time windows...</span>
+                <span>{prefetchProgress.current}/{prefetchProgress.total}</span>
+              </div>
+              <div className="w-full bg-background rounded-full h-1.5">
+                <div
+                  className="bg-primary h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(prefetchProgress.current / prefetchProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+
 
         {/* Colorbar Range Controls */}
         {/* Colorbar Range Controls removed - moved to legend slider */}

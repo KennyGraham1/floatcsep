@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, useMap, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -34,6 +34,20 @@ interface ForecastMapProps {
     colorbarMax?: number;
 }
 
+// Pre-computed cell data structure for performance
+interface ProcessedCellData {
+    lons: Float32Array;
+    lats: Float32Array;
+    colorIndices: Uint16Array;
+    count: number;
+    dLon: number;
+    dLat: number;
+    minLon: number;
+    minLat: number;
+    // Lookup map for tooltip hit testing
+    lookup: Map<string, { lon: number; lat: number; rate: number }>;
+}
+
 // Optimized Canvas Layer for rendering thousands of grid cells
 function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
     cells: ForecastCell[];
@@ -45,42 +59,135 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
     const map = useMap();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const tooltipRef = useRef<L.Tooltip | null>(null);
+    const rafIdRef = useRef<number | null>(null);
+    const lastZoomRef = useRef<number | null>(null);
+    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const offscreenBoundsRef = useRef<L.LatLngBounds | null>(null);
 
     const effectiveMin = colorbarMin !== undefined ? colorbarMin : vmin;
     const effectiveMax = colorbarMax !== undefined ? colorbarMax : vmax;
 
-    // Derived grid properties for hit testing
-    const gridProps = useMemo(() => {
+    // Pre-process cell data: compute color indices and use typed arrays
+    const processedData = useMemo<ProcessedCellData | null>(() => {
         if (cells.length === 0) return null;
 
-        const lons = cells.map(c => c.lon);
-        const lats = cells.map(c => c.lat);
+        const count = cells.length;
+        const lons = new Float32Array(count);
+        const lats = new Float32Array(count);
+        const colorIndices = new Uint16Array(count);
 
         // Find unique sorted coords to determine step size
-        // Use a small epsilon for float comparison
-        const uniqueLons = [...new Set(lons)].sort((a, b) => a - b);
-        const uniqueLats = [...new Set(lats)].sort((a, b) => a - b);
+        const uniqueLons = [...new Set(cells.map(c => c.lon))].sort((a, b) => a - b);
+        const uniqueLats = [...new Set(cells.map(c => c.lat))].sort((a, b) => a - b);
 
         const minLon = uniqueLons[0];
         const minLat = uniqueLats[0];
-
-        // Calculate step size (dh)
         const dLon = uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 0.1;
         const dLat = uniqueLats.length > 1 ? uniqueLats[1] - uniqueLats[0] : 0.1;
 
-        // Create a spatial lookup map: key="latIndex,lonIndex" -> cell
-        const lookup = new Map<string, ForecastCell>();
-        cells.forEach(cell => {
+        // Create lookup map for hit testing
+        const lookup = new Map<string, { lon: number; lat: number; rate: number }>();
+
+        const range = effectiveMax - effectiveMin;
+        const colorCount = VIRIDIS_COLORS.length - 1;
+
+        for (let i = 0; i < count; i++) {
+            const cell = cells[i];
+            lons[i] = cell.lon;
+            lats[i] = cell.lat;
+
+            // Pre-compute color index
+            const logRate = Math.log10(cell.rate);
+            const normalized = range > 0 ? (logRate - effectiveMin) / range : 0.5;
+            const clamped = Math.max(0, Math.min(1, normalized));
+            colorIndices[i] = Math.floor(clamped * colorCount);
+
+            // Add to lookup
             const lonIdx = Math.round((cell.lon - minLon) / dLon);
             const latIdx = Math.round((cell.lat - minLat) / dLat);
-            lookup.set(`${latIdx},${lonIdx}`, cell);
-        });
+            lookup.set(`${latIdx},${lonIdx}`, { lon: cell.lon, lat: cell.lat, rate: cell.rate });
+        }
 
-        return { minLon, minLat, dLon, dLat, lookup };
-    }, [cells]);
+        return { lons, lats, colorIndices, count, dLon, dLat, minLon, minLat, lookup };
+    }, [cells, effectiveMin, effectiveMax]);
+
+    // Throttled draw function using requestAnimationFrame
+    const scheduleDraw = useCallback(() => {
+        if (rafIdRef.current) {
+            cancelAnimationFrame(rafIdRef.current);
+        }
+        rafIdRef.current = requestAnimationFrame(() => {
+            rafIdRef.current = null;
+            drawCells();
+        });
+    }, []);
+
+    // Main draw function - renders cells to canvas
+    const drawCells = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !map || !processedData) return;
+
+        const { lons, lats, colorIndices, count, dLon, dLat } = processedData;
+
+        const size = map.getSize();
+        const bounds = map.getBounds();
+        const currentZoom = map.getZoom();
+
+        // Handle high DPI
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = size.x * dpr;
+        canvas.height = size.y * dpr;
+        canvas.style.width = size.x + 'px';
+        canvas.style.height = size.y + 'px';
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.scale(dpr, dpr);
+
+        // Transform origin to match leaflet's overlay pane position
+        const topLeft = map.containerPointToLayerPoint([0, 0]);
+        L.DomUtil.setPosition(canvas, topLeft);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, size.x, size.y);
+
+        const hw = dLon / 2;
+        const hh = dLat / 2;
+
+        // Get bounds for culling
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+        const south = bounds.getSouth();
+        const north = bounds.getNorth();
+
+        // Batch rendering - iterate through typed arrays
+        for (let i = 0; i < count; i++) {
+            const lon = lons[i];
+            const lat = lats[i];
+
+            // Quick bounds check - skip if outside viewport
+            if (lon + hw < west || lon - hw > east ||
+                lat + hh < south || lat - hh > north) {
+                continue;
+            }
+
+            // Project corners to pixel coords
+            const p1 = map.latLngToContainerPoint([lat + hh, lon - hw]);
+            const p2 = map.latLngToContainerPoint([lat - hh, lon + hw]);
+
+            const w = Math.ceil(p2.x - p1.x); // Ceil to avoid gaps
+            const h = Math.ceil(p2.y - p1.y);
+
+            ctx.fillStyle = VIRIDIS_COLORS[colorIndices[i]];
+            ctx.fillRect(Math.floor(p1.x), Math.floor(p1.y), w, h);
+        }
+
+        lastZoomRef.current = currentZoom;
+    }, [map, processedData]);
 
     useEffect(() => {
-        if (!gridProps) return;
+        if (!processedData) return;
 
         const canvas = L.DomUtil.create('canvas', 'leaflet-zoom-animated') as HTMLCanvasElement;
         canvas.style.zIndex = '100'; // Above tiles
@@ -99,66 +206,8 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
         });
         tooltipRef.current = tooltip;
 
-        function draw() {
-            if (!canvas || !map) return;
-
-            const size = map.getSize();
-            const bounds = map.getBounds();
-            const zoom = map.getZoom();
-
-            // Handle high DPI
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = size.x * dpr;
-            canvas.height = size.y * dpr;
-            canvas.style.width = size.x + 'px';
-            canvas.style.height = size.y + 'px';
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            ctx.scale(dpr, dpr);
-
-            // Transform origin to match leaflet's overlay pane position
-            const topLeft = map.containerPointToLayerPoint([0, 0]);
-            L.DomUtil.setPosition(canvas, topLeft);
-
-            // Clear canvas
-            ctx.clearRect(0, 0, size.x, size.y);
-
-            const { dLon, dLat } = gridProps!;
-            const hw = dLon / 2;
-            const hh = dLat / 2;
-
-            // Batch drawing
-            cells.forEach(cell => {
-                // Optimization: Skip if outside bounds
-                // Simple check
-                if (cell.lon + hw < bounds.getWest() || cell.lon - hw > bounds.getEast() ||
-                    cell.lat + hh < bounds.getSouth() || cell.lat - hh > bounds.getNorth()) {
-                    return;
-                }
-
-                // Project corners to pixel coords
-                // We draw a rectangle defined by (lon-hw, lat+hh) [top-left] to (lon+hw, lat-hh) [bottom-right]
-                const p1 = map.latLngToContainerPoint([cell.lat + hh, cell.lon - hw]);
-                const p2 = map.latLngToContainerPoint([cell.lat - hh, cell.lon + hw]);
-
-                const w = Math.ceil(p2.x - p1.x); // Ceil to avoid gaps
-                const h = Math.ceil(p2.y - p1.y);
-
-                const logRate = Math.log10(cell.rate);
-                const range = effectiveMax - effectiveMin;
-                const normalized = range > 0 ? (logRate - effectiveMin) / range : 0.5;
-                const clamped = Math.max(0, Math.min(1, normalized));
-                const colorIdx = Math.floor(clamped * (VIRIDIS_COLORS.length - 1));
-
-                ctx.fillStyle = VIRIDIS_COLORS[colorIdx];
-                ctx.fillRect(Math.floor(p1.x), Math.floor(p1.y), w, h);
-            });
-        }
-
         function handleMouseMove(e: MouseEvent) {
-            if (!gridProps || !map) return;
+            if (!processedData || !map) return;
 
             // Convert mouse event to container point
             const rect = canvas.getBoundingClientRect();
@@ -167,16 +216,14 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
 
             const latlng = map.containerPointToLatLng([x, y]);
 
-            // Hit test
-            const { minLon, minLat, dLon, dLat, lookup } = gridProps;
+            // Hit test using lookup map
+            const { minLon, minLat, dLon, dLat, lookup } = processedData;
 
-            // Calculate expected index
             const lonIdx = Math.round((latlng.lng - minLon) / dLon);
             const latIdx = Math.round((latlng.lat - minLat) / dLat);
 
             const cell = lookup.get(`${latIdx},${lonIdx}`);
 
-            // Check if within bounds of that specific cell (rect detection)
             if (cell) {
                 const hw = dLon / 2;
                 const hh = dLat / 2;
@@ -195,22 +242,29 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
             canvas.style.cursor = 'grab';
         }
 
-        // Event listeners
-        map.on('move', draw);
-        map.on('zoom', draw);
-        map.on('viewreset', draw);
+        // Use throttled draw for map events
+        const onMapUpdate = () => scheduleDraw();
+
+        map.on('move', onMapUpdate);
+        map.on('zoom', onMapUpdate);
+        map.on('viewreset', onMapUpdate);
 
         // Mouse interaction on the canvas itself
         canvas.addEventListener('mousemove', handleMouseMove);
         canvas.addEventListener('mouseleave', () => map.closeTooltip(tooltip));
 
         // Initial draw
-        draw();
+        drawCells();
 
         return () => {
-            map.off('move', draw);
-            map.off('zoom', draw);
-            map.off('viewreset', draw);
+            // Cancel any pending animation frame
+            if (rafIdRef.current) {
+                cancelAnimationFrame(rafIdRef.current);
+            }
+
+            map.off('move', onMapUpdate);
+            map.off('zoom', onMapUpdate);
+            map.off('viewreset', onMapUpdate);
             if (canvasRef.current) {
                 canvasRef.current.removeEventListener('mousemove', handleMouseMove);
                 canvasRef.current.parentNode?.removeChild(canvasRef.current);
@@ -219,7 +273,14 @@ function ForecastLayer({ cells, vmin, vmax, colorbarMin, colorbarMax }: {
                 map.removeLayer(tooltipRef.current);
             }
         };
-    }, [map, gridProps, effectiveMin, effectiveMax]);
+    }, [map, processedData, scheduleDraw, drawCells]);
+
+    // Redraw when color range changes
+    useEffect(() => {
+        if (canvasRef.current && processedData) {
+            drawCells();
+        }
+    }, [effectiveMin, effectiveMax, drawCells, processedData]);
 
     return null;
 }

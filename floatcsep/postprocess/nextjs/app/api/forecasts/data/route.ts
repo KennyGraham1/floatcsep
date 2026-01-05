@@ -10,8 +10,38 @@ export const dynamic = 'force-dynamic';
 
 const execAsync = promisify(exec);
 
-// In-memory cache for forecast data
-const forecastCache = new Map<string, any>();
+// File-based cache directory (survives hot-reload)
+const CACHE_DIR = path.join(process.cwd(), '.cache', 'forecast_api_cache');
+
+async function ensureCacheDir() {
+  try {
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+  } catch {
+    // Directory exists
+  }
+}
+
+function getCachePath(modelIndex: number, timeWindow: number): string {
+  return path.join(CACHE_DIR, `forecast_${modelIndex}_${timeWindow}.json`);
+}
+
+async function readCache(cachePath: string): Promise<any | null> {
+  try {
+    const data = await fs.readFile(cachePath, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache(cachePath: string, data: any): Promise<void> {
+  try {
+    await ensureCacheDir();
+    await fs.writeFile(cachePath, JSON.stringify(data));
+  } catch (err) {
+    console.error('Failed to write cache:', err);
+  }
+}
 
 export async function POST(request: NextRequest) {
   let tempFilePath: string | null = null;
@@ -26,13 +56,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check cache
-    const cacheKey = `${modelIndex}|${timeWindow}`;
-    if (forecastCache.has(cacheKey)) {
-
-      return NextResponse.json(forecastCache.get(cacheKey), {
+    // Check file-based cache (survives hot-reload)
+    const cachePath = getCachePath(modelIndex, timeWindow);
+    const cachedData = await readCache(cachePath);
+    if (cachedData) {
+      return NextResponse.json(cachedData, {
         headers: {
           'Cache-Control': 'public, max-age=3600',
+          'X-Cache': 'HIT',
         },
       });
     }
@@ -50,8 +81,7 @@ export async function POST(request: NextRequest) {
 
     const command = `python "${pythonScript}" load_forecast "${forecastPath}" "${appRoot}" "${tempFilePath}" "${isCatalogFc}"`;
 
-
-    const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 50 }); // Enable large buffer
+    const { stdout, stderr } = await execAsync(command, { maxBuffer: 1024 * 1024 * 50 });
 
     if (stderr) {
       console.error('Python stderr:', stderr);
@@ -66,12 +96,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cache result
-    forecastCache.set(cacheKey, data);
+    // Write to file-based cache
+    await writeCache(cachePath, data);
 
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'public, max-age=3600',
+        'X-Cache': 'MISS',
       },
     });
   } catch (error) {
