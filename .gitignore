@@ -4,7 +4,13 @@ version
 # Only ignore results and models directories within tutorial case folders
 tutorials/case*/results/
 tutorials/case*/models/
-
+tutorials/case*/pymock*
+tutorials/case*/*.json
+tutorials/case*/**/*.csv
+tests/artifacts/models/
+tests/artifacts/catalogs/
+tests/artifacts/zenodo/
+tests/artifacts/zenodo_test/
 notes.kg
 
 # Next.js
