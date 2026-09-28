@@ -20,7 +20,7 @@ import { useElapsed } from '@/hooks/useElapsed';
 import { useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
 import { useEvaluations } from '@/lib/api';
 import { formatRate } from '@/lib/format';
-import { modelGrid, shortGridName, splitModelName } from '@/lib/modelGrid';
+import { gridLabel, modelGrid, shortGridName, splitModelName } from '@/lib/modelGrid';
 import { formatDate, parseTimeWindows, type TimeWindow } from '@/lib/time';
 import type { EvaluationSummary, Manifest } from '@/lib/types';
 
@@ -94,7 +94,12 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
   const elapsed = useElapsed(isLoading);
   const { params, set } = useQueryState();
   const windows = useMemo(() => parseTimeWindows(manifest.time_windows), [manifest.time_windows]);
-  const grids = useMemo(() => modelGrid(manifest.models), [manifest.models]);
+  // Results can cover grids the experiment has no forecasts for (e.g. imported ones).
+  const grids = useMemo(() => {
+    const names = new Set(manifest.models.map((m) => m.name));
+    for (const e of manifest.evaluations) names.add(e.model);
+    return modelGrid([...names].map((name) => ({ name })));
+  }, [manifest.models, manifest.evaluations]);
 
   const tests = useMemo(() => {
     const present = new Set((data ?? []).map((s) => s.test));
@@ -203,10 +208,12 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
     );
   }
 
-  // Models x windows, for the selected grid.
+  // Models x windows, for the selected grid, over the windows it has results for
+  // (e.g. only the whole period for a grid evaluated elsewhere).
+  const gridWindows = windowsWithResults.filter((w) => rowModels.some((m) => find(m, gridName, w.index)));
   const timeCells: HeatCell[] = [];
   rowModels.forEach((m, row) =>
-    windowsWithResults.forEach((w, col) => {
+    gridWindows.forEach((w, col) => {
       const s = find(m, gridName, w.index);
       if (s)
         timeCells.push({
@@ -291,7 +298,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
     />
   );
 
-  const windowColumns = windowsWithResults.map(windowName);
+  const windowColumns = gridWindows.map(windowName);
   const gridColumns = grids ? grids.grids.map(shortGridName) : [];
 
   return (
@@ -321,7 +328,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
             className="w-full sm:w-40"
             value={gridName}
             onChange={(value) => set({ grid: value })}
-            options={grids.grids.map((g) => ({ value: g, label: g }))}
+            options={grids.grids.map((g) => ({ value: g, label: gridLabel(g) }))}
           />
         )}
       </FilterBar>
@@ -357,7 +364,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
           )}
 
           <div className="grid gap-5 2xl:grid-cols-2">
-            {windowsWithResults.length > 1 && (
+            {gridWindows.length > 1 && (
               <ChartCard
                 title={`${test} by model and time window`}
                 description={`${gridName ? `Grid ${gridName} · ` : ''}click a cell to show that window`}
@@ -370,8 +377,8 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                   cells={timeCells}
                   scale={scale(timeCells.map((c) => c.value))}
                   ariaLabel={`${test} results for each model and time window`}
-                  selected={{ row: -1, col: windowsWithResults.findIndex((w) => w.index === windowIndex) }}
-                  onSelect={(_, col) => set({ window: windowsWithResults[col].index + 1 })}
+                  selected={{ row: -1, col: gridWindows.findIndex((w) => w.index === windowIndex) }}
+                  onSelect={(_, col) => set({ window: gridWindows[col].index + 1 })}
                 />
               </ChartCard>
             )}
@@ -387,7 +394,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                     ? 'Observed number of events against the 95% range of the forecast (Poisson)'
                     : 'Observed statistic against the simulated distribution (5th percentile to maximum)'
               }
-              className={windowsWithResults.length > 1 ? undefined : '2xl:col-span-2'}
+              className={gridWindows.length > 1 ? undefined : '2xl:col-span-2'}
               table={
                 <DataTable
                   caption={`${test} for ${where}`}

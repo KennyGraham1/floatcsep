@@ -4,9 +4,9 @@ import L from 'leaflet';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import type { Catalog } from '@/lib/catalog';
-import { CHROME, EVENT_COLORS, HEAT, rampGradient, rampTable } from '@/lib/colors';
+import { CHROME, EVENT_COLORS, rampGradient, rampTable } from '@/lib/colors';
 import { formatLatLon, formatSci } from '@/lib/format';
-import { gridExtent, type ForecastCells } from '@/lib/grid';
+import { gridExtent, viewExtent, type ForecastCells } from '@/lib/grid';
 import { CellLayer, type HoveredCell } from './CellLayer';
 import { eventTooltip } from './CatalogMap';
 import { EventsLayer } from './EventsLayer';
@@ -23,21 +23,32 @@ interface ForecastMapProps {
   measure: 'rate' | 'density';
   /** Colour range in log10 units. */
   range: [number, number];
+  /** Colour palette stops, low → high. */
+  stops: string[];
   opacity: number;
   observed: { catalog: Catalog; indices: Uint32Array } | null;
   height?: number;
 }
 
-export default function ForecastMap({ cells, values, measure, range, opacity, observed, height }: ForecastMapProps) {
+export default function ForecastMap({
+  cells,
+  values,
+  measure,
+  range,
+  stops,
+  opacity,
+  observed,
+  height,
+}: ForecastMapProps) {
   const mode = useThemeMode();
-  const table = useMemo(() => rampTable(HEAT[mode]), [mode]);
+  const table = useMemo(() => rampTable(stops), [stops]);
   const { grid } = cells;
-  const extent = useMemo(() => gridExtent(grid), [grid]);
+  const extent = useMemo(() => viewExtent(gridExtent(grid)), [grid]);
   const bounds = useMemo(() => L.latLngBounds([extent[0], extent[1]], [extent[2], extent[3]]), [extent]);
   const [hover, setHover] = useState<HoveredCell | null>(null);
   const observedColor = EVENT_COLORS[mode].input;
-  // Events are drawn in the grid's longitude frame: only a grid unwrapped past
-  // 180° moves western longitudes east (a global grid keeps them in place).
+  // Events are drawn in the longitude frame of the view: past 180° for grids that
+  // cross the antimeridian and for global grids, which are shown Pacific-centred.
   const unwrap = extent[3] > 180;
 
   const colorFor = useCallback(() => observedColor, [observedColor]);
@@ -94,7 +105,7 @@ export default function ForecastMap({ cells, values, measure, range, opacity, ob
                   </>
                 )
               }
-              gradient={rampGradient(HEAT[mode])}
+              gradient={rampGradient(stops)}
               min={`≤ ${range[0].toFixed(1)}`}
               max={`≥ ${range[1].toFixed(1)}`}
             />

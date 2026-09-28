@@ -95,6 +95,8 @@ export interface Manifest {
   results: ResultFigure[];
   evaluations: EvaluationFile[];
   summary_figures: SummaryFigure[];
+  /** about.md describing the experiment (relative to the results folder), if present. */
+  about: string | null;
   exp_class: string | null;
   n_intervals: number | null;
   horizon: string | null;

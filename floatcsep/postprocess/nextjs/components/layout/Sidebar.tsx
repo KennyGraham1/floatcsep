@@ -1,6 +1,14 @@
 'use client';
 
-import { Activity, ChartColumn, ExternalLink, LayoutDashboard, Map as MapIcon, type LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  BookOpen,
+  ChartColumn,
+  ExternalLink,
+  LayoutDashboard,
+  Map as MapIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Badge } from '@/components/ui/Badge';
@@ -20,6 +28,7 @@ interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { href: '/experiment', label: 'Overview', icon: LayoutDashboard },
+  { href: '/about', label: 'About', icon: BookOpen },
   { href: '/catalogs', label: 'Catalog', icon: Activity },
   { href: '/forecasts', label: 'Forecasts', icon: MapIcon, count: (m) => m.models.length },
   { href: '/results', label: 'Results', icon: ChartColumn },

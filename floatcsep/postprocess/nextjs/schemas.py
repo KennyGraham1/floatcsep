@@ -120,6 +120,8 @@ class ManifestModel(BaseModel):
         None, validation_alias="model_config", serialization_alias="model_config"
     )
     test_config: Optional[str] = None
+    # Markdown describing the experiment (about.md next to the configuration)
+    about: Optional[str] = None
 
     @field_validator("region", mode="before")
     def serialize_region(cls, v: Any) -> Optional[Dict[str, Any]]:

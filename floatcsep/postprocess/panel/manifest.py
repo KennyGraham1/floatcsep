@@ -58,6 +58,7 @@ class Manifest:
     config_file: Optional[str]  # main config file path
     model_config: Optional[str]  # models config path
     test_config: Optional[str]  # tests config path
+    about: Optional[str] = None  # about.md describing the experiment, if present
 
 
 def _timedelta_to_str(value: Any) -> Optional[str]:
@@ -240,6 +241,10 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     config_file = getattr(experiment, "config_file", None)
     model_config_path = getattr(experiment, "model_config", None)
     test_config_path = getattr(experiment, "test_config", None)
+
+    # An about.md next to the configuration describes the experiment (dashboard's About page).
+    about_file = reg.abs("about.md")
+    about = _rel(about_file, app_root) if os.path.isfile(about_file) else None
     return Manifest(
         name=name,
         start_date=start.date().isoformat(),
@@ -280,4 +285,5 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
         config_file=config_file,
         model_config=model_config_path,
         test_config=test_config_path,
+        about=about,
     )

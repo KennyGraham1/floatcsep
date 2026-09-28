@@ -13,12 +13,14 @@ interface RateHistogramProps {
   domain: [number, number];
   /** Current colour range (log10), used to colour the bars like the map. */
   range: [number, number];
+  /** The map's colour palette, low → high. */
+  stops: string[];
   bins?: number;
   height?: number;
 }
 
 /** Distribution of cell rates, coloured with the map's colour scale. */
-export default function RateHistogram({ logRates, domain, range, bins = 28, height = 150 }: RateHistogramProps) {
+export default function RateHistogram({ logRates, domain, range, stops, bins = 28, height = 150 }: RateHistogramProps) {
   const theme = useChartTheme();
 
   const histogram = useMemo(() => {
@@ -68,14 +70,14 @@ export default function RateHistogram({ logRates, domain, range, bins = 28, heig
           data: histogram.counts.map((count, k) => ({
             value: count,
             itemStyle: {
-              color: rampColor(theme.heat, (histogram.centers[k] - cMin) / span),
+              color: rampColor(stops, (histogram.centers[k] - cMin) / span),
               borderRadius: [2, 2, 0, 0],
             },
           })),
         },
       ],
     };
-  }, [theme, histogram, range, domain, bins]);
+  }, [theme, histogram, range, stops, domain, bins]);
 
   return <EChart option={option} height={height} ariaLabel="Histogram of forecast cell rates" />;
 }

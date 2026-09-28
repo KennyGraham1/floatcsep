@@ -4,6 +4,8 @@ version
 # Only ignore results and models directories within tutorial case folders
 tutorials/case*/results/
 tutorials/case*/models/
+tutorials/case*/imported/
+tutorials/case*/about/
 tutorials/case*/pymock*
 tutorials/case*/*.json
 tutorials/case*/**/*.csv

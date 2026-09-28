@@ -6,17 +6,18 @@ K — A Global Experiment on Quadtree Grids
 **Goal.** Test global forecasts of M7.45+ earthquakes on multi-resolution *quadtree* grids. Nine
 forecasting models are each set up on eight quadtree grids (72 forecasts), evaluated year by year
 and over the whole 2014–2021 testing period with Poisson consistency tests, and compared with the
-GEAR1 benchmark on the same grid. A custom post-processing script adds the summary figures of the
+GEAR1 benchmark on the same grid. The results of the global experiment on the models' native 0.1°
+grid are shown alongside. A custom post-processing script adds the summary figures of the
 experiment (score heatmaps across grids, information-gain rankings, yearly outcomes, a map of the
-grids), and the Next.js dashboard shows the quadtree forecasts, the test scores and the grids
-interactively.
+grids), and the Next.js dashboard shows the quadtree forecasts, the test scores, the grids and an
+*About* page describing the experiment.
 
 .. important::
 
    The input data of this tutorial are **not distributed with floatCSEP**: several of the forecasts
    are unpublished research output. ``prepare.py`` collects them from a local copy of the global
-   quadtree experiment, and the copied files (``catalog.csv``, ``models/``) and the ``results/``
-   folder are ignored by git.
+   quadtree experiment, and the copied files (``catalog.csv``, ``models/``, ``imported/``,
+   ``about/``) and the ``results/`` folder are ignored by git.
 
 .. admonition:: **TL; DR**
 
@@ -55,9 +56,12 @@ After running ``prepare.py``, the experiment folder contains:
 ::
 
     case_k
+        ├── about.md          # the dashboard's About page
+        ├── about/            # its figures (copied by prepare.py)
         ├── catalog.csv       # gCMT catalog, M5.95+, 1976-2022 (written by prepare.py)
         ├── config.yml
         ├── custom_plots.py
+        ├── imported/         # results on the native 0.1° grid (copied by prepare.py)
         ├── models/           # 72 forecasts, <MODEL>=<GRID>.csv (copied by prepare.py)
         ├── models.yml        # rewritten by prepare.py
         ├── prepare.py
@@ -109,6 +113,15 @@ N100L11     922       SN100L11    1,432
 ==========  ========  ==========  ========
 
 ``--grids`` selects some of the grids (all eight by default); ``models.yml`` is rewritten to match.
+
+``prepare.py`` also copies:
+
+- The global experiment's results on the models' **native 0.1° grid** (``FULL01``, 6.48 million
+  cells) for the whole period, into ``imported/``. They were computed with the same forecasts and
+  tests, but pyCSEP's likelihood tests take hours on that many cells, so they are not recomputed
+  here (skip them with ``--no-native``). ``custom_plots.py`` shows them as a ninth grid.
+- The figures of ``about.md`` (how quadtree grids are built, the grids, the aggregation, the
+  forecasts), into ``about/``.
 
 
 Configuration
@@ -220,7 +233,9 @@ done, and:
 1. Runs the paired T-test of every model against GEAR1 on the same grid, in every time window, with
    :func:`csep.core.poisson_evaluations.paired_t_test`. Each result is stored like floatCSEP's own,
    as ``results/<window>/evaluations/Paired T-test_<MODEL>=<GRID>.json``.
-2. Draws the summary figures of the global experiment into ``results/figures/``:
+2. Stores the imported results on the native grid the same way, in the whole-period window.
+3. Draws the summary figures of the global experiment into ``results/figures/``, with the native
+   grid as a ninth column of the whole-period figures:
 
    ==============================  ==============================================================
    Figure                          Content
@@ -266,16 +281,18 @@ Exploring the results in the dashboard
 --------------------------------------
 
 The Next.js dashboard (``floatcsep view config.yml --ui nextjs``, see :ref:`running`) recognizes the
-quadtree grids and the ``<MODEL>=<GRID>`` names:
+quadtree grids and the ``<MODEL>=<GRID>`` names. Global maps are centred on the Pacific.
 
 - **Overview** maps the forecast grids, with a selector for the eight grids; each cell is shaded by
   its zoom level.
+- **About** shows ``about.md``: how the quadtree grids are built, the aggregation of the 0.1°
+  forecasts onto them, the models and the tests, with the global experiment's figures.
 - **Forecasts** selects a model and a grid. The map shows the expected number of events per cell or,
   better suited to cells of very different sizes, per 10⁴ km² (the *rate density*), with the
   observed events of the time window on top.
-- **Results**, *Charts* view: heatmaps of the test scores, as models × grids for a time window or
-  models × time windows for a grid, including the same-grid T-tests. Selecting a cell shows the
-  intervals of that test for every model.
+- **Results**, *Charts* view: heatmaps of the test scores, as models × grids for a time window
+  (with the native 0.1° grid for the whole period) or models × time windows for a grid, including
+  the same-grid T-tests. Selecting a cell shows the intervals of that test for every model.
 - **Results**, *Figures* view: the consistency plots of every test and window, and the summary
   figures of ``results/figures`` under *Experiment figures*.
 

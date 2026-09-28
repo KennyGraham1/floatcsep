@@ -175,8 +175,9 @@ export function magnitudeRadius(minMagnitude: number) {
 }
 
 /**
- * Whether longitudes should be unwrapped to keep data near 180° contiguous: only
- * when that clearly shortens their span, so global data keep the usual frame.
+ * Whether longitudes should be unwrapped (0° to 360°): when that clearly shortens
+ * their span (data around the antimeridian), and for global data, which are shown
+ * Pacific-centred as global seismicity usually is.
  */
 export function needsUnwrap(lons: ArrayLike<number>): boolean {
   let min = Infinity;
@@ -191,5 +192,7 @@ export function needsUnwrap(lons: ArrayLike<number>): boolean {
     if (shifted < minShifted) minShifted = shifted;
     if (shifted > maxShifted) maxShifted = shifted;
   }
-  return max - min > 180 && maxShifted - minShifted < max - min - 45;
+  const span = max - min;
+  const shifted = maxShifted - minShifted;
+  return span > 180 && (shifted < span - 45 || (span > 300 && shifted > 300));
 }

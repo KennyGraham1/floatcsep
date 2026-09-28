@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { DataTable } from '@/components/ui/DataTable';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import { PalettePicker } from '@/components/ui/PalettePicker';
 import { RangeSlider } from '@/components/ui/RangeSlider';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
@@ -22,10 +23,11 @@ import { Switch } from '@/components/ui/Switch';
 import { useElapsed } from '@/hooks/useElapsed';
 import { useObservedCatalog } from '@/hooks/useObservedCatalog';
 import { indexByName, useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
+import { usePersistentState } from '@/hooks/usePersistentState';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { forecastUrl, prefetch, useForecast } from '@/lib/api';
 import { eventsInWindow, regionMask } from '@/lib/catalog';
-import { HEAT, rampGradient } from '@/lib/colors';
+import { PALETTE_NAMES, paletteStops, rampGradient, type PaletteName } from '@/lib/colors';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
 import { formatInt, formatLatLon, formatRate, formatSci, magnitudeBinLabel, magnitudeDecimals } from '@/lib/format';
 import { cellBounds, forecastCells } from '@/lib/grid';
@@ -119,6 +121,8 @@ function ForecastsView() {
     return [lo, hi];
   }, [userRange, rangeKey, domain]);
   const [opacity, setOpacity] = useState(0.85);
+  const [palette, setPalette] = usePersistentState<PaletteName>('floatcsep:palette', 'turbo', PALETTE_NAMES);
+  const stops = paletteStops(palette, mode);
   const [showObserved, setShowObserved] = useState(true);
 
   const { catalog } = useObservedCatalog(manifest);
@@ -296,6 +300,7 @@ function ForecastsView() {
                   values={values}
                   measure={measure}
                   range={range}
+                  stops={stops}
                   opacity={opacity}
                   observed={showObserved && catalog && observed ? { catalog, indices: observed } : null}
                 />
@@ -340,13 +345,10 @@ function ForecastsView() {
                   ]}
                 />
                 <ErrorBoundary label="The histogram">
-                  <RateHistogram logRates={values} domain={domain} range={range} />
+                  <RateHistogram logRates={values} domain={domain} range={range} stops={stops} />
                 </ErrorBoundary>
                 <div>
-                  <div
-                    className="mb-1 h-2 rounded-sm ring-1 ring-line"
-                    style={{ background: rampGradient(HEAT[mode]) }}
-                  />
+                  <div className="mb-1 h-2 rounded-sm ring-1 ring-line" style={{ background: rampGradient(stops) }} />
                   <RangeSlider
                     label="Colour range"
                     min={domain[0]}
@@ -361,6 +363,7 @@ function ForecastsView() {
                     <span>{range[1].toFixed(1)}</span>
                   </div>
                 </div>
+                <PalettePicker value={palette} onChange={setPalette} />
                 <Slider
                   label="Layer opacity"
                   min={0.2}

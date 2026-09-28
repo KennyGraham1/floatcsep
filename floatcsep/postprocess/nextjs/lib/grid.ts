@@ -228,6 +228,15 @@ export function gridExtent(grid: CellGrid): [number, number, number, number] {
   return [s, w, n, e];
 }
 
+/**
+ * The extent to show a grid with: grids covering the globe are shown
+ * Pacific-centred (longitudes 0 to 360), as global seismicity usually is.
+ */
+export function viewExtent(extent: [number, number, number, number]): [number, number, number, number] {
+  const [south, west, north, east] = extent;
+  return east - west >= 300 ? [south, 0, north, 360] : extent;
+}
+
 /** Index of the cell containing (lon, lat), or -1. */
 export function cellAt(grid: CellGrid, lon: number, lat: number): number {
   if (grid.type === 'regular') {
@@ -241,7 +250,8 @@ export function cellAt(grid: CellGrid, lon: number, lat: number): number {
   }
   if (Math.abs(lat) > MAX_LAT) return -1;
   const deepest = grid.levels[grid.levels.length - 1];
-  const key = tileToQuadkey(lonToTile(lon, deepest), latToTile(lat, deepest), deepest);
+  const x = ((((lon + 180) % 360) + 360) % 360) - 180;
+  const key = tileToQuadkey(lonToTile(x, deepest), latToTile(lat, deepest), deepest);
   for (const level of grid.levels) {
     const k = grid.index.get(key.slice(0, level));
     if (k !== undefined) return k;

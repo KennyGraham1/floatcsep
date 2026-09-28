@@ -9,8 +9,9 @@ Tailwind CSS, Apache ECharts and Leaflet.
 | Page | What it shows |
 | --- | --- |
 | **Overview** | Key figures, experiment configuration, map of the testing region (or of the forecasts' own grids, such as quadtree grids, with a grid selector), time-window timeline, models and tests. |
+| **About** | The experiment's own description, `about.md`, with its figures, and its citation details (authors, DOIs, license). |
 | **Catalog** | Filterable event map (before start / experiment period, minimum magnitude), magnitude over time with the forecast windows, magnitude–frequency distribution with an Aki–Utsu b-value, events per time window, largest events. |
-| **Forecasts** | Per model and time window: map of expected events per cell or per 10⁴ km² (rate density, for cells of different sizes) with the observed events on top, colour-scale histogram and range, expected vs observed events per magnitude bin, headline numbers (Σλ, observed, peak). Regular and quadtree grids. |
+| **Forecasts** | Per model and time window: map of expected events per cell or per 10⁴ km² (rate density, for cells of different sizes) with the observed events on top, colour-scale histogram and range, a choice of colour palettes (Turbo by default, as in the global experiment's figures; Viridis, Cividis, Plasma, Magma, Inferno, Heat), expected vs observed events per magnitude bin, headline numbers (Σλ, observed, peak). Regular and quadtree grids. |
 | **Results** | *Charts*: heatmaps of the test scores (models × time windows, and models × grids for multi-grid experiments) and the per-model test intervals, read from the saved evaluation results. *Figures*: every evaluation figure by test and time window, per-model figures, the experiment's own figures (`results/figures/`), a full-screen viewer with download, test configuration and a coverage grid. |
 
 Every chart has a table view, selections live in the URL (views can be
@@ -22,7 +23,23 @@ manual override. Dates are UTC throughout.
 When every model is named `<MODEL>=<GRID>` (for example `GEAR1=N50L11`) and
 there are at least two grids, the dashboard treats the experiment as the same
 models on several grids: the Forecasts page selects a model and a grid, and the
-Results page adds heatmaps of models × grids. Tutorial K is such an experiment.
+Results page adds heatmaps of models × grids. Results saved for grids without
+forecasts in the experiment (e.g. computed elsewhere, as `<test>_<MODEL>=<GRID>.json`)
+join the heatmaps as extra grids. Tutorial K is such an experiment.
+
+### About page
+
+An `about.md` next to the experiment's configuration is shown in the About page
+(GitHub-flavoured Markdown: headings, lists, tables, links and images). Images
+are linked relative to it, e.g. `![The grids](about/grids.png)`; only image
+files inside its folder are served. Without it, the page shows the experiment's
+citation details.
+
+### Maps
+
+Maps fit the data they show. Grids and catalogs covering the globe are shown
+Pacific-centred, as global seismicity usually is, and regional data across the
+antimeridian (e.g. New Zealand) stay contiguous.
 
 ### Experiment figures
 
@@ -88,6 +105,7 @@ floatcsep view config.yml --ui nextjs
                ──► /api/catalog             catalog as columns   ┐ manifest_api.py via the
                ──► /api/forecasts?model&window  cell rates        ┘ floatCSEP interpreter
                ──► /api/evaluations         summaries of the saved evaluation results
+               ──► /api/about               about.md; its images from /api/about/assets/<n>
                ──► /api/results/<path>      result figure (listed in the manifest only)
 ```
 

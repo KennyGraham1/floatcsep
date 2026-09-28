@@ -18,11 +18,19 @@ Written into the results directory:
     figures/annual_counts.png       forecast vs observed events by year (primary grid)
     figures/annual_pooled_ig.png    T-test pooled over the years (primary grid)
     figures/quadtree_grids.png      the quadtree grids
+
+Results on the models' native 0.1-degree grid (FULL01, 6.48 million cells),
+computed by the global experiment for the whole period with the same forecasts
+and tests, are copied by prepare.py into imported/. They are stored next to
+floatCSEP's own results and shown as a ninth grid in the whole-period figures.
 """
 
+import datetime
 import json
 import logging
 import os
+import re
+import shutil
 
 import matplotlib
 
@@ -45,6 +53,16 @@ REF = "GEAR1"
 PRIMARY_GRID = "N50L11"
 ALPHA = 0.05
 T_TEST = "Paired T-test"
+TESTS = {
+    "N": "Poisson N-test",
+    "M": "Poisson M-test",
+    "S": "Poisson S-test",
+    "CL": "Poisson CL-test",
+    "T": T_TEST,
+}
+# The models' native 0.1-degree grid, evaluated by the global experiment (2014-2022)
+NATIVE = "FULL01"
+NATIVE_WINDOW = (datetime.datetime(2014, 1, 1), datetime.datetime(2022, 1, 1))
 ORDER = ["GEAR1", "KJSS", "SHIFT2F_GSRM", "TEAM", "WHEEL", "GSSGSRM", "SUP", "PPE", "EEPASfull"]
 GRID_ORDER = [
     "N10L11",
@@ -148,6 +166,8 @@ class Layout:
         self.model_names = [m for m in ORDER if m in names] + sorted(names - set(ORDER))
         self.grids = [g for g in GRID_ORDER if g in grids] + sorted(grids - set(GRID_ORDER))
         self.primary = PRIMARY_GRID if PRIMARY_GRID in self.grids else self.grids[0]
+        # Grids of the whole-period figures: these, and the native grid once imported
+        self.columns = list(self.grids)
         windows = list(experiment.time_windows)
         self.full = max(windows, key=years_between)
         self.annual = [
@@ -167,14 +187,7 @@ class Layout:
             return json.load(f)
 
     def result(self, window, key, model, grid):
-        tests = {
-            "N": "Poisson N-test",
-            "M": "Poisson M-test",
-            "S": "Poisson S-test",
-            "CL": "Poisson CL-test",
-            "T": T_TEST,
-        }
-        return self.load(window, tests[key], model, grid)
+        return self.load(window, TESTS[key], model, grid)
 
 
 def same_grid_ttests(layout):
@@ -201,6 +214,31 @@ def same_grid_ttests(layout):
                     json.dump(result.to_dict(), f, indent=4, cls=_NumpyEncoder)
                 written += 1
     log.info(f"Wrote {written} same-grid paired T-test results")
+
+
+def import_native_results(layout):
+    """
+    Results on the native 0.1-degree grid, which prepare.py copies from the global
+    experiment: there, pyCSEP's likelihood tests take hours on 6.48 million cells.
+    They are stored like floatCSEP's own results, in the whole-period window.
+    """
+    source = layout.experiment.registry.abs("imported")
+    if not os.path.isdir(source):
+        return
+    if tuple(layout.full) != NATIVE_WINDOW:
+        log.warning("The native-grid results cover 2014-2022 only: not imported")
+        return
+    copied = 0
+    for name in sorted(os.listdir(source)):
+        match = re.fullmatch(r"Poisson_(N|M|S|CL|T)_(.+)\.json", name)
+        if match:
+            key, model = match.groups()
+            target = layout.path(layout.full, TESTS[key], model)
+            shutil.copyfile(os.path.join(source, name), target)
+            copied += 1
+    if copied:
+        layout.columns.append(NATIVE)
+    log.info(f"Imported {copied} results on the native 0.1-degree grid")
 
 
 def pooled_ttest(layout, model, grid, windows):
@@ -269,7 +307,7 @@ def period_label(window):
 
 
 def grid_label(grid):
-    return grid.replace("L11", "")
+    return "0.1° native" if grid == NATIVE else grid.replace("L11", "")
 
 
 # ------------------------------------------------ whole period: across grids
@@ -277,7 +315,7 @@ def grid_label(grid):
 
 def heatmap(layout, key, out_dir):
     cfg = CONSIST[key]
-    models, grids = layout.model_names, layout.grids
+    models, grids = layout.model_names, layout.columns
     thr = ALPHA / 2 if cfg["two_sided"] else ALPHA
     scores = np.full((len(models), len(grids)), np.nan)
     passed = np.ones_like(scores, bool)
@@ -325,26 +363,20 @@ def heatmap(layout, key, out_dir):
                         (k - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=INK, lw=1.6, zorder=3
                     )
                 )
-    n_catalogue = sum(1 for g in grids if not g.startswith("SN"))
-    if 0 < n_catalogue < len(grids):
-        ax.axvline(n_catalogue - 0.5, color="white", lw=4)
-        ax.axvline(n_catalogue - 0.5, color=INK, lw=1.2)
-        ax.text(
-            (n_catalogue - 1) / 2,
-            -0.72,
-            "catalogue-refined ($N$)",
-            ha="center",
-            fontsize=8.5,
-            color=INK,
-        )
-        ax.text(
-            n_catalogue + (len(grids) - n_catalogue - 1) / 2,
-            -0.72,
-            "catalogue and strain ($SN$)",
-            ha="center",
-            fontsize=8.5,
-            color=INK,
-        )
+    groups = [
+        ("catalogue-refined ($N$)", [k for k, g in enumerate(grids) if g.startswith("N")]),
+        ("catalogue and strain ($SN$)", [k for k, g in enumerate(grids) if g.startswith("SN")]),
+        ("native", [k for k, g in enumerate(grids) if g == NATIVE]),
+    ]
+    groups = [(label, cols) for label, cols in groups if cols]
+    if len(groups) > 1:
+        for n, (label, cols) in enumerate(groups):
+            ax.text(
+                (cols[0] + cols[-1]) / 2, -0.72, label, ha="center", fontsize=8.5, color=INK
+            )
+            if n > 0:
+                ax.axvline(cols[0] - 0.5, color="white", lw=4)
+                ax.axvline(cols[0] - 0.5, color=INK, lw=1.2)
     ax.set_xticks(np.arange(-0.5, len(grids), 1), minor=True)
     ax.set_yticks(np.arange(-0.5, len(models), 1), minor=True)
     ax.grid(which="minor", color="white", lw=1.5)
@@ -397,8 +429,8 @@ def heatmap(layout, key, out_dir):
 def facets(layout, key, out_dir):
     cfg = CONSIST[key]
     order = layout.model_names[::-1]
-    grids = layout.grids
-    ncol = min(4, len(grids))
+    grids = layout.columns
+    ncol = 4 if len(grids) % 4 == 0 else min(3, len(grids))
     nrow = int(np.ceil(len(grids) / ncol))
     fig, axes = plt.subplots(
         nrow, ncol, figsize=(4.3 * ncol, 3.9 * nrow * len(order) / 9.0 + 0.9), squeeze=False
@@ -489,7 +521,7 @@ def facets(layout, key, out_dir):
 
 def t_ranked(layout, out_dir):
     """One band per model (best mean information gain first), one row per grid."""
-    grids = layout.grids
+    grids = layout.columns
     models = [m for m in layout.model_names if m != REF]
     data = {}
     for m in models:
@@ -538,17 +570,25 @@ def t_ranked(layout, out_dir):
                 n_worse += 1
             else:
                 col, fill = TIE, "white"
+            marker = "D" if g == NATIVE else "o"
             if finite:
                 ax.plot([lo, hi], [y, y], color=col, lw=1.4, zorder=2, solid_capstyle="butt")
                 ax.scatter(
-                    [ig], [y], s=26, marker="o", facecolor=fill, edgecolor=col, lw=1.1, zorder=3
+                    [ig],
+                    [y],
+                    s=26,
+                    marker=marker,
+                    facecolor=fill,
+                    edgecolor=col,
+                    lw=1.1,
+                    zorder=3,
                 )
             else:
                 ax.scatter(
                     [x_floor],
                     [y],
                     s=26,
-                    marker="o",
+                    marker=marker,
                     facecolor="none",
                     edgecolor=FAIL,
                     lw=1.2,
@@ -610,6 +650,18 @@ def t_ranked(layout, out_dir):
                 label=f"interval above zero ({n_better})",
             )
         )
+    if NATIVE in grids:
+        legend.append(
+            Line2D(
+                [],
+                [],
+                marker="D",
+                color=INK2,
+                markerfacecolor="white",
+                lw=0,
+                label="native 0.1° grid (diamonds)",
+            )
+        )
     ax.legend(
         handles=legend,
         loc="upper center",
@@ -620,7 +672,8 @@ def t_ranked(layout, out_dir):
     )
     ax.set_title(
         f"Paired T-test against GEAR1, $M \\geq 7.45$, {period_label(layout.full)}\n"
-        f"{len(grids)} quadtree grids for each model",
+        f"{len(layout.grids)} quadtree grids for each model"
+        + (" and the native 0.1° grid" if NATIVE in grids else ""),
         loc="left",
         fontsize=9.5,
         color=INK,
@@ -923,6 +976,7 @@ def main(experiment):
     os.makedirs(out_dir, exist_ok=True)
 
     same_grid_ttests(layout)
+    import_native_results(layout)
     with plt.rc_context(STYLE):
         for key in CONSIST:
             heatmap(layout, key, out_dir)

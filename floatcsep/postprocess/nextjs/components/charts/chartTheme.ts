@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { CHROME, EVENT_COLORS, HEAT, SERIES, type ThemeMode } from '@/lib/colors';
+import { CHROME, EVENT_COLORS, SERIES, type ThemeMode } from '@/lib/colors';
 import { escapeHtml } from '@/lib/utils';
 
 const FONT = '"Noto Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -24,7 +24,6 @@ export interface ChartTheme {
   chrome: (typeof CHROME)[ThemeMode];
   series: string[];
   events: { input: string; test: string };
-  heat: string[];
   /** Options every chart starts from: font, recessive axes, tooltip style. */
   base: Record<string, unknown>;
   axis: (extra?: Record<string, unknown>) => Record<string, unknown>;
@@ -66,7 +65,6 @@ export function useChartTheme(): ChartTheme {
       chrome,
       series: SERIES[mode],
       events: EVENT_COLORS[mode],
-      heat: HEAT[mode],
       base,
       axis,
     };

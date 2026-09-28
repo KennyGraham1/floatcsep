@@ -29,12 +29,18 @@ All notable changes to the floatCSEP Next.js Dashboard.
   histogram with range slider and opacity, neighbouring windows prefetched.
 - Forecasts: quadtree forecasts, and a rate-density view (events per 10⁴ km²)
   for cells of different sizes.
+- Forecasts: colour palettes for the map (Turbo by default; Viridis, Cividis,
+  Plasma, Magma, Inferno, Heat), remembered between visits.
 - Results: *Charts* view with heatmaps of the test scores (models × time
   windows, models × grids) and per-model intervals, from `/api/evaluations`.
 - Results: coverage grid, per-model figures, full-screen viewer with download,
   and the experiment's own figures (`results/figures/`).
 - Multi-grid experiments (models named `<MODEL>=<GRID>`): model and grid
-  selectors, and a map of each forecast grid on the Overview.
+  selectors, a map of each forecast grid on the Overview, and results of grids
+  evaluated elsewhere (without forecasts in the experiment) in the heatmaps.
+- About page: the experiment's `about.md` with its figures, and its citation
+  details.
+- Global maps are Pacific-centred.
 - Overview: time-window timeline, models and tests tables.
 
 ### Fixed

@@ -61,6 +61,11 @@ export function useEvaluations(enabled = true) {
   return useSWR<EvaluationSummary[], ApiError>(enabled ? '/api/evaluations' : null, fetchJson, DATA_OPTIONS);
 }
 
+/** The experiment's about.md, with its images linked to /api/about/assets/<n>. */
+export function useAbout(enabled = true) {
+  return useSWR<{ markdown: string }, ApiError>(enabled ? '/api/about' : null, fetchJson, DATA_OPTIONS);
+}
+
 /** Warm the SWR cache (e.g. the next time window) without rendering anything. */
 export function prefetch(url: string): void {
   preload(url, fetchJson).catch(() => {

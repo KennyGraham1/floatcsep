@@ -165,28 +165,37 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
   const evaluations = evaluationCandidates.filter((_, i) => evaluationPresent[i]);
 
   // Results saved outside the configured tests (e.g. by a plot_custom script),
-  // named <test>_<model>.json like floatCSEP's own.
+  // named <test>_<model>.json like floatCSEP's own. They are matched by model
+  // first; results of models the experiment has no forecasts for (e.g. imported
+  // from another grid) are then matched by a known test name.
   const known = new Set(evaluations.map((e) => e.path));
   const modelsByLength = [...models.map((m) => m.name)].sort((a, b) => b.length - a.length);
-  await Promise.all(
-    timeWindows.map(async (tw, window) => {
+  const listings = await Promise.all(
+    timeWindows.map(async (tw) => {
       const folder = path.posix.join(tw.replace(/\s+to\s+/, '_'), 'evaluations');
-      let names: string[] = [];
-      try {
-        names = await fs.readdir(path.join(appRoot, folder));
-      } catch {
-        return;
-      }
-      for (const name of names) {
-        const relative = path.posix.join(folder, name);
-        if (!name.endsWith('.json') || known.has(relative)) continue;
-        const model = modelsByLength.find((m) => name.endsWith(`_${m}.json`));
-        if (!model) continue;
-        const test = name.slice(0, -`_${model}.json`.length);
-        if (test) evaluations.push({ window, test, model, path: relative });
-      }
+      const names = await fs.readdir(path.join(appRoot, folder)).catch(() => [] as string[]);
+      return { folder, names };
     }),
   );
+  const unmatched: { window: number; name: string; relative: string }[] = [];
+  listings.forEach(({ folder, names }, window) => {
+    for (const name of names) {
+      const relative = path.posix.join(folder, name);
+      if (!name.endsWith('.json') || known.has(relative)) continue;
+      const model = modelsByLength.find((m) => name.endsWith(`_${m}.json`));
+      const test = model ? name.slice(0, -`_${model}.json`.length) : '';
+      if (model && test) evaluations.push({ window, test, model, path: relative });
+      else unmatched.push({ window, name, relative });
+    }
+  });
+  const testsByLength = [...new Set([...tests.map((t) => t.name), ...evaluations.map((e) => e.test)])].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const { window, name, relative } of unmatched) {
+    const test = testsByLength.find((t) => name.startsWith(`${t}_`));
+    const model = test ? name.slice(test.length + 1, -'.json'.length) : '';
+    if (test && model) evaluations.push({ window, test, model, path: relative });
+  }
 
   // Figures for the whole experiment, e.g. written by a plot_custom script.
   let summaryFigures: SummaryFigure[] = [];
@@ -201,6 +210,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
   }
 
   const catalogPath = str(raw.catalog?.path);
+  const aboutPath = str(raw.about);
 
   const manifest: Manifest = {
     name: str(raw.name) ?? 'Experiment',
@@ -228,6 +238,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
     results,
     evaluations,
     summary_figures: summaryFigures,
+    about: aboutPath && (await isFile(aboutPath)) ? aboutPath : null,
     exp_class: str(raw.exp_class),
     n_intervals: num(raw.n_intervals),
     horizon: str(raw.horizon),

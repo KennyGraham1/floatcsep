@@ -68,6 +68,68 @@ export const HEAT: Record<ThemeMode, string[]> = {
   dark: ['#4a0c6b', '#781c6d', '#a52c60', '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4'],
 };
 
+/**
+ * Palettes for the forecast map, sampled from matplotlib's colormaps. Turbo is
+ * the one of the global experiment's rate-density figures; viridis and cividis
+ * are perceptually uniform and readable with colour-vision deficiencies. "heat"
+ * is the HEAT ramp of the light or dark theme.
+ */
+export type PaletteName = 'turbo' | 'viridis' | 'cividis' | 'plasma' | 'magma' | 'inferno' | 'heat';
+
+export const PALETTE_NAMES: readonly PaletteName[] = [
+  'turbo',
+  'viridis',
+  'cividis',
+  'plasma',
+  'magma',
+  'inferno',
+  'heat',
+];
+
+export const PALETTE_LABELS: Record<PaletteName, string> = {
+  turbo: 'Turbo',
+  viridis: 'Viridis',
+  cividis: 'Cividis',
+  plasma: 'Plasma',
+  magma: 'Magma',
+  inferno: 'Inferno',
+  heat: 'Heat',
+};
+
+// Seventeen evenly spaced samples of each colormap.
+// prettier-ignore
+const PALETTE_STOPS: Record<Exclude<PaletteName, 'heat'>, string[]> = {
+  turbo: [
+    '#30123b', '#4040a2', '#466be3', '#4294ff', '#28bceb', '#18ddc2', '#32f298', '#6dfe62', '#a4fc3c',
+    '#cdec34', '#eecf3a', '#fdac34', '#fb7e21', '#eb500e', '#d02f05', '#a91601', '#7a0403',
+  ],
+  viridis: [
+    '#440154', '#48186a', '#472d7b', '#424086', '#3b528b', '#33638d', '#2c728e', '#26828e', '#21918c',
+    '#1fa088', '#28ae80', '#3fbc73', '#5ec962', '#84d44b', '#addc30', '#d8e219', '#fde725',
+  ],
+  cividis: [
+    '#00224e', '#002e6a', '#1a386f', '#32436d', '#434e6c', '#535a6d', '#61656f', '#6f7073', '#7d7c78',
+    '#8c8878', '#9b9476', '#aba072', '#bcae6c', '#cdbb63', '#dec958', '#f0d846', '#fee838',
+  ],
+  plasma: [
+    '#0d0887', '#310597', '#4c02a1', '#6600a7', '#7e03a8', '#9511a1', '#aa2395', '#bc3587', '#cc4778',
+    '#da5a6a', '#e66c5c', '#f0804e', '#f89540', '#fdac33', '#fdc527', '#f8df25', '#f0f921',
+  ],
+  magma: [
+    '#000004', '#0a0822', '#1d1147', '#36106b', '#51127c', '#6a1c81', '#832681', '#9c2e7f', '#b73779',
+    '#d0416f', '#e75263', '#f56b5c', '#fc8961', '#fea772', '#fec488', '#fde2a3', '#fcfdbf',
+  ],
+  inferno: [
+    '#000004', '#0b0724', '#210c4a', '#3d0965', '#57106e', '#71196e', '#8a226a', '#a32c61', '#bc3754',
+    '#d24644', '#e45a31', '#f1731d', '#f98e09', '#fcac11', '#f9cb35', '#f2ea69', '#fcffa4',
+  ],
+};
+
+/** The colour stops of a palette, low → high. */
+export function paletteStops(name: PaletteName, mode: ThemeMode): string[] {
+  return name === 'heat' ? HEAT[mode] : PALETTE_STOPS[name];
+}
+
 /** Region cells on the overview map. */
 export const REGION_FILL: Record<ThemeMode, string> = {
   light: '#2a78d6',

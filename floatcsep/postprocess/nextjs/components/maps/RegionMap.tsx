@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { HEAT, REGION_FILL, rampGradient, rampTable } from '@/lib/colors';
 import { formatInt, formatLatLon } from '@/lib/format';
-import { gridExtent, solidTable, type CellGrid } from '@/lib/grid';
+import { gridExtent, solidTable, viewExtent, type CellGrid } from '@/lib/grid';
 import { CellLayer, type HoveredCell } from './CellLayer';
 import MapView from './MapView';
 import { ColorScaleLegend, LegendDot, MapPanel } from './MapOverlays';
@@ -23,7 +23,7 @@ interface RegionMapProps {
  */
 export default function RegionMap({ grid, label, height }: RegionMapProps) {
   const mode = useThemeMode();
-  const extent = useMemo(() => gridExtent(grid), [grid]);
+  const extent = useMemo(() => viewExtent(gridExtent(grid)), [grid]);
   const bounds = useMemo(() => L.latLngBounds([extent[0], extent[1]], [extent[2], extent[3]]), [extent]);
   const [hover, setHover] = useState<HoveredCell | null>(null);
 
