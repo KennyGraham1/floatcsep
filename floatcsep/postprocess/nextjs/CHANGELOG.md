@@ -2,6 +2,43 @@
 
 All notable changes to the floatCSEP Next.js Dashboard.
 
+## [2.0.0] - 2026-09
+
+### Changed
+- Redesigned interface: sidebar navigation, stat tiles, cards and tables,
+  light/dark/system themes, responsive layout down to phone widths, floatCSEP
+  branding and Noto Sans (bundled, works offline).
+- All charts use **Apache ECharts** (Highcharts removed). Every chart has a table
+  view, tooltips escape catalog text, and dates are shown in UTC.
+- Maps use keyless basemaps (Esri light/dark gray canvas, OpenStreetMap, Esri
+  imagery); CARTO tiles now require an API key. Forecast and region grids are
+  drawn as one Mercator-resampled image with O(1) cell hover.
+- Upgraded to Next.js 15.5 and React 19 (fixes the Next.js 14 security
+  advisories); `npm audit` reports no vulnerabilities.
+- `floatcsep view --ui nextjs` builds and serves a production build (rebuilt
+  when the dashboard changes), binds to `localhost`, reinstalls dependencies
+  when `package.json` changes, and passes its own Python interpreter to the API.
+- API: `/api/catalog` and `/api/forecasts?model=&window=` resolve files from the
+  manifest instead of accepting paths; results are served only if listed in the
+  manifest, with ETags; caches are keyed on file path, size and mtime.
+
+### Added
+- Catalog: period and magnitude filters, magnitude–frequency distribution with
+  b-value, events per time window, largest events.
+- Forecasts: observed events overlay, expected vs observed counts, colour-scale
+  histogram with range slider and opacity, neighbouring windows prefetched.
+- Results: coverage grid, per-model figures, full-screen viewer with download.
+- Overview: time-window timeline, models and tests tables.
+
+### Fixed
+- Catalog-based forecasts failed to load (wrong module import).
+- Cached forecasts were keyed by model/window index and could show another
+  experiment's data.
+- Event times were parsed as local time, misclassifying events near the start.
+- Colour-range changes were lost when panning the forecast map.
+- Model registry internals and empty plot functions leaked into the manifest.
+- Arbitrary paths could be read through the catalog/forecast/results routes.
+
 ## [1.1.0] - 2025
 
 ### Changed

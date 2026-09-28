@@ -1,52 +1,35 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import '@fontsource-variable/noto-sans';
+import 'leaflet/dist/leaflet.css';
 import './globals.css';
-import { ManifestProvider } from '@/lib/contexts/ManifestContext';
+import AppShell from '@/components/layout/AppShell';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import Header from '@/components/layout/Header';
-import Footer from '@/components/layout/Footer';
-import Navigation from '@/components/layout/Navigation';
+import { ManifestProvider } from '@/lib/contexts/ManifestContext';
 
 export const metadata: Metadata = {
-  title: 'floatCSEP Dashboard',
-  description: 'Interactive earthquake forecasting experiment dashboard',
+  title: 'floatCSEP',
+  description: 'Interactive dashboard for floatCSEP earthquake forecasting experiments',
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f9f9f7' },
+    { media: '(prefers-color-scheme: dark)', color: '#0d0d0d' },
+  ],
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="antialiased">
-        <ManifestProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <div className="min-h-screen flex flex-col">
-              <a
-                href="#main-content"
-                className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-primary focus:text-background focus:px-4 focus:py-2 focus:rounded"
-              >
-                Skip to main content
-              </a>
-              <Header />
-              <Navigation />
-              <main id="main-content" className="flex-1 container mx-auto px-6 py-8" role="main">
-                {children}
-              </main>
-              <Footer />
-            </div>
-          </ThemeProvider>
-        </ManifestProvider>
+    // next-themes sets the theme class on <html> before hydration.
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ManifestProvider>
+            <AppShell>{children}</AppShell>
+          </ManifestProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

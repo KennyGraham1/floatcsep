@@ -5,32 +5,59 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function lonLatToMercator(lon: number, lat: number): [number, number] {
-  const k = 6378137.0; // Earth radius in meters
-  const x = k * (lon * Math.PI / 180);
-  const y = k * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2));
-  return [x, y];
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/** Escape text for HTML strings (chart and map tooltips render HTML). */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
 }
 
-export function safeRender(value: any): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (Array.isArray(value)) {
-    // Filter out empty objects and render the rest
-    const filtered = value.filter(v => {
-      if (typeof v === 'object' && v !== null) {
-        return Object.keys(v).length > 0;
-      }
-      return v !== null && v !== undefined;
-    });
-    if (filtered.length === 0) return '';
-    return filtered.map(v => safeRender(v)).join(', ');
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Min/max without spreading (spreading large arrays overflows the call stack). */
+export function extent(values: ArrayLike<number>): [number, number] | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
   }
-  if (typeof value === 'object') {
-    const keys = Object.keys(value);
-    if (keys.length === 0) return '';
-    return JSON.stringify(value);
-  }
-  return String(value);
+  return min <= max ? [min, max] : null;
+}
+
+/** URL of a result figure served by /api/results. */
+export function figureUrl(relativePath: string, download = false): string {
+  const encoded = relativePath.split('/').map(encodeURIComponent).join('/');
+  return `/api/results/${encoded}${download ? '?download=1' : ''}`;
+}
+
+export function doiUrl(doi: string): string {
+  return /^https?:\/\//i.test(doi) ? doi : `https://doi.org/${doi.replace(/^doi:\s*/i, '')}`;
+}
+
+/**
+ * Browser URL of a git remote: "git@github.com:org/repo.git" and
+ * "ssh://git@host/org/repo" become "https://host/org/repo". Null if unknown.
+ */
+export function gitWebUrl(remote: string): string | null {
+  const url = remote.trim().replace(/\.git$/, '');
+  const scp = url.match(/^[\w.-]+@([^:/]+):(.+)$/);
+  if (scp) return `https://${scp[1]}/${scp[2]}`;
+  const ssh = url.match(/^(?:ssh|git):\/\/(?:[\w.-]+@)?([^/:]+)(?::\d+)?\/(.+)$/);
+  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
+  return /^https?:\/\//i.test(url) ? url : null;
+}
+
+export function zenodoUrl(id: string | number): string {
+  return `https://zenodo.org/records/${id}`;
 }

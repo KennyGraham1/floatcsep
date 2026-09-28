@@ -21,3 +21,11 @@ global-exclude *.html
 global-exclude *.so
 global-exclude *~
 global-exclude .DS_Store
+
+# Next.js dashboard: ship the sources only, never local installs, builds or caches
+prune floatcsep/postprocess/nextjs/node_modules
+prune floatcsep/postprocess/nextjs/.next
+prune floatcsep/postprocess/nextjs/.next-prod
+prune floatcsep/postprocess/nextjs/.cache
+exclude floatcsep/postprocess/nextjs/next-env.d.ts
+exclude floatcsep/postprocess/nextjs/tsconfig.tsbuildinfo

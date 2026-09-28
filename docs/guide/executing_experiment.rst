@@ -115,14 +115,14 @@ Or using the Panel-based dashboard:
 
 This starts a local server and opens a browser at ``http://localhost:<port>`` where you can:
 
-- View the experiment overview and configuration
-- Browse forecast visualizations
-- Explore catalog plots
-- Review evaluation results (N-test, S-test plots)
+- View the experiment overview: configuration, testing region, time windows, models and tests
+- Explore the observed catalog: epicentre map, magnitude over time, magnitude-frequency distribution and events per time window
+- Browse forecast maps for each model and time window, with observed events, colour-scale controls and expected versus observed events per magnitude bin
+- Review the evaluation figures (e.g. N-test, S-test) of every test and time window
 
 .. note::
 
-    The ``--ui nextjs`` option (recommended) uses a modern Next.js-based interface. Node.js 18.17.0 or newer is required (automatically downloaded if not present). The ``--ui panel`` option uses the Panel-based dashboard.
+    The ``--ui nextjs`` option (recommended) uses a modern Next.js-based interface. Node.js 18.18 or newer is required (a Node.js LTS runtime is downloaded automatically if none is found). The first launch installs the dashboard dependencies and builds it, which takes a few minutes; later launches start in seconds. The server only listens on ``localhost``. The ``--ui panel`` option uses the Panel-based dashboard.
 
 
 Reproducing Results: ``floatcsep reproduce``

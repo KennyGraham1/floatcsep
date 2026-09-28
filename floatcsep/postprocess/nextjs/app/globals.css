@@ -2,62 +2,173 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens (RGB triplets). Light and dark values are selected separately,
+ * not flipped: every text/surface pair meets WCAG AA, data colours come from the
+ * validated categorical palette, and --accent is the floatCSEP crimson.
+ * Keep in sync with lib/colors.ts, which carries the same values for charts/maps.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --surface: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --primary: 173 80% 30%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 45 93% 47%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --radius: 0.5rem;
-  }
- 
-  .dark {
-    --background: 228 81% 5%;
-    --foreground: 210 20% 91%;
-    --surface: 223 47% 9%;
-    --border: 210 24% 16%;
-    --primary: 173 80% 40%;
-    --primary-foreground: 228 81% 5%;
-    --secondary: 45 93% 47%;
-    --secondary-foreground: 210 40% 98%;
+    color-scheme: light;
+    --page: 249 249 247;
+    --surface: 255 255 255;
+    --surface-2: 244 244 241;
+    --surface-3: 235 235 231;
+    --line: 228 227 221;
+    --line-strong: 208 207 200;
+    --ink: 18 18 17;
+    --ink-2: 82 81 78;
+    --ink-3: 111 109 104;
+    --accent: 179 20 31;
+    --link: 28 92 171;
+    --focus: 42 120 214;
+    --critical: 180 35 35;
+    --good: 0 99 0;
+    --warning: 138 90 0;
+    --series-input: 42 120 214;
+    --series-test: 235 104 52;
   }
 
-  * {
-    @apply border-border;
+  .dark {
+    color-scheme: dark;
+    --page: 13 13 13;
+    --surface: 26 26 25;
+    --surface-2: 34 34 32;
+    --surface-3: 44 44 42;
+    --line: 46 46 43;
+    --line-strong: 64 64 60;
+    --ink: 244 244 242;
+    --ink-2: 195 194 183;
+    --ink-3: 156 154 147;
+    --accent: 240 97 109;
+    --link: 109 167 236;
+    --focus: 57 135 229;
+    --critical: 240 122 122;
+    --good: 12 163 12;
+    --warning: 250 178 25;
+    --series-input: 57 135 229;
+    --series-test: 217 89 38;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-page font-sans text-sm text-ink antialiased;
+    font-feature-settings: 'kern' 1;
+  }
+
+  ::selection {
+    background: rgb(var(--focus) / 0.22);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 2px;
+  }
+
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
   }
 }
 
-@layer utilities {
-  /* Screen reader only - visually hidden but accessible */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
+@layer components {
+  /* Numbers that align in columns (tables, axis-like lists). */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 
-  .focus\:not-sr-only:focus {
-    position: static;
-    width: auto;
-    height: auto;
-    padding: inherit;
-    margin: inherit;
-    overflow: visible;
-    clip: auto;
-    white-space: normal;
+  .link {
+    @apply text-link underline decoration-link/30 underline-offset-2 transition-colors hover:decoration-link;
   }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------ Leaflet */
+
+.leaflet-container {
+  font-family: inherit;
+  font-size: 12px;
+  background: rgb(var(--surface-2));
+  outline-offset: -2px;
+}
+
+.leaflet-bar,
+.leaflet-control-layers {
+  border: 1px solid rgb(var(--line)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08) !important;
+  overflow: hidden;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  border-bottom-color: rgb(var(--line));
+  width: 30px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+}
+
+.leaflet-bar a:hover {
+  background: rgb(var(--surface-2));
+}
+
+.leaflet-bar a.leaflet-disabled {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink-3));
+}
+
+.leaflet-control-attribution {
+  background: rgb(var(--surface) / 0.85) !important;
+  color: rgb(var(--ink-3));
+  font-size: 10px;
+  border-top-left-radius: 6px;
+  padding: 1px 6px !important;
+}
+
+.leaflet-control-attribution a {
+  color: rgb(var(--ink-2));
+}
+
+.leaflet-tooltip.map-tooltip {
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  border: 1px solid rgb(var(--line));
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.leaflet-tooltip.map-tooltip::before {
+  display: none;
+}
+
+/* Grid rasters: every forecast cell stays a crisp square at any zoom. */
+.leaflet-image-layer.raster-crisp {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }

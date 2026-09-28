@@ -15,6 +15,9 @@ notes.kg
 
 # Next.js
 floatcsep/postprocess/nextjs/.next/
+floatcsep/postprocess/nextjs/.next-prod/
+floatcsep/postprocess/nextjs/next-env.d.ts
+floatcsep/postprocess/nextjs/tsconfig.tsbuildinfo
 floatcsep/postprocess/nextjs/node_modules/
 floatcsep/postprocess/nextjs/out/
 floatcsep/postprocess/nextjs/.vercel/

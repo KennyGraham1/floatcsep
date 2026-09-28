@@ -1,284 +1,280 @@
 """
-Python subprocess handlers for complex data processing.
-Called by Next.js API routes via subprocess.
+Data loaders for the floatCSEP Next.js dashboard.
 
-Performance optimizations:
-- File-based JSON caching to avoid reparsing forecast files
-- Vectorized numpy operations for cell data generation
-- Uses orjson for faster JSON serialization when available
+The dashboard API routes (``lib/server/python.ts``) run this module as a subprocess
+with the same Python interpreter that launched ``floatcsep view``. Each command parses
+a catalog or forecast with floatCSEP's own parsers and writes a compact, columnar JSON
+document to ``--out``. A one-line JSON status is printed to stdout. Caching is done by
+the caller, keyed on the source file's path, size and modification time.
+
+Usage::
+
+    python manifest_api.py catalog --path <catalog file> --out <json>
+    python manifest_api.py forecast --manifest <manifest.json> --model <i> --window <j> --out <json>
 """
-import sys
-import hashlib
+
+import argparse
+import json
+import math
 import os
+import sys
+import traceback
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-# Try to use orjson for faster serialization, fall back to standard json
-try:
-    import orjson
-    def json_dumps(obj):
-        return orjson.dumps(obj).decode('utf-8')
-    def json_loads(s):
-        return orjson.loads(s)
-except ImportError:
-    import json
-    def json_dumps(obj):
-        return json.dumps(obj, separators=(',', ':'))  # Compact output
-    def json_loads(s):
-        return json.loads(s)
-
-# Standard json for file operations that need pretty printing
-import json as std_json
-
-from floatcsep.utils.file_io import GriddedForecastParsers, CatalogForecastParsers, CatalogParser
-
-# Cache directory for processed forecast JSON
-CACHE_DIR = Path(__file__).parent / ".cache" / "forecast_cache"
+# Bump when the JSON layout changes, so cached documents are regenerated.
+FORMAT_VERSION = 3
 
 
-def get_cache_path(forecast_path: str, is_catalog_fc: bool) -> Path:
-    """Generate a cache file path based on the forecast file."""
-    # Create hash of the forecast path for cache key
-    path_hash = hashlib.md5(forecast_path.encode()).hexdigest()[:12]
-    fc_type = "catalog" if is_catalog_fc else "gridded"
-    return CACHE_DIR / f"{fc_type}_{path_hash}.json"
+def _write_json(payload: Dict[str, Any], out_path: str) -> None:
+    """Write JSON atomically, so a concurrent reader never sees a partial file."""
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, separators=(",", ":"), allow_nan=False)
+    os.replace(tmp, out)
 
 
-def is_cache_valid(cache_path: Path, source_path: Path) -> bool:
-    """Check if cache is valid (exists and newer than source)."""
-    if not cache_path.exists():
-        return False
-    if not source_path.exists():
-        return False
-    return cache_path.stat().st_mtime > source_path.stat().st_mtime
+def _decode(value: Any) -> str:
+    if isinstance(value, (bytes, bytearray, np.bytes_)):
+        return bytes(value).decode("utf-8", errors="replace")
+    return str(value)
 
 
-def load_catalog_data(catalog_path: str, app_root: str) -> Dict[str, Any]:
-    """Load catalog and return event data as JSON."""
-    path = Path(app_root) / catalog_path
+def _rounded(values: np.ndarray, decimals: int) -> List[Optional[float]]:
+    """Round an array and map non-finite values to None (JSON has no NaN)."""
+    values = np.asarray(values, dtype=float)
+    out = np.round(values, decimals).tolist()
+    if np.isfinite(values).all():
+        return out
+    return [v if math.isfinite(v) else None for v in out]
 
-    try:
-        if path.suffix.lower() == ".json":
-            try:
-                catalog = CatalogParser.json(str(path))
-            except std_json.JSONDecodeError:
-                catalog = CatalogParser.ascii(str(path))
-        else:
-            catalog = CatalogParser.ascii(str(path))
-    except Exception as e:
-        return {"error": str(e)}
 
-    if catalog is None or catalog.event_count == 0:
-        return {"events": [], "count": 0, "bbox": None}
+def _significant(values: np.ndarray, digits: int = 6) -> List[float]:
+    return [float(f"{v:.{digits}g}") for v in np.asarray(values, dtype=float)]
 
-    lons = catalog.get_longitudes()
-    lats = catalog.get_latitudes()
-    mags = catalog.get_magnitudes()
-    dts = catalog.get_datetimes()
-    event_ids = catalog.get_event_ids()
 
-    events = []
-    for i in range(len(lons)):
-        events.append({
-            "lon": float(lons[i]),
-            "lat": float(lats[i]),
-            "magnitude": float(mags[i]),
-            "time": dts[i].isoformat(),
-            "event_id": str(event_ids[i]) if isinstance(event_ids[i], (bytes, bytearray)) else event_ids[i].decode('utf-8') if hasattr(event_ids[i], 'decode') else str(event_ids[i]),
-        })
+def load_catalog(path: str) -> Dict[str, Any]:
+    """Parse an observed catalog into columnar arrays (times in epoch milliseconds)."""
+    from floatcsep.utils.file_io import CatalogParser
 
-    # Calculate bbox manually to handle antimeridian correctly
-    if len(lons) > 0 and len(lats) > 0:
-        min_lat = float(np.min(lats))
-        max_lat = float(np.max(lats))
-        min_lon = float(np.min(lons))
-        max_lon = float(np.max(lons))
+    catalog_path = Path(path)
+    if not catalog_path.is_file():
+        raise FileNotFoundError(f"Catalog file not found: {catalog_path}")
 
-        # Check if data crosses the antimeridian
-        has_positive = any(lon > 90 for lon in lons)
-        has_negative = any(lon < -90 for lon in lons)
-
-        if has_positive and has_negative:
-            positive_lons = [lon for lon in lons if lon > 0]
-            negative_lons = [lon for lon in lons if lon < 0]
-
-            if positive_lons and negative_lons:
-                west = float(min(positive_lons))
-                east = float(max(negative_lons))
-                bbox = [west, min_lat, east, max_lat]
-            else:
-                bbox = [min_lon, min_lat, max_lon, max_lat]
-        else:
-            bbox = [min_lon, min_lat, max_lon, max_lat]
+    if catalog_path.suffix.lower() == ".json":
+        try:
+            catalog = CatalogParser.json(str(catalog_path))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            catalog = CatalogParser.ascii(str(catalog_path))
     else:
-        bbox = None
+        catalog = CatalogParser.ascii(str(catalog_path))
+
+    count = 0 if catalog is None else int(catalog.event_count)
+    if count == 0:
+        return {
+            "version": FORMAT_VERSION,
+            "count": 0,
+            "lon": [],
+            "lat": [],
+            "mag": [],
+            "depth": [],
+            "time": [],
+            "id": [],
+        }
 
     return {
-        "events": events,
-        "count": catalog.event_count,
-        "bbox": bbox,
+        "version": FORMAT_VERSION,
+        "count": count,
+        "lon": _rounded(catalog.get_longitudes(), 5),
+        "lat": _rounded(catalog.get_latitudes(), 5),
+        "mag": _rounded(catalog.get_magnitudes(), 3),
+        "depth": _rounded(catalog.get_depths(), 3),
+        "time": [int(t) for t in catalog.get_epoch_times()],
+        "id": [_decode(i) for i in catalog.get_event_ids()],
     }
 
 
-def load_forecast_data(
-    forecast_path: str,
-    app_root: str,
-    region_data: Dict[str, Any],
-    is_catalog_fc: bool = False,
-) -> Dict[str, Any]:
-    """Load forecast and return gridded data as JSON.
-    
-    Uses file-based caching to avoid reparsing on subsequent loads.
+def _experiment_region(manifest: Dict[str, Any]):
+    """Rebuild the experiment's space-magnitude region from the manifest."""
+    from csep.core.regions import CartesianGrid2D
+
+    region = manifest.get("region") or {}
+    origins = region.get("origins")
+    dh = region.get("dh")
+    magnitudes = manifest.get("magnitudes") or []
+    if not origins or not dh:
+        raise ValueError("The manifest has no region grid, required for catalog forecasts.")
+    if len(magnitudes) == 0:
+        raise ValueError("The manifest has no magnitude bins, required for catalog forecasts.")
+    return CartesianGrid2D.from_origins(
+        np.asarray(origins, dtype=float),
+        dh=float(dh),
+        magnitudes=np.asarray(magnitudes, dtype=float),
+        name=region.get("name"),
+    )
+
+
+def _load_gridded(path: Path, fmt: Optional[str]):
+    from floatcsep.utils.file_io import GriddedForecastParsers
+
+    suffix = path.suffix.lower().lstrip(".") or (fmt or "").lower().lstrip(".")
+    parsers = {
+        "dat": GriddedForecastParsers.dat,
+        "xml": GriddedForecastParsers.xml,
+        "gml": GriddedForecastParsers.xml,
+        "csv": GriddedForecastParsers.csv,
+        "txt": GriddedForecastParsers.csv,
+        "h5": GriddedForecastParsers.hdf5,
+        "hdf5": GriddedForecastParsers.hdf5,
+    }
+    if suffix not in parsers:
+        raise ValueError(f"Unsupported gridded forecast format: '.{suffix}'")
+    rates, region, magnitudes = parsers[suffix](str(path))
+    return np.asarray(rates, dtype=float), region, np.asarray(magnitudes, dtype=float)
+
+
+def _window_scale(window: str, forecast_unit: Any) -> float:
     """
-    path = Path(app_root) / forecast_path
+    Scale floatCSEP applies to gridded forecasts: window length in decimal years
+    over the model's forecast unit (1 year unless configured, see
+    GriddedForecastRepository._load_single_forecast).
+    """
+    from csep.utils.time_utils import decimal_year
+    from floatcsep.utils.helpers import str2timewindow
 
-    if not path.exists():
-        return {"error": f"Forecast file not found: {forecast_path}"}
+    start, end = str2timewindow(window.replace(" to ", "_"))
+    unit = float(forecast_unit) if forecast_unit else 1.0
+    return (decimal_year(end) - decimal_year(start)) / unit
 
-    # Check cache first
-    cache_path = get_cache_path(forecast_path, is_catalog_fc)
-    if is_cache_valid(cache_path, path):
-        try:
-            with open(cache_path, 'r') as f:
-                return json_loads(f.read())
-        except Exception:
-            pass  # Cache read failed, regenerate
 
-    suffix = path.suffix.lower()
+def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Dict[str, Any]:
+    """Expected rates of one model and time window, as a sparse grid of cell rates."""
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
 
+    models = manifest.get("models") or []
+    windows = manifest.get("time_windows") or []
+    if not 0 <= model_index < len(models):
+        raise IndexError(f"Model index {model_index} is out of range")
+    if not 0 <= window_index < len(windows):
+        raise IndexError(f"Time window index {window_index} is out of range")
+
+    model = models[model_index]
+    window = windows[window_index]
+    rel_path = (model.get("forecasts") or {}).get(window)
+    if not rel_path:
+        raise LookupError(f"Model '{model.get('name')}' has no forecast for {window}")
+
+    app_root = Path(manifest.get("app_root") or Path(manifest_path).parent)
+    path = (app_root / rel_path).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Forecast file not found: {rel_path}")
+
+    is_catalog = model.get("forecast_class") == "CatalogForecastRepository"
+    n_catalogs = None
+    if is_catalog:
+        from floatcsep.utils.file_io import CatalogForecastParsers
+
+        region = _experiment_region(manifest)
+        n_sims = (model.get("func_kwargs") or {}).get("n_sims")
+        forecast = CatalogForecastParsers.csv(
+            str(path),
+            region=region,
+            n_cat=int(n_sims) if n_sims else None,
+            filter_spatial=True,
+            apply_filters=True,
+            store=False,
+        )
+        expected = forecast.get_expected_rates(verbose=False)
+        rates = np.asarray(expected.data, dtype=float)
+        magnitudes = np.asarray(region.magnitudes, dtype=float)
+        n_catalogs = int(forecast.n_cat) if forecast.n_cat is not None else None
+    else:
+        rates, region, magnitudes = _load_gridded(path, model.get("fmt"))
+        # Match what the experiment evaluates: rates for this window's length.
+        rates = rates * _window_scale(window, model.get("forecast_unit"))
+
+    if rates.ndim == 1:
+        rates = rates[:, None]
+    origins = np.asarray(region.origins(), dtype=float)
+    dh = float(region.dh)
+
+    cell_rates = rates.sum(axis=1)
+    magnitude_rates = rates.sum(axis=0)
+
+    lon = origins[:, 0]
+    lat = origins[:, 1]
+    # Keep regions that straddle the antimeridian contiguous (e.g. 179°E -> 181°E).
+    if lon.max() - lon.min() > 180:
+        shifted = np.where(lon < 0, lon + 360.0, lon)
+        if shifted.max() - shifted.min() < lon.max() - lon.min():
+            lon = shifted
+    lon0 = float(lon.min())
+    lat0 = float(lat.min())
+    ix = np.rint((lon - lon0) / dh).astype(np.int64)
+    iy = np.rint((lat - lat0) / dh).astype(np.int64)
+
+    active = np.isfinite(cell_rates) & (cell_rates > 0)
+    log_rates = np.log10(cell_rates[active]) if active.any() else np.array([0.0, 1.0])
+
+    return {
+        "version": FORMAT_VERSION,
+        "kind": "catalog" if is_catalog else "gridded",
+        "model": model.get("name"),
+        "time_window": window,
+        "path": rel_path,
+        "dh": dh,
+        "lon0": lon0,
+        "lat0": lat0,
+        "nx": int(ix.max()) + 1,
+        "ny": int(iy.max()) + 1,
+        "n_cells": int(len(origins)),
+        "n_active": int(active.sum()),
+        "ix": ix[active].tolist(),
+        "iy": iy[active].tolist(),
+        "rate": _significant(cell_rates[active]),
+        "total": float(np.nansum(cell_rates)),
+        "vmin": float(log_rates.min()),
+        "vmax": float(log_rates.max()),
+        "magnitudes": _rounded(magnitudes, 4),
+        "magnitude_rates": _significant(magnitude_rates),
+        "n_catalogs": n_catalogs,
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    catalog = sub.add_parser("catalog", help="Parse an observed catalog")
+    catalog.add_argument("--path", required=True)
+    catalog.add_argument("--out", required=True)
+
+    forecast = sub.add_parser("forecast", help="Compute cell rates of a forecast")
+    forecast.add_argument("--manifest", required=True)
+    forecast.add_argument("--model", type=int, required=True)
+    forecast.add_argument("--window", type=int, required=True)
+    forecast.add_argument("--out", required=True)
+
+    args = parser.parse_args(argv)
     try:
-        if is_catalog_fc:
-            from pycsep.core.regions import CartesianGrid2D
-
-            if not region_data or not region_data.get('bbox'):
-                return {"error": "Region data required for catalog forecasts"}
-
-            bbox = region_data['bbox']
-            dh = region_data.get('dh', 0.1)
-
-            region = CartesianGrid2D.from_origins(
-                origins=None,
-                dh=dh,
-                mask=None,
-            )
-
-            cf = CatalogForecastParsers.csv(
-                str(path),
-                region=region,
-                filter_spatial=True,
-                apply_filters=True,
-                store=False,
-            )
-
-            gf = cf.get_expected_rates(verbose=False)
-            rates = np.asarray(gf.data, dtype='float32')
-            region_out = getattr(gf, 'region', region)
+        if args.command == "catalog":
+            payload = load_catalog(args.path)
         else:
-            # Gridded forecast
-            if suffix == ".dat":
-                rates, region_out, mags = GriddedForecastParsers.dat(str(path))
-            elif suffix in (".xml", ".gml"):
-                rates, region_out, mags = GriddedForecastParsers.xml(str(path))
-            elif suffix in (".csv", ".txt"):
-                rates, region_out, mags = GriddedForecastParsers.csv(str(path))
-            elif suffix in (".h5", ".hdf5"):
-                rates, region_out, mags = GriddedForecastParsers.hdf5(str(path))
-            else:
-                return {"error": f"Unsupported forecast file extension: {suffix}"}
+            payload = load_forecast(args.manifest, args.model, args.window)
+        _write_json(payload, args.out)
+    except Exception as exc:  # reported to the dashboard as a JSON error
+        traceback.print_exc(file=sys.stderr)
+        print(json.dumps({"ok": False, "error": str(exc) or exc.__class__.__name__}))
+        return 1
 
-        # Sum across magnitude bins to get total rate per cell
-        total_rates = rates.sum(axis=1).astype('float32')
-
-        # Get cell coordinates
-        origins = region_out.origins()
-        dh = float(region_out.dh)
-
-        # Vectorized cell center calculation
-        lon_c = origins[:, 0] + 0.5 * dh
-        lat_c = origins[:, 1] + 0.5 * dh
-
-        # Filter to non-zero rates using numpy mask (vectorized)
-        mask = total_rates > 0
-        lon_c_filtered = lon_c[mask]
-        lat_c_filtered = lat_c[mask]
-        rates_filtered = total_rates[mask]
-
-        # Build cell data using list comprehension (faster than loop with append)
-        # Convert to Python floats in one go
-        cells = [
-            {"lon": float(lon_c_filtered[i]), "lat": float(lat_c_filtered[i]), "rate": float(rates_filtered[i])}
-            for i in range(len(lon_c_filtered))
-        ]
-
-        # Calculate vmin/vmax in log10 space
-        with np.errstate(divide='ignore', invalid='ignore'):
-            log_rates = np.log10(rates_filtered)
-
-        finite = np.isfinite(log_rates)
-        if np.any(finite):
-            vmin = float(np.nanmin(log_rates[finite]))
-            vmax = float(np.nanmax(log_rates[finite]))
-        else:
-            vmin = 0.0
-            vmax = 1.0
-
-        result = {
-            "cells": cells,
-            "dh": dh,
-            "vmin": vmin,
-            "vmax": vmax,
-        }
-
-        # Write to cache
-        try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            with open(cache_path, 'w') as f:
-                f.write(json_dumps(result))
-        except Exception:
-            pass  # Cache write failed, continue without caching
-
-        return result
-
-    except Exception as e:
-        return {"error": f"Failed to load forecast: {str(e)}"}
+    print(json.dumps({"ok": True, "out": args.out}))
+    return 0
 
 
 if __name__ == "__main__":
-    # Command-line interface for subprocess calls
-    if len(sys.argv) < 2:
-        print(json_dumps({"error": "No command specified"}))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    if command == "load_catalog":
-        if len(sys.argv) < 4:
-            print(json_dumps({"error": "Missing arguments for load_catalog"}))
-            sys.exit(1)
-        catalog_path = sys.argv[2]
-        app_root = sys.argv[3]
-        result = load_catalog_data(catalog_path, app_root)
-        print(json_dumps(result))
-
-    elif command == "load_forecast":
-        if len(sys.argv) < 6:
-            print(json_dumps({"error": "Missing arguments for load_forecast"}))
-            sys.exit(1)
-        forecast_path = sys.argv[2]
-        app_root = sys.argv[3]
-        region_arg = sys.argv[4]
-        if Path(region_arg).exists():
-            with open(region_arg, 'r') as f:
-                region_data = json_loads(f.read())
-        else:
-            region_data = json_loads(region_arg)
-
-        is_catalog_fc = sys.argv[5].lower() == "true"
-        result = load_forecast_data(forecast_path, app_root, region_data, is_catalog_fc)
-        print(json_dumps(result))
-
-    else:
-        print(json_dumps({"error": f"Unknown command: {command}"}))
-        sys.exit(1)
+    sys.exit(main())

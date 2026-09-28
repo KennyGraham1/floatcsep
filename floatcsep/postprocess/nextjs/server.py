@@ -3,25 +3,46 @@
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
 
 from ..panel.manifest import build_manifest
-from .runtime import ensure_node_runtime, ensure_nextjs_dependencies
-from .schemas import ManifestModel
+from .runtime import NodeRuntime, ensure_node_runtime, ensure_nextjs_dependencies
+from .schemas import ManifestModel, finite_json
 
 logger = logging.getLogger(__name__)
 
+# Production builds get their own output directory, so running `next dev` (which
+# writes to `.next`) never mixes its artifacts into a production build.
+PROD_DIST_DIR = ".next-prod"
 
-def find_free_port() -> int:
+# Files and directories whose changes require a new production build.
+BUILD_INPUTS = (
+    "app",
+    "components",
+    "hooks",
+    "lib",
+    "public",
+    "next.config.js",
+    "package.json",
+    "package-lock.json",
+    "postcss.config.js",
+    "tailwind.config.ts",
+    "tsconfig.json",
+)
+
+
+def find_free_port(address: str = "localhost") -> int:
     """Find an available port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
+        s.bind((address, 0))
         s.listen(1)
         port = s.getsockname()[1]
     return port
@@ -69,7 +90,7 @@ def wait_for_server(address: str, port: int, timeout: int = 60) -> bool:
     while time.time() - start_time < timeout:
         try:
             req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 if response.status == 200:
                     logger.info("Server is fully ready!")
                     return True
@@ -87,13 +108,94 @@ def wait_for_server(address: str, port: int, timeout: int = 60) -> bool:
     return False
 
 
+def _newest_input_mtime(nextjs_dir: Path) -> float:
+    newest = 0.0
+    for name in BUILD_INPUTS:
+        path = nextjs_dir / name
+        if path.is_file():
+            newest = max(newest, path.stat().st_mtime)
+        elif path.is_dir():
+            for child in path.rglob("*"):
+                if child.is_file():
+                    newest = max(newest, child.stat().st_mtime)
+    return newest
+
+
+def _build_is_current(nextjs_dir: Path) -> bool:
+    build_id = nextjs_dir / PROD_DIST_DIR / "BUILD_ID"
+    return build_id.exists() and build_id.stat().st_mtime >= _newest_input_mtime(nextjs_dir)
+
+
+def _build_dashboard(nextjs_dir: Path, runtime: NodeRuntime, env: dict) -> bool:
+    """Create a production build. Returns False (and logs why) if it fails."""
+    logger.info("Building the dashboard (only needed after installing or updating)...")
+    result = subprocess.run(
+        [str(runtime.npm_path), "run", "build"],
+        cwd=nextjs_dir,
+        env={**env, "NEXT_DIST_DIR": PROD_DIST_DIR},
+    )
+    if result.returncode != 0:
+        logger.warning("Dashboard build failed (exit code %s).", result.returncode)
+        return False
+    return True
+
+
+def _raise_keyboard_interrupt(signum, frame):
+    raise KeyboardInterrupt
+
+
+def _stop_process_tree(process: subprocess.Popen) -> None:
+    """Stop npm and everything it started (npm does not forward signals reliably)."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        logger.warning("Server did not terminate gracefully, forcing shutdown...")
+        if os.name != "nt":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        process.kill()
+        process.wait()
+
+
+def _library_versions() -> dict:
+    versions = {}
+    try:
+        from floatcsep import __version__ as floatcsep_version
+
+        versions["FLOATCSEP_VERSION"] = str(floatcsep_version)
+    except Exception:  # pragma: no cover - version metadata is optional
+        pass
+    try:
+        import csep
+
+        versions["PYCSEP_VERSION"] = str(csep.__version__)
+    except Exception:  # pragma: no cover
+        pass
+    return versions
+
+
 def run_nextjs_app(
     experiment: Any,
     port: int = 0,
     address: str = "localhost",
     show: bool = True,
     title: Optional[str] = None,
-    mode: str = "dev",
+    mode: str = "auto",
 ) -> None:
     """
     Launch the Next.js dashboard for the experiment.
@@ -101,10 +203,12 @@ def run_nextjs_app(
     Args:
         experiment: Experiment instance
         port: Port number (0 = auto-select)
-        address: Host address
+        address: Host address. The server only listens on this address.
         show: Open browser automatically
         title: Window title (unused in Next.js)
-        mode: 'dev' or 'start' (production)
+        mode: 'auto' (production build, rebuilt when the dashboard sources change,
+            falling back to 'dev' if the build fails), 'start' (production) or
+            'dev' (development server with hot reload)
     """
     # Build manifest
     logger.info("Building experiment manifest...")
@@ -118,6 +222,7 @@ def run_nextjs_app(
 
     runtime = ensure_node_runtime(nextjs_dir)
     base_env = runtime.apply_to_env(os.environ)
+    base_env["NEXT_TELEMETRY_DISABLED"] = "1"
     # Ensure dependencies installed using the detected runtime
     ensure_nextjs_dependencies(
         nextjs_dir,
@@ -127,17 +232,22 @@ def run_nextjs_app(
 
     # Select port
     if port == 0:
-        port = find_free_port()
+        port = find_free_port(address)
 
     # Write manifest to cache for API access
-    manifest_path = nextjs_dir / ".cache" / "manifest.json"
-    manifest_path.parent.mkdir(exist_ok=True)
+    cache_dir = nextjs_dir / ".cache"
+    manifest_path = cache_dir / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Writing manifest to {manifest_path}...")
     try:
         with open(manifest_path, "w") as f:
             # Serialize using Pydantic
-            json.dump(manifest_model.model_dump(mode="json"), f, indent=2)
+            json.dump(
+                finite_json(manifest_model.model_dump(mode="json", by_alias=True)),
+                f,
+                allow_nan=False,
+            )
         logger.info(
             f"Manifest written successfully ({manifest_path.stat().st_size} bytes)"
         )
@@ -148,65 +258,78 @@ def run_nextjs_app(
     # Environment for the Next.js process
     env = base_env.copy()
     env["MANIFEST_PATH"] = str(manifest_path.absolute())
-    env["APP_ROOT"] = manifest.app_root
+    env["APP_ROOT"] = str(manifest.app_root)
     env["HOSTNAME"] = address
     env["PORT"] = str(port)
+    # The API routes parse catalogs and forecasts with this interpreter, which is
+    # the one floatCSEP runs in (a bare `python` on PATH may be another env).
+    env["FLOATCSEP_PYTHON"] = sys.executable
+    env["FLOATCSEP_DASHBOARD_CACHE"] = str(cache_dir / "data")
+    env.update(_library_versions())
+
+    mode = (mode or "auto").lower()
+    if mode in ("auto", "start"):
+        if _build_is_current(nextjs_dir) or _build_dashboard(nextjs_dir, runtime, env):
+            mode = "start"
+        else:
+            logger.warning("Falling back to the development server.")
+            mode = "dev"
+    if mode == "start":
+        env["NEXT_DIST_DIR"] = PROD_DIST_DIR
 
     # Construct command
-    cmd = [str(runtime.npm_path), "run", mode]
+    cmd = [str(runtime.npm_path), "run", mode, "--", "--port", str(port), "--hostname", address]
 
     logger.info(f"Starting Next.js dashboard at http://{address}:{port}")
     logger.info(f"Mode: {mode}")
     logger.debug(f"MANIFEST_PATH: {env['MANIFEST_PATH']}")
     logger.debug(f"APP_ROOT: {env['APP_ROOT']}")
 
-    # Start the Next.js server as a subprocess
+    # Start the Next.js server in its own process group, so that stopping it
+    # also stops the `next` process npm spawns (no orphaned server on the port).
+    group = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
     try:
-        # Start process without capturing output - let it inherit parent's stdout/stderr
-        # This prevents buffering issues and allows real-time output
-        process = subprocess.Popen(
-            cmd,
-            cwd=nextjs_dir,
-            env=env,
-        )
-
-        # Open browser after server is ready
-        if show:
-
-            def open_browser_when_ready():
-                logger.info("Waiting for server to be ready...")
-                if wait_for_server(address, port, timeout=30):
-                    logger.info(f"Opening browser at http://{address}:{port}")
-                    webbrowser.open(f"http://{address}:{port}")
-                else:
-                    logger.warning(
-                        "Server did not become ready in time. Browser not opened automatically."
-                    )
-
-            threading.Thread(target=open_browser_when_ready, daemon=True).start()
-
-        # Wait for the process to complete
-        try:
-            return_code = process.wait()
-            if return_code != 0:
-                logger.error(f"Next.js server exited with code {return_code}")
-                raise subprocess.CalledProcessError(return_code, cmd)
-        except KeyboardInterrupt:
-            logger.info("\nShutting down Next.js server...")
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                logger.warning(
-                    "Server did not terminate gracefully, forcing shutdown..."
-                )
-                process.kill()
-                process.wait()
-            logger.info("Server stopped.")
-
+        # Output is inherited (not captured) so the server logs appear in real time.
+        process = subprocess.Popen(cmd, cwd=nextjs_dir, env=env, **group)
     except FileNotFoundError:
         logger.error(f"Command not found: {cmd[0]}")
         raise
-    except Exception as e:
-        logger.error(f"Failed to start Next.js server: {e}")
-        raise
+
+    # Treat SIGTERM like Ctrl+C, so the cleanup below also runs when killed.
+    previous_handler = None
+    try:
+        previous_handler = signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
+    except ValueError:  # not in the main thread
+        pass
+
+    # Open browser after server is ready
+    if show:
+
+        def open_browser_when_ready():
+            logger.info("Waiting for server to be ready...")
+            if wait_for_server(address, port, timeout=120):
+                logger.info(f"Opening browser at http://{address}:{port}")
+                webbrowser.open(f"http://{address}:{port}")
+            else:
+                logger.warning(
+                    "Server did not become ready in time. Browser not opened automatically."
+                )
+
+        threading.Thread(target=open_browser_when_ready, daemon=True).start()
+
+    try:
+        return_code = process.wait()
+        if return_code != 0:
+            logger.error(f"Next.js server exited with code {return_code}")
+            raise subprocess.CalledProcessError(return_code, cmd)
+    except KeyboardInterrupt:
+        logger.info("\nShutting down Next.js server...")
+    finally:
+        _stop_process_tree(process)
+        if previous_handler is not None:
+            signal.signal(signal.SIGTERM, previous_handler)
+    logger.info("Server stopped.")

@@ -1,33 +1,28 @@
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
-import useSWR from 'swr';
-import { Manifest } from '../types';
+import { createContext, useContext, type ReactNode } from 'react';
+import useSWR, { type KeyedMutator } from 'swr';
+import { ApiError, fetchJson } from '../api';
+import type { Manifest } from '../types';
 
 interface ManifestContextType {
   manifest: Manifest | null;
   isLoading: boolean;
-  error: any;
+  error: ApiError | undefined;
+  reload: KeyedMutator<Manifest>;
 }
 
 const ManifestContext = createContext<ManifestContextType | undefined>(undefined);
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch manifest: ${res.status} ${res.statusText}`);
-  }
-  return res.json();
-};
-
 export function ManifestProvider({ children }: { children: ReactNode }) {
-  const { data, error, isLoading } = useSWR<Manifest>('/api/manifest', fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<Manifest, ApiError>('/api/manifest', fetchJson, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
+    shouldRetryOnError: false,
   });
 
   return (
-    <ManifestContext.Provider value={{ manifest: data || null, isLoading, error }}>
+    <ManifestContext.Provider value={{ manifest: data ?? null, isLoading, error, reload: mutate }}>
       {children}
     </ManifestContext.Provider>
   );
@@ -39,4 +34,11 @@ export function useManifest() {
     throw new Error('useManifest must be used within ManifestProvider');
   }
   return context;
+}
+
+/** For pages rendered by AppShell, which only renders them once the manifest loaded. */
+export function useLoadedManifest(): Manifest {
+  const { manifest } = useManifest();
+  if (!manifest) throw new Error('The experiment manifest is not loaded');
+  return manifest;
 }

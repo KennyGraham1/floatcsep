@@ -1,3 +1,63 @@
+/**
+ * Data shapes shared by the API routes and the pages.
+ *
+ * The manifest served by /api/manifest is a normalized version of the file that
+ * `floatcsep view` writes (see lib/server/manifest.ts): paths are relative to the
+ * experiment's results directory and only files that exist are listed.
+ */
+
+export interface Region {
+  name: string | null;
+  /** [west, south, east, north] in degrees. */
+  bbox: [number, number, number, number] | null;
+  dh: number | null;
+  /** Lower-left corners of the grid cells, as [lon, lat]. */
+  origins: [number, number][] | null;
+}
+
+export interface Model {
+  name: string;
+  forecast_unit: string | null;
+  path: string | null;
+  giturl: string | null;
+  git_hash: string | null;
+  zenodo_id: string | number | null;
+  authors: string | null;
+  doi: string | null;
+  func: string | null;
+  func_kwargs: Record<string, unknown> | null;
+  fmt: string | null;
+  forecast_class: string | null;
+  is_catalog_forecast: boolean;
+  /** Forecast file per time window (same order as `time_windows`), or null. */
+  forecasts: (string | null)[];
+  /** Whether each forecast file exists on disk. */
+  forecast_available: boolean[];
+}
+
+export interface Test {
+  name: string;
+  func: string | null;
+  func_kwargs: Record<string, unknown> | null;
+  ref_model: string | null;
+  plot_func: string[];
+  plot_args: unknown;
+  plot_kwargs: unknown;
+}
+
+/** A result figure. `model` is null for the test's summary figure. */
+export interface ResultFigure {
+  window: number;
+  test: string;
+  model: string | null;
+  path: string;
+}
+
+export interface CatalogInfo {
+  path: string | null;
+  available: boolean;
+}
+
 export interface Manifest {
   name: string;
   start_date: string;
@@ -12,18 +72,15 @@ export interface Manifest {
   last_run: string | null;
   catalog_doi: string | null;
   license: string | null;
-  date_range: string;
   magnitudes: number[];
   region: Region | null;
   models: Model[];
   tests: Test[];
   time_windows: string[];
   catalog: CatalogInfo;
-  results_main: Record<string, string>;
-  results_model: Record<string, string>;
-  app_root: string;
-  exp_class: string;
-  n_intervals: number;
+  results: ResultFigure[];
+  exp_class: string | null;
+  n_intervals: number | null;
   horizon: string | null;
   offset: string | null;
   growth: string | null;
@@ -39,72 +96,49 @@ export interface Manifest {
   test_config: string | null;
 }
 
-export interface Region {
-  name: string | null;
-  bbox: [number, number, number, number] | null; // [west, south, east, north]
-  dh: number | null;
-  origins: [number, number][] | null;
-}
-
-export interface Model {
-  name: string;
-  forecast_unit: string | null;
-  path: string | null;
-  giturl: string | null;
-  git_hash: string | null;
-  zenodo_id: string | null;
-  authors: string | null;
-  doi: string | null;
-  func: string | null;
-  func_kwargs: Record<string, any> | null;
-  fmt: string | null;
-  forecasts: Record<string, string>;
-  forecast_class: string;
-  forecast_paths?: string[] | null;
-  is_catalog_forecast?: boolean;
-}
-
-export interface Test {
-  name: string;
-  func: string | null;
-  func_kwargs: Record<string, any> | null;
-  ref_model: string | null;
-  plot_func: string | null;
-  plot_args: any[] | null;
-  plot_kwargs: Record<string, any> | null;
-  type?: string | null;
-  percentile?: number | null;
-}
-
-export interface CatalogInfo {
-  path?: string;
-  map?: string;
-  time?: string;
-}
-
-export interface CatalogEvent {
-  lon: number;
-  lat: number;
-  magnitude: number;
-  time: string;
-  event_id: string;
-  category?: 'input' | 'test';
-}
-
-export interface CatalogData {
-  events: CatalogEvent[];
+/** Observed catalog, column-oriented. `time` is epoch milliseconds (UTC). */
+export interface CatalogPayload {
+  version: number;
   count: number;
-  bbox: [number, number, number, number] | null;
+  lon: number[];
+  lat: number[];
+  mag: number[];
+  depth: (number | null)[];
+  time: number[];
+  id: string[];
 }
 
-export interface ForecastCell {
-  lon: number;
-  lat: number;
-  rate: number;
-}
-
-export interface ForecastData {
-  cells: ForecastCell[];
+/**
+ * Expected rates of one forecast. Cells with a positive rate are listed by their
+ * integer grid position (`ix`, `iy`) on a regular grid of spacing `dh` whose
+ * lower-left cell corner is (`lon0`, `lat0`).
+ */
+export interface ForecastPayload {
+  version: number;
+  kind: 'gridded' | 'catalog';
+  model: string;
+  time_window: string;
+  path: string;
+  dh: number;
+  lon0: number;
+  lat0: number;
+  nx: number;
+  ny: number;
+  n_cells: number;
+  n_active: number;
+  ix: number[];
+  iy: number[];
+  rate: number[];
+  total: number;
+  /** log10 of the smallest / largest positive cell rate. */
   vmin: number;
   vmax: number;
+  magnitudes: (number | null)[];
+  magnitude_rates: number[];
+  n_catalogs: number | null;
+}
+
+export interface ApiErrorBody {
+  error: string;
+  details?: string;
 }

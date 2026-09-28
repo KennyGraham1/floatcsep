@@ -1,284 +1,311 @@
 'use client';
 
-import { useManifest } from '@/lib/contexts/ManifestContext';
-import { useState, useMemo } from 'react';
-
-import { safeRender } from '@/lib/utils';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FileChartColumn, Maximize2 } from 'lucide-react';
+import { Suspense, useMemo, useState } from 'react';
+import { FilterBar, PageHeader } from '@/components/layout/PageHeader';
+import { shortFunctionName } from '@/components/overview/TestsTable';
+import { CoverageMatrix } from '@/components/results/CoverageMatrix';
+import { FigureImage } from '@/components/results/FigureImage';
+import { Badge } from '@/components/ui/Badge';
+import { Button, LinkButton } from '@/components/ui/Button';
+import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+import { DefinitionList } from '@/components/ui/DefinitionList';
+import { Lightbox, type LightboxItem } from '@/components/ui/Lightbox';
+import { Select } from '@/components/ui/Select';
+import { EmptyState, Skeleton } from '@/components/ui/States';
+import { useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
+import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
+import { pluralize } from '@/lib/format';
+import { formatDate, parseTimeWindows } from '@/lib/time';
+import type { ResultFigure, Test } from '@/lib/types';
+import { figureUrl } from '@/lib/utils';
 
 export default function ResultsPage() {
-  const { manifest, isLoading: manifestLoading } = useManifest();
-  const [selectedTimeWindowIndex, setSelectedTimeWindowIndex] = useState<number>(0);
-  const [selectedTestIndex, setSelectedTestIndex] = useState<number>(0);
-  const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState<boolean>(false);
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}>
+      <ResultsView />
+    </Suspense>
+  );
+}
 
-  // Get selected items
-  const selectedTest = manifest?.tests?.[selectedTestIndex] || null;
-  const selectedModel = manifest?.models?.[selectedModelIndex] || null;
-  const selectedTimeWindow = manifest?.time_windows?.[selectedTimeWindowIndex] || null;
+function isEmptyValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.every(isEmptyValue);
+  if (typeof value === 'object') return Object.keys(value as object).length === 0;
+  return false;
+}
 
-  // Look up image path from manifest's results_model dictionary
-  // The manifest maps (time_window|test|model) -> actual file path
-  const imagePath = useMemo(() => {
-    if (!manifest || !selectedTest || !selectedModel || selectedTimeWindow === null) return null;
+/** Pretty-printed JSON, or null (so the definition row is hidden) when empty. */
+function jsonBlock(value: unknown) {
+  if (isEmptyValue(value)) return null;
+  return (
+    <pre className="scrollbar-thin max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-surface-2 px-2.5 py-2 font-mono text-2xs leading-4 text-ink-2">
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
 
-    const testName = selectedTest.name;
-    const modelName = selectedModel.name;
+function TestDetails({ test }: { test: Test }) {
+  return (
+    <DefinitionList
+      layout="stacked"
+      items={[
+        {
+          label: 'Evaluation',
+          value: test.func && (
+            <code className="text-xs text-ink-2" title={test.func}>
+              {/* Allow line breaks after dots in long dotted names. */}
+              {shortFunctionName(test.func)?.replace(/\./g, '.\u200b')}
+            </code>
+          ),
+        },
+        { label: 'Reference model', value: test.ref_model },
+        { label: 'Arguments', value: jsonBlock(test.func_kwargs) },
+        {
+          label: 'Plot functions',
+          value: test.plot_func.length > 0 && (
+            <span className="text-xs text-ink-2">{test.plot_func.map((f) => f.split('.').pop()).join(', ')}</span>
+          ),
+        },
+        { label: 'Plot arguments', value: jsonBlock(test.plot_args) },
+      ]}
+    />
+  );
+}
 
-    // Build the lookup key: "time_window|test_name|model_name"
-    const lookupKey = `${selectedTimeWindow}|${testName}|${modelName}`;
+function ResultsView() {
+  const manifest = useLoadedManifest();
+  const { params, set } = useQueryState();
+  const windows = useMemo(() => parseTimeWindows(manifest.time_windows), [manifest.time_windows]);
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
-    // Check if we have a per-model result
-    if (manifest.results_model && manifest.results_model[lookupKey]) {
-      const relativePath = manifest.results_model[lookupKey];
-      return `/api/results/${relativePath}`;
+  const { byKey, counts, testsWithFigures } = useMemo(() => {
+    const byKey = new Map<string, { summary: ResultFigure | null; models: ResultFigure[] }>();
+    const counts = new Map<string, number>();
+    for (const figure of manifest.results) {
+      const key = `${figure.window}|${figure.test}`;
+      const entry = byKey.get(key) ?? { summary: null, models: [] };
+      if (figure.model === null) entry.summary = figure;
+      else entry.models.push(figure);
+      byKey.set(key, entry);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
+    // Keep the manifest's model order for per-model figures.
+    const order = new Map(manifest.models.map((m, i) => [m.name, i]));
+    byKey.forEach((entry) => entry.models.sort((a, b) => (order.get(a.model!) ?? 0) - (order.get(b.model!) ?? 0)));
+    const testsWithFigures = new Set(manifest.results.map((f) => f.test));
+    return { byKey, counts, testsWithFigures };
+  }, [manifest.results, manifest.models]);
 
-    // Fall back to main results (test-level, not per-model)
-    const mainKey = `${selectedTimeWindow}|${testName}`;
-    if (manifest.results_main && manifest.results_main[mainKey]) {
-      const relativePath = manifest.results_main[mainKey];
-      return `/api/results/${relativePath}`;
-    }
-
-    return null;
-  }, [manifest, selectedTest, selectedModel, selectedTimeWindow]);
-
-  if (manifestLoading) {
+  if (manifest.results.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading manifest...</p>
-        </div>
-      </div>
+      <>
+        <PageHeader title="Results" description="Evaluation figures of the experiment." />
+        <Card>
+          <EmptyState
+            icon={FileChartColumn}
+            title="No result figures yet"
+            description={
+              <>
+                Evaluation figures appear here once the experiment has run. Create them with{' '}
+                <code className="text-ink-2">floatcsep run config.yml</code> or{' '}
+                <code className="text-ink-2">floatcsep plot config.yml</code>.
+              </>
+            }
+          />
+        </Card>
+      </>
     );
   }
 
-  if (!manifest || !manifest.tests || manifest.tests.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <p className="text-gray-400">No test results available</p>
-      </div>
-    );
-  }
+  const tests = manifest.tests.length > 0 ? manifest.tests : Array.from(testsWithFigures, (name) => ({ name }) as Test);
+  const defaultTest = tests.find((t) => testsWithFigures.has(t.name))?.name ?? tests[0].name;
+  const testName = tests.some((t) => t.name === params.get('test')) ? params.get('test')! : defaultTest;
+  const test = tests.find((t) => t.name === testName)!;
+
+  // Default to the latest window with figures for this test (e.g. cumulative tests).
+  let latest = 0;
+  windows.forEach((w) => {
+    if (counts.has(`${w.index}|${testName}`)) latest = w.index;
+  });
+  const windowIndex = windowIndexFromParam(params.get('window'), windows.length, latest);
+  const window = windows[windowIndex];
+  const entry = byKey.get(`${windowIndex}|${testName}`) ?? { summary: null, models: [] };
+
+  const items: LightboxItem[] = [
+    ...(entry.summary ? [entry.summary] : []),
+    ...entry.models,
+  ].map((figure) => ({
+    src: figureUrl(figure.path),
+    downloadHref: figureUrl(figure.path, true),
+    title: figure.model ? `${testName} · ${figure.model}` : testName,
+    subtitle: `${window.label} · ${formatDate(window.start)} → ${formatDate(window.end)}`,
+  }));
+
+  const selectWindow = (index: number) => set({ window: index + 1 });
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      {/* Left Column: Selectors */}
-      <div className="lg:col-span-1 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold mb-1">Results</h1>
-          <p className="text-sm text-gray-400">Evaluation test results</p>
-        </div>
+    <>
+      <PageHeader
+        title="Results"
+        description="Figures produced by the evaluation tests. Click a figure to enlarge it."
+      />
 
-        {/* Time Window Selector */}
-        <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
-          <h2 className="text-lg font-semibold">Time Window</h2>
-          <select
-            value={selectedTimeWindowIndex}
-            onChange={(e) => {
-              setSelectedTimeWindowIndex(Number(e.target.value));
-              setImageError(null);
-            }}
-            className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {manifest.time_windows.map((tw, idx) => (
-              <option key={idx} value={idx}>
-                T{idx + 1}: {tw}
-              </option>
-            ))}
-          </select>
-        </div>
+      <FilterBar>
+        <Select
+          label="Test"
+          className="w-full sm:w-64"
+          value={testName}
+          onChange={(value) => set({ test: value })}
+          options={tests.map((t) => ({
+            value: t.name,
+            label: testsWithFigures.has(t.name) ? t.name : `${t.name} (no figures)`,
+          }))}
+        />
+        <Select
+          label="Time window"
+          className="w-full sm:w-[22rem]"
+          value={String(windowIndex)}
+          onChange={(value) => selectWindow(Number(value))}
+          options={windows.map((w) => ({
+            value: String(w.index),
+            label: `${w.label} · ${formatDate(w.start)} → ${formatDate(w.end)}${counts.has(`${w.index}|${testName}`) ? '' : ' (no figures)'}`,
+          }))}
+          addon={
+            <>
+              <Button
+                size="icon"
+                className="size-9"
+                aria-label="Previous time window"
+                disabled={windowIndex === 0}
+                onClick={() => selectWindow(windowIndex - 1)}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                size="icon"
+                className="size-9"
+                aria-label="Next time window"
+                disabled={windowIndex >= windows.length - 1}
+                onClick={() => selectWindow(windowIndex + 1)}
+              >
+                <ChevronRight />
+              </Button>
+            </>
+          }
+        />
+      </FilterBar>
 
-        {/* Test Selector */}
-        <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
-          <h2 className="text-lg font-semibold">Test</h2>
-          <select
-            value={selectedTestIndex}
-            onChange={(e) => {
-              setSelectedTestIndex(Number(e.target.value));
-              setImageError(null);
-            }}
-            className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {manifest.tests.map((test, idx) => (
-              <option key={idx} value={idx}>
-                {test.name}
-              </option>
-            ))}
-          </select>
-
-          {selectedTest && (
-            <div className="text-xs text-gray-400 space-y-1 pt-2">
-              {selectedTest.type && (
-                <p>
-                  <span className="font-semibold">Type:</span> {safeRender(selectedTest.type)}
-                </p>
-              )}
-              {selectedTest.percentile && (
-                <p>
-                  <span className="font-semibold">Percentile:</span> {safeRender(selectedTest.percentile)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Model Selector */}
-        <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
-          <h2 className="text-lg font-semibold">Model</h2>
-          <select
-            value={selectedModelIndex}
-            onChange={(e) => {
-              setSelectedModelIndex(Number(e.target.value));
-              setImageError(null);
-            }}
-            className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            {manifest.models.map((model, idx) => (
-              <option key={idx} value={idx}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-
-          {selectedModel && (
-            <div className="text-xs text-gray-400 space-y-1 pt-2">
-              {selectedModel.zenodo_id && (
-                <p>
-                  <span className="font-semibold">Zenodo:</span>{' '}
-                  <code className="bg-background px-1 py-0.5 rounded">{selectedModel.zenodo_id}</code>
-                </p>
-              )}
-              {selectedModel.doi && (
-                <p>
-                  <span className="font-semibold">DOI:</span>{' '}
-                  <a
-                    href={`https://doi.org/${selectedModel.doi}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {selectedModel.doi}
-                  </a>
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Test Metadata */}
-        {selectedTest && (
-          <div className="bg-surface p-6 rounded-lg border border-border space-y-3">
-            <h3 className="text-sm font-semibold">Test Details</h3>
-            <div className="space-y-2 text-xs text-gray-400">
-              <p>
-                <span className="font-semibold">Name:</span>{' '}
-                {safeRender(selectedTest.name)}
-              </p>
-              {selectedTest.type && (
-                <p>
-                  <span className="font-semibold">Type:</span>{' '}
-                  {safeRender(selectedTest.type)}
-                </p>
-              )}
-              {selectedTest.func && safeRender(selectedTest.func) && (
-                <p>
-                  <span className="font-semibold">Function:</span>{' '}
-                  <code className="bg-background px-1 py-0.5 rounded text-xs">
-                    {safeRender(selectedTest.func)}
-                  </code>
-                </p>
-              )}
-              {selectedTest.plot_func && safeRender(selectedTest.plot_func) && (
-                <p>
-                  <span className="font-semibold">Plot function:</span>{' '}
-                  <code className="bg-background px-1 py-0.5 rounded text-xs">
-                    {safeRender(selectedTest.plot_func)}
-                  </code>
-                </p>
-              )}
-              {selectedTest.percentile && (
-                <p>
-                  <span className="font-semibold">Percentile:</span>{' '}
-                  {safeRender(selectedTest.percentile)}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Right Column: Result Image */}
-      <div className="lg:col-span-3 space-y-6">
-        <div className="bg-surface p-6 rounded-lg border border-border">
-          <h2 className="text-lg font-semibold mb-4">
-            {selectedTest?.name} - {selectedModel?.name}
-          </h2>
-
-          {imagePath && (
-            <div className="relative w-full bg-background rounded-lg overflow-hidden">
-              {imageLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                    <p className="text-gray-400">Loading result image...</p>
-                  </div>
-                </div>
-              )}
-
-              {imageError && (
-                <div className="flex items-center justify-center min-h-[400px] p-8">
-                  <div className="text-center text-red-400">
-                    <p className="text-xl font-semibold mb-2">Error loading result</p>
-                    <p className="text-sm">{imageError}</p>
-                    <p className="text-xs text-gray-500 mt-4">
-                      Expected path: {imagePath}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {!imageError && (
-                <img
-                  src={imagePath}
-                  alt={`${selectedTest?.name} - ${selectedModel?.name}`}
-                  className="w-full h-auto"
-                  onLoadStart={() => setImageLoading(true)}
-                  onLoad={() => {
-                    setImageLoading(false);
-                    setImageError(null);
-                  }}
-                  onError={() => {
-                    setImageLoading(false);
-                    setImageError('Result image not found. The test may not have been run yet.');
-                  }}
+      <div className="grid gap-5 xl:grid-cols-12">
+        <div className="flex min-w-0 flex-col gap-5 xl:col-span-8">
+          <Card>
+            <CardHeader
+              title={`${testName} · ${window.label}`}
+              description={
+                entry.summary
+                  ? `Summary figure · ${formatDate(window.start)} → ${formatDate(window.end)}`
+                  : `${formatDate(window.start)} → ${formatDate(window.end)}`
+              }
+              actions={
+                entry.summary && (
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => setLightbox(0)}>
+                      <Maximize2 /> Expand
+                    </Button>
+                    <LinkButton size="sm" variant="ghost" href={figureUrl(entry.summary.path)} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink /> Open
+                    </LinkButton>
+                    <LinkButton size="sm" variant="ghost" href={figureUrl(entry.summary.path, true)}>
+                      <Download /> Download
+                    </LinkButton>
+                  </>
+                )
+              }
+            />
+            <CardBody>
+              {entry.summary ? (
+                <FigureImage
+                  key={entry.summary.path}
+                  src={figureUrl(entry.summary.path)}
+                  alt={`${testName} result for ${window.label}`}
+                  onOpen={() => setLightbox(0)}
+                  className="mx-auto max-w-4xl"
+                />
+              ) : (
+                <EmptyState
+                  icon={FileChartColumn}
+                  title="No summary figure"
+                  description={
+                    entry.models.length > 0
+                      ? 'This test only has per-model figures for this window (below).'
+                      : `${testName} has no figures for ${window.label}. Pick a highlighted cell in the coverage chart.`
+                  }
                 />
               )}
-            </div>
-          )}
+            </CardBody>
+          </Card>
 
-          {!imagePath && (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center text-gray-400">
-                <p className="mb-2">No result image available for this combination</p>
-                <p className="text-xs">
-                  This test may not have been run for the selected model and time window.
-                </p>
-              </div>
-            </div>
+          {entry.models.length > 0 && (
+            <Card>
+              <CardHeader
+                title="Per-model figures"
+                description={`${pluralize(entry.models.length, 'figure')} for ${window.label}`}
+              />
+              <CardBody>
+                <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+                  {entry.models.map((figure, k) => {
+                    const index = (entry.summary ? 1 : 0) + k;
+                    return (
+                      <figure key={figure.path} className="min-w-0">
+                        <FigureImage
+                          src={figureUrl(figure.path)}
+                          alt={`${testName} result of ${figure.model} for ${window.label}`}
+                          onOpen={() => setLightbox(index)}
+                        />
+                        <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs">
+                          <span className="truncate font-medium text-ink">{figure.model}</span>
+                          <a href={figureUrl(figure.path, true)} className="link shrink-0 text-ink-3" aria-label={`Download ${figure.model} figure`}>
+                            Download
+                          </a>
+                        </figcaption>
+                      </figure>
+                    );
+                  })}
+                </div>
+              </CardBody>
+            </Card>
           )}
         </div>
 
-        <div className="text-xs text-gray-400">
-          <p>
-            <span className="font-semibold">Note:</span> Result images are generated by floatCSEP evaluation tests.
-            If an image is not found, the test may not have been run for this combination.
-          </p>
+        <div className="flex min-w-0 flex-col gap-5 xl:col-span-4">
+          <Card>
+            <CardHeader
+              title="Test details"
+              description={test.func ? undefined : 'Configuration of the evaluation'}
+              actions={testsWithFigures.has(testName) ? <Badge tone="info">{pluralize(manifest.results.filter((f) => f.test === testName).length, 'figure')}</Badge> : undefined}
+            />
+            <CardBody>
+              <TestDetails test={test} />
+            </CardBody>
+          </Card>
+          {windows.length > 1 && (
+            <Card>
+              <CardHeader title="Coverage" description="Figures available per test and time window" />
+              <CardBody>
+                <CoverageMatrix
+                  tests={tests.map((t) => t.name)}
+                  windows={windows}
+                  counts={counts}
+                  selected={{ test: testName, window: windowIndex }}
+                  onSelect={(t, w) => set({ test: t, window: w + 1 })}
+                />
+              </CardBody>
+            </Card>
+          )}
         </div>
       </div>
-    </div>
+
+      <Lightbox items={items} index={lightbox} onIndexChange={setLightbox} />
+    </>
   );
 }

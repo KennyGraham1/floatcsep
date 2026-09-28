@@ -1,65 +1,72 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
+import fs from 'fs/promises';
 import path from 'path';
+import { NextResponse, type NextRequest } from 'next/server';
+import { errorResponse, HttpError, notModified } from '@/lib/server/http';
+import { loadManifest, resolveFromRoot } from '@/lib/server/manifest';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { path: string[] } }
-) {
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+const CONTENT_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+};
+
+function safeDecode(segment: string): string {
   try {
-    const appRoot = process.env.APP_ROOT || '.';
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
 
-    // Reconstruct file path from params
-    // Note: paths from manifest already include 'results/', so don't add it again
-    const filePath = path.join(appRoot, ...params.path);
+/** A result figure. Only files listed in the manifest are served. */
+export async function GET(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  try {
+    const { path: segments } = await context.params;
+    const { appRoot, figures } = await loadManifest();
 
-    // Security check: ensure path is within app root
-    const resolvedPath = path.resolve(filePath);
-    const resolvedRoot = path.resolve(appRoot);
-
-    if (!resolvedPath.startsWith(resolvedRoot)) {
-      return NextResponse.json(
-        { error: 'Invalid file path' },
-        { status: 403 }
-      );
-    }
-
-    // Read file
-    const fileBuffer = await readFile(resolvedPath);
-
-    // Determine content type based on extension
-    const ext = path.extname(resolvedPath).toLowerCase();
-    let contentType = 'application/octet-stream';
-
-    if (ext === '.png') {
-      contentType = 'image/png';
-    } else if (ext === '.jpg' || ext === '.jpeg') {
-      contentType = 'image/jpeg';
-    } else if (ext === '.svg') {
-      contentType = 'image/svg+xml';
-    } else if (ext === '.pdf') {
-      contentType = 'application/pdf';
-    }
-
-    return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
-      },
-    });
-  } catch (error: any) {
-    console.error('Error reading result file:', error);
-
-    if (error.code === 'ENOENT') {
-      return NextResponse.json(
-        { error: 'File not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to read result file', details: String(error) },
-      { status: 500 }
+    const candidates = [segments.join('/'), segments.map(safeDecode).join('/')].map((p) =>
+      path.posix.normalize(p),
     );
+    const relative = candidates.find((p) => figures.has(p));
+    if (!relative) throw new HttpError(404, 'Figure not found');
+
+    const file = resolveFromRoot(appRoot, relative);
+    let stat;
+    try {
+      stat = await fs.stat(file);
+    } catch {
+      throw new HttpError(404, 'Figure not found');
+    }
+
+    const etag = `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
+    const cachedResponse = notModified(request, etag);
+    if (cachedResponse) return cachedResponse;
+
+    const extension = path.extname(file).toLowerCase();
+    const headers: Record<string, string> = {
+      'Content-Type': CONTENT_TYPES[extension] ?? 'application/octet-stream',
+      'Cache-Control': 'private, no-cache',
+      'Last-Modified': stat.mtime.toUTCString(),
+      'X-Content-Type-Options': 'nosniff',
+      ETag: etag,
+    };
+    if (extension === '.svg') {
+      headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+    }
+    if (request.nextUrl.searchParams.has('download')) {
+      const name = path.basename(file).replace(/"/g, '');
+      headers['Content-Disposition'] = `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(file))}`;
+    }
+
+    return new NextResponse(await fs.readFile(file), { headers });
+  } catch (error) {
+    return errorResponse(error);
   }
 }

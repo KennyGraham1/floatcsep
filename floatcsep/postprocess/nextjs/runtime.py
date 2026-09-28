@@ -1,5 +1,6 @@
 """Node.js runtime management for floatCSEP Next.js dashboard."""
 
+import hashlib
 import logging
 import os
 import platform
@@ -16,8 +17,13 @@ from urllib import request
 
 logger = logging.getLogger(__name__)
 
-MIN_NODE_VERSION = (18, 17, 0)
-BUNDLED_NODE_VERSION = "20.11.1"
+# Next.js 15 requires Node.js >= 18.18. The bundled fallback is the current LTS line.
+MIN_NODE_VERSION = (18, 18, 0)
+BUNDLED_NODE_VERSION = "24.21.0"
+
+# Written into node_modules after a successful install; holds a hash of the
+# dependency manifests so a changed package.json triggers a reinstall.
+INSTALL_STAMP = ".floatcsep-install-stamp"
 
 
 @dataclass
@@ -109,7 +115,10 @@ def _extract_node_archive(archive: Path, destination: Path) -> Path:
     else:
         # Handles .tar.xz
         with tarfile.open(archive, mode="r:*") as tf:
-            tf.extractall(destination)
+            try:
+                tf.extractall(destination, filter="data")
+            except TypeError:  # Python without extraction filters
+                tf.extractall(destination)
     # Find the extracted directory (node-vXX-<platform>)
     for child in destination.iterdir():
         if child.is_dir() and child.name.startswith(f"node-v{BUNDLED_NODE_VERSION}"):
@@ -165,17 +174,32 @@ def ensure_node_runtime(nextjs_dir: Path) -> NodeRuntime:
     return ensure_bundled_node(nextjs_dir)
 
 
+def _dependency_hash(nextjs_dir: Path) -> str:
+    digest = hashlib.sha256()
+    for name in ("package.json", "package-lock.json"):
+        path = nextjs_dir / name
+        if path.exists():
+            digest.update(name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def ensure_nextjs_dependencies(
     nextjs_dir: Path, npm_cmd: List[str], env: dict
 ) -> None:
-    """Install Node dependencies if needed."""
+    """Install Node dependencies if missing or out of date with package.json."""
     node_modules = nextjs_dir / "node_modules"
-    if node_modules.exists():
+    stamp = node_modules / INSTALL_STAMP
+    wanted = _dependency_hash(nextjs_dir)
+    if stamp.exists() and stamp.read_text().strip() == wanted:
         return
-    logger.info("Installing Next.js dependencies (this may take a few minutes)...")
+    if node_modules.exists():
+        logger.info("Dashboard dependencies changed, updating them...")
+    else:
+        logger.info("Installing Next.js dependencies (this may take a few minutes)...")
     try:
         subprocess.run(
-            npm_cmd + ["install"],
+            npm_cmd + ["install", "--no-audit", "--no-fund"],
             cwd=nextjs_dir,
             check=True,
             env=env,
@@ -186,3 +210,5 @@ def ensure_nextjs_dependencies(
             "Could not install Next.js dependencies automatically. "
             "Please ensure network access is available or install them manually."
         )
+    # npm may rewrite package-lock.json, so hash again after installing.
+    stamp.write_text(_dependency_hash(nextjs_dir))
