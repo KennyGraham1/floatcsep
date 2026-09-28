@@ -69,8 +69,14 @@ export default function CatalogMap({ catalog, indices, height, fallbackBounds }:
     return L.latLngBounds([s, w], [n, e]).pad(0.02);
   }, [catalog, indices, summary.unwrap, fallbackBounds]);
 
-  const radiusFor = useMemo(() => magnitudeRadius(Number.isFinite(summary.minMag) ? summary.minMag : 0), [summary.minMag]);
-  const colorFor = useCallback((i: number) => (catalog.kind[i] === INPUT ? colors.input : colors.test), [catalog, colors]);
+  const radiusFor = useMemo(
+    () => magnitudeRadius(Number.isFinite(summary.minMag) ? summary.minMag : 0),
+    [summary.minMag],
+  );
+  const colorFor = useCallback(
+    (i: number) => (catalog.kind[i] === INPUT ? colors.input : colors.test),
+    [catalog, colors],
+  );
   const tooltip = useCallback((i: number) => eventTooltip(catalog, i), [catalog]);
 
   const sizeSteps = useMemo(() => {

@@ -237,6 +237,9 @@ class CondaManager(EnvironmentManager):
             force (bool): Whether to forcefully remove an existing environment.
         """
         build = self._build_exe()
+        # `conda env create/update` reject -y/--yes on older conda (e.g. 23.1), so
+        # auto-confirm through the environment instead to support older versions.
+        yes_env = {**os.environ, "CONDA_ALWAYS_YES": "true", "MAMBA_ALWAYS_YES": "true"}
 
         if force and self.env_exists():
             log.info(f"Removing existing env: {self.env_name}")
@@ -259,10 +262,11 @@ class CondaManager(EnvironmentManager):
             if has_python_key:
                 log.info(f"Creating env {self.env_name} from environment.yml")
                 p = subprocess.Popen(
-                    [build, "env", "create", "-n", self.env_name, "-f", env_file, "-y"],
+                    [build, "env", "create", "-n", self.env_name, "-f", env_file],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     universal_newlines=True,
+                    env=yes_env,
                 )
             else:
                 log.info(f"Creating env {self.env_name} with python={py_spec}")
@@ -272,10 +276,11 @@ class CondaManager(EnvironmentManager):
 
                 log.info(f"Updating env {self.env_name} from environment.yml")
                 p = subprocess.Popen(
-                    [build, "env", "update", "-n", self.env_name, "-f", env_file, "-y"],
+                    [build, "env", "update", "-n", self.env_name, "-f", env_file],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     universal_newlines=True,
+                    env=yes_env,
                 )
         else:
             log.info(f"Creating env {self.env_name} with python={py_spec}")

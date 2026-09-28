@@ -34,7 +34,9 @@ export function Slider({ label, min, max, step, value, onChange, formatValue = S
         value={value}
         aria-valuetext={formatValue(value)}
         onChange={(event) => onChange(Number(event.target.value))}
-        style={{ background: `linear-gradient(to right, rgb(var(--ink) / 0.7) ${percent}%, rgb(var(--surface-3)) ${percent}%)` }}
+        style={{
+          background: `linear-gradient(to right, rgb(var(--ink) / 0.7) ${percent}%, rgb(var(--surface-3)) ${percent}%)`,
+        }}
         className={cn(
           'h-1 w-full cursor-pointer appearance-none rounded-full',
           '[&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full',

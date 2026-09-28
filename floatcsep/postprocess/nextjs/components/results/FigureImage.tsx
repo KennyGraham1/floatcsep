@@ -21,7 +21,10 @@ export function FigureImage({ src, alt, onOpen, className, aspect = 4 / 3 }: Fig
   if (state === 'error') {
     return (
       <div
-        className={cn('flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-surface-2 text-xs text-ink-3', className)}
+        className={cn(
+          'flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-surface-2 text-xs text-ink-3',
+          className,
+        )}
         style={{ aspectRatio: aspect }}
       >
         <ImageOff className="size-5" aria-hidden />

@@ -1,0 +1,32 @@
+name: Global M7.45+ forecasts on quadtree grids
+
+time_config:
+  # Eight annual windows, then the whole eight-year testing period.
+  time_windows:
+    - [2014-01-01T00:00:00, 2015-01-01T00:00:00]
+    - [2015-01-01T00:00:00, 2016-01-01T00:00:00]
+    - [2016-01-01T00:00:00, 2017-01-01T00:00:00]
+    - [2017-01-01T00:00:00, 2018-01-01T00:00:00]
+    - [2018-01-01T00:00:00, 2019-01-01T00:00:00]
+    - [2019-01-01T00:00:00, 2020-01-01T00:00:00]
+    - [2020-01-01T00:00:00, 2021-01-01T00:00:00]
+    - [2021-01-01T00:00:00, 2022-01-01T00:00:00]
+    - [2014-01-01T00:00:00, 2022-01-01T00:00:00]
+
+region_config:
+  # No fixed region: each forecast is evaluated on its own quadtree grid,
+  # a multi-resolution Web Mercator tiling of the globe (latitudes up to ±85.05°).
+  mag_min: 7.45
+  mag_max: 8.95
+  mag_bin: 0.1
+  depth_min: 0
+  depth_max: 70
+
+catalog: catalog.csv
+models: models.yml
+test_config: tests.yml
+
+postprocess:
+  plot_forecasts: False
+  # Same-grid paired T-tests and the summary figures (see custom_plots.py).
+  plot_custom: custom_plots.py:main

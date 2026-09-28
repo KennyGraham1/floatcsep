@@ -13,6 +13,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { DataTable } from '@/components/ui/DataTable';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { RangeSlider } from '@/components/ui/RangeSlider';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { Slider } from '@/components/ui/Slider';
 import { StatGrid, StatTile } from '@/components/ui/StatTile';
@@ -26,10 +27,10 @@ import { forecastUrl, prefetch, useForecast } from '@/lib/api';
 import { eventsInWindow, regionMask } from '@/lib/catalog';
 import { HEAT, rampGradient } from '@/lib/colors';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
-import { formatInt, formatLatLon, formatRate, formatSci } from '@/lib/format';
-import { forecastRaster } from '@/lib/grid';
+import { formatInt, formatLatLon, formatRate, formatSci, magnitudeBinLabel, magnitudeDecimals } from '@/lib/format';
+import { cellBounds, forecastCells } from '@/lib/grid';
+import { modelGrid, splitModelName } from '@/lib/modelGrid';
 import { formatDate, formatDuration, parseTimeWindows } from '@/lib/time';
-import type { ForecastPayload } from '@/lib/types';
 import { clamp, cn } from '@/lib/utils';
 
 const ForecastMap = dynamic(() => import('@/components/maps/ForecastMap'), {
@@ -45,10 +46,23 @@ export default function ForecastsPage() {
   );
 }
 
-/** Colour-scale domain (log10) around the forecast's rates. */
-function rateDomain(forecast: ForecastPayload): [number, number] {
-  const lo = Math.floor(forecast.vmin * 10) / 10;
-  const hi = Math.ceil(forecast.vmax * 10) / 10;
+/** Rate densities are shown per this area, in km² (see ForecastMap). */
+const DENSITY_AREA = 10_000;
+
+type Measure = 'rate' | 'density';
+
+/** Colour-scale domain (log10, rounded to 0.1) around the displayed values. */
+function valueDomain(values: Float64Array): [number, number] {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  if (!(min <= max)) return [0, 1];
+  const lo = Math.floor(min * 10) / 10;
+  const hi = Math.ceil(max * 10) / 10;
   return hi - lo < 0.2 ? [lo - 0.5, hi + 0.5] : [lo, hi];
 }
 
@@ -58,8 +72,10 @@ function ForecastsView() {
   const { params, set } = useQueryState();
   const windows = useMemo(() => parseTimeWindows(manifest.time_windows), [manifest.time_windows]);
 
+  const grids = useMemo(() => modelGrid(manifest.models), [manifest.models]);
   const modelIndex = indexByName(manifest.models, params.get('model'));
   const model = manifest.models[modelIndex];
+  const selected = model ? splitModelName(model.name) : null;
   const firstAvailable = Math.max(0, model?.forecast_available.findIndex(Boolean) ?? 0);
   const windowIndex = windowIndexFromParam(params.get('window'), windows.length, firstAvailable);
   const window = windows[windowIndex];
@@ -78,17 +94,30 @@ function ForecastsView() {
     }
   }, [current, model, modelIndex, windowIndex, windows.length]);
 
-  const grid = useMemo(() => (forecast ? forecastRaster(forecast) : null), [forecast]);
-  const domain = useMemo<[number, number]>(() => (forecast ? rateDomain(forecast) : [0, 1]), [forecast]);
+  const cells = useMemo(() => (forecast ? forecastCells(forecast) : null), [forecast]);
+  // Quadtree cells differ in area by orders of magnitude: compare densities there.
+  const [measureChoice, setMeasure] = useState<Measure | null>(null);
+  const measure: Measure = measureChoice ?? (cells?.grid.type === 'quadtree' ? 'density' : 'rate');
+  const values = useMemo(() => {
+    if (!cells) return new Float64Array(0);
+    const out = new Float64Array(cells.rates.length);
+    for (let k = 0; k < out.length; k++) {
+      const v = measure === 'density' ? (cells.rates[k] / cells.areas[k]) * DENSITY_AREA : cells.rates[k];
+      out[k] = Math.log10(v);
+    }
+    return out;
+  }, [cells, measure]);
+  const domain = useMemo<[number, number]>(() => valueDomain(values), [values]);
 
   // The colour range is kept while stepping through windows of the same model.
-  const [userRange, setUserRange] = useState<{ model: string; range: [number, number] } | null>(null);
+  const [userRange, setUserRange] = useState<{ key: string; range: [number, number] } | null>(null);
+  const rangeKey = `${model?.name}:${measure}`;
   const range = useMemo<[number, number]>(() => {
-    if (!userRange || userRange.model !== model?.name) return domain;
+    if (!userRange || userRange.key !== rangeKey) return domain;
     const lo = clamp(userRange.range[0], domain[0], domain[1] - 0.1);
     const hi = clamp(userRange.range[1], lo + 0.1, domain[1]);
     return [lo, hi];
-  }, [userRange, model?.name, domain]);
+  }, [userRange, rangeKey, domain]);
   const [opacity, setOpacity] = useState(0.85);
   const [showObserved, setShowObserved] = useState(true);
 
@@ -101,15 +130,16 @@ function ForecastsView() {
   );
 
   const peak = useMemo(() => {
-    if (!grid || grid.rates.length === 0) return null;
+    if (!cells || cells.rates.length === 0) return null;
     let k = 0;
-    for (let j = 1; j < grid.rates.length; j++) if (grid.rates[j] > grid.rates[k]) k = j;
+    for (let j = 1; j < values.length; j++) if (values[j] > values[k]) k = j;
+    const [west, south, east, north] = cellBounds(cells.grid, k);
     return {
-      rate: grid.rates[k],
-      lon: grid.lon0 + (grid.ix[k] + 0.5) * grid.dh,
-      lat: grid.lat0 + (grid.iy[k] + 0.5) * grid.dh,
+      value: 10 ** values[k],
+      lon: (west + east) / 2,
+      lat: (south + north) / 2,
     };
-  }, [grid]);
+  }, [cells, values]);
 
   const magnitudeBins = useMemo(() => {
     if (!forecast) return null;
@@ -164,15 +194,26 @@ function ForecastsView() {
   } else if (error && !current) {
     body = (
       <Card>
-        <ErrorState title="The forecast could not be loaded" message={error.message} details={error.details} onRetry={() => mutate()} />
+        <ErrorState
+          title="The forecast could not be loaded"
+          message={error.message}
+          details={error.details}
+          onRetry={() => mutate()}
+        />
       </Card>
     );
-  } else if (!forecast || !grid) {
+  } else if (!forecast || !cells) {
     body = (
       <Card>
         <LoadingState
-          title={model.is_catalog_forecast ? 'Computing expected rates from the simulated catalogs…' : 'Reading the forecast…'}
-          description={elapsed >= 3 ? `${elapsed}s — large forecasts take a while the first time; results are cached.` : undefined}
+          title={
+            model.is_catalog_forecast
+              ? 'Computing expected rates from the simulated catalogs…'
+              : 'Reading the forecast…'
+          }
+          description={
+            elapsed >= 3 ? `${elapsed}s — large forecasts take a while the first time; results are cached.` : undefined
+          }
           className="min-h-[420px]"
         />
       </Card>
@@ -190,12 +231,22 @@ function ForecastsView() {
           <StatTile
             label="Observed events"
             value={observed ? formatInt(observed.length) : '—'}
-            caption={observed ? `M ≥ ${minMagnitude.toFixed(1)} in the region` : manifest.catalog.available ? 'loading catalog…' : 'no catalog'}
+            caption={
+              observed
+                ? `M ≥ ${minMagnitude.toFixed(magnitudeDecimals([minMagnitude]))} in the region`
+                : manifest.catalog.available
+                  ? 'loading catalog…'
+                  : 'no catalog'
+            }
           />
           <StatTile
-            label="Peak cell rate"
-            value={peak ? formatSci(peak.rate) : '—'}
-            caption={peak ? formatLatLon(peak.lat, peak.lon) : undefined}
+            label={measure === 'density' ? 'Peak rate density' : 'Peak cell rate'}
+            value={peak ? formatSci(peak.value) : '—'}
+            caption={
+              peak
+                ? `${measure === 'density' ? 'per 10⁴ km² · ' : ''}${formatLatLon(peak.lat, peak.lon, 1)}`
+                : undefined
+            }
           />
           <StatTile
             label="Active cells"
@@ -205,7 +256,13 @@ function ForecastsView() {
           <StatTile
             label="Forecast type"
             value={forecast.kind === 'catalog' ? 'Catalog' : 'Gridded'}
-            caption={forecast.n_catalogs ? `${formatInt(forecast.n_catalogs)} simulated catalogs` : `${forecast.dh.toFixed(2)}° cells`}
+            caption={
+              forecast.n_catalogs
+                ? `${formatInt(forecast.n_catalogs)} simulated catalogs`
+                : cells.grid.type === 'quadtree'
+                  ? `quadtree, levels ${cells.grid.levels[0]}–${cells.grid.levels[cells.grid.levels.length - 1]}`
+                  : `${forecast.dh?.toFixed(2)}° cells`
+            }
           />
           <StatTile
             label="Time window"
@@ -220,7 +277,8 @@ function ForecastsView() {
               title={`${model.name} · ${window.label}`}
               description={
                 <>
-                  Expected events per cell, {formatDate(window.start)} → {formatDate(window.end)} ·{' '}
+                  {measure === 'density' ? 'Expected events per 10⁴ km²' : 'Expected events per cell'},{' '}
+                  {formatDate(window.start)} → {formatDate(window.end)} ·{' '}
                   <code className="text-2xs" title={forecast.path}>
                     {forecast.path.split('/').pop()}
                   </code>
@@ -234,7 +292,9 @@ function ForecastsView() {
             >
               <ErrorBoundary label="The forecast map">
                 <ForecastMap
-                  grid={grid}
+                  cells={cells}
+                  values={values}
+                  measure={measure}
                   range={range}
                   opacity={opacity}
                   observed={showObserved && catalog && observed ? { catalog, indices: observed } : null}
@@ -249,7 +309,8 @@ function ForecastsView() {
                 title="Colour scale"
                 description={
                   <>
-                    log<sub>10</sub> λ per cell · cells outside the range are clamped
+                    log<sub>10</sub> of {measure === 'density' ? 'events per 10⁴ km²' : 'λ per cell'} · values outside
+                    the range are clamped
                   </>
                 }
                 actions={
@@ -264,18 +325,35 @@ function ForecastsView() {
                 }
               />
               <CardBody className="space-y-4 pt-3">
+                <SegmentedControl<Measure>
+                  label="Measure"
+                  size="md"
+                  className="w-full [&>button]:flex-1"
+                  value={measure}
+                  onChange={(value) => {
+                    setMeasure(value);
+                    setUserRange(null);
+                  }}
+                  options={[
+                    { value: 'rate', label: 'Events per cell' },
+                    { value: 'density', label: 'Rate density' },
+                  ]}
+                />
                 <ErrorBoundary label="The histogram">
-                  <RateHistogram logRates={grid.values as Float64Array} domain={domain} range={range} />
+                  <RateHistogram logRates={values} domain={domain} range={range} />
                 </ErrorBoundary>
                 <div>
-                  <div className="mb-1 h-2 rounded-sm ring-1 ring-line" style={{ background: rampGradient(HEAT[mode]) }} />
+                  <div
+                    className="mb-1 h-2 rounded-sm ring-1 ring-line"
+                    style={{ background: rampGradient(HEAT[mode]) }}
+                  />
                   <RangeSlider
                     label="Colour range"
                     min={domain[0]}
                     max={domain[1]}
                     step={0.1}
                     value={range}
-                    onChange={(value) => setUserRange({ model: model.name, range: value })}
+                    onChange={(value) => setUserRange({ key: rangeKey, range: value })}
                     formatValue={(v) => v.toFixed(1)}
                   />
                   <div className="mt-1 flex justify-between text-xs tabular text-ink-2">
@@ -303,10 +381,29 @@ function ForecastsView() {
                   <DataTable
                     caption="Expected and observed events per magnitude bin"
                     columns={[
-                      { key: 'm', header: 'Magnitude', numeric: true, render: (k: number) => `≥ ${magnitudeBins.mags[k].toFixed(2)}` },
-                      { key: 'e', header: 'Expected', align: 'right', numeric: true, render: (k: number) => formatRate(magnitudeBins.expected[k]) },
+                      {
+                        key: 'm',
+                        header: 'Magnitude',
+                        numeric: true,
+                        render: (k: number) => magnitudeBinLabel(magnitudeBins.mags, k),
+                      },
+                      {
+                        key: 'e',
+                        header: 'Expected',
+                        align: 'right',
+                        numeric: true,
+                        render: (k: number) => formatRate(magnitudeBins.expected[k]),
+                      },
                       ...(magnitudeBins.counts
-                        ? [{ key: 'o', header: 'Observed', align: 'right' as const, numeric: true, render: (k: number) => formatInt(magnitudeBins.counts![k]) }]
+                        ? [
+                            {
+                              key: 'o',
+                              header: 'Observed',
+                              align: 'right' as const,
+                              numeric: true,
+                              render: (k: number) => formatInt(magnitudeBins.counts![k]),
+                            },
+                          ]
                         : []),
                     ]}
                     rows={magnitudeBins.mags.map((_, k) => k)}
@@ -336,16 +433,49 @@ function ForecastsView() {
       />
 
       <FilterBar>
-        <Select
-          label="Model"
-          className="w-full sm:w-60"
-          value={String(modelIndex)}
-          onChange={(value) => set({ model: manifest.models[Number(value)].name })}
-          options={manifest.models.map((m, i) => ({
-            value: String(i),
-            label: `${m.name}${m.is_catalog_forecast ? ' (catalog-based)' : ''}`,
-          }))}
-        />
+        {grids && selected?.grid ? (
+          <>
+            <Select
+              label="Model"
+              className="w-full sm:w-52"
+              value={selected.model}
+              onChange={(value) => {
+                const index = grids.indexOf(value, selected.grid!);
+                if (index >= 0) set({ model: manifest.models[index].name });
+              }}
+              options={grids.models.map((name) => ({
+                value: name,
+                label: name,
+                disabled: grids.indexOf(name, selected.grid!) < 0,
+              }))}
+            />
+            <Select
+              label="Grid"
+              className="w-full sm:w-40"
+              value={selected.grid}
+              onChange={(value) => {
+                const index = grids.indexOf(selected.model, value);
+                if (index >= 0) set({ model: manifest.models[index].name });
+              }}
+              options={grids.grids.map((grid) => ({
+                value: grid,
+                label: grid,
+                disabled: grids.indexOf(selected.model, grid) < 0,
+              }))}
+            />
+          </>
+        ) : (
+          <Select
+            label="Model"
+            className="w-full sm:w-60"
+            value={String(modelIndex)}
+            onChange={(value) => set({ model: manifest.models[Number(value)].name })}
+            options={manifest.models.map((m, i) => ({
+              value: String(i),
+              label: `${m.name}${m.is_catalog_forecast ? ' (catalog-based)' : ''}`,
+            }))}
+          />
+        )}
         <Select
           label="Time window"
           className="w-full sm:w-[22rem]"
@@ -375,12 +505,7 @@ function ForecastsView() {
             </>
           }
         />
-        <Switch
-          className="h-9"
-          checked={showObserved}
-          onChange={setShowObserved}
-          label="Show observed events"
-        />
+        <Switch className="h-9" checked={showObserved} onChange={setShowObserved} label="Show observed events" />
       </FilterBar>
 
       {body}

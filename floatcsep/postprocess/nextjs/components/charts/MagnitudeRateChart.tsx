@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { ChartOption } from '@/lib/echarts';
-import { formatInt, formatPowerOfTen, formatRate } from '@/lib/format';
+import { formatInt, formatPowerOfTen, formatRate, magnitudeBinLabel, magnitudeDecimals } from '@/lib/format';
 import EChart from './EChart';
 import { tooltipRow, tooltipTitle, useChartTheme } from './chartTheme';
 
@@ -20,6 +20,7 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
 
   const option = useMemo<ChartOption>(() => {
     const [expColor, obsColor] = theme.series;
+    const decimals = magnitudeDecimals(magnitudes);
     const positive = (v: number) => (v > 0 ? v : null);
     const legend = [{ name: 'Expected', icon: 'path://M0,4 L14,4 L14,6 L0,6 Z', itemStyle: { color: expColor } }];
     if (observed) legend.push({ name: 'Observed', icon: 'circle', itemStyle: { color: obsColor } });
@@ -29,7 +30,7 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
       legend: { top: 0, left: 4, itemGap: 18, textStyle: { color: theme.chrome.ink2, fontSize: 12 }, data: legend },
       xAxis: {
         type: 'category',
-        data: magnitudes.map((m) => m.toFixed(1)),
+        data: magnitudes.map((m) => m.toFixed(decimals)),
         name: 'Magnitude bin',
         nameLocation: 'middle',
         nameGap: 26,
@@ -50,7 +51,7 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
         formatter: (params: any[]) => {
           const k = params[0]?.dataIndex ?? 0;
           const rows = [
-            tooltipTitle(`M ${magnitudes[k].toFixed(2)}`),
+            tooltipTitle(`M ${magnitudeBinLabel(magnitudes, k, decimals)}`),
             tooltipRow(expColor, formatRate(expected[k]), 'expected'),
           ];
           if (observed) rows.push(tooltipRow(obsColor, formatInt(observed[k]), 'observed'));
@@ -87,10 +88,6 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
   }, [theme, magnitudes, expected, observed]);
 
   return (
-    <EChart
-      option={option}
-      height={height}
-      ariaLabel="Expected and observed number of events per magnitude bin"
-    />
+    <EChart option={option} height={height} ariaLabel="Expected and observed number of events per magnitude bin" />
   );
 }

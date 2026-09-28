@@ -71,11 +71,31 @@ export function formatMagnitude(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '—' : value.toFixed(1);
 }
 
-export function formatLatLon(lat: number, lon: number): string {
+/** Fewest decimals (at least one) that print every value exactly, e.g. 2 for bins 7.45, 7.55, … */
+export function magnitudeDecimals(values: ArrayLike<number>): number {
+  for (let decimals = 1; decimals < 3; decimals++) {
+    const scale = 10 ** decimals;
+    let exact = true;
+    for (let i = 0; i < values.length && exact; i++) {
+      exact = Math.abs(Math.round(values[i] * scale) - values[i] * scale) < 1e-6;
+    }
+    if (exact) return decimals;
+  }
+  return 3;
+}
+
+/** A magnitude bin by its edges; pyCSEP's last bin is open-ended. */
+export function magnitudeBinLabel(mags: number[], k: number, decimals = magnitudeDecimals(mags)): string {
+  return k < mags.length - 1
+    ? `${mags[k].toFixed(decimals)}–${mags[k + 1].toFixed(decimals)}`
+    : `≥ ${mags[k].toFixed(decimals)}`;
+}
+
+export function formatLatLon(lat: number, lon: number, digits = 3): string {
   const wrapped = ((((lon + 180) % 360) + 360) % 360) - 180;
   const ns = lat >= 0 ? 'N' : 'S';
   const ew = wrapped >= 0 ? 'E' : 'W';
-  return `${Math.abs(lat).toFixed(3)}° ${ns}, ${Math.abs(wrapped).toFixed(3)}° ${ew}`;
+  return `${Math.abs(lat).toFixed(digits)}° ${ns}, ${Math.abs(wrapped).toFixed(digits)}° ${ew}`;
 }
 
 export function pluralize(count: number, singular: string, plural = `${singular}s`): string {

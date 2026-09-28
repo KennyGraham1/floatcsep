@@ -13,10 +13,26 @@ interface TimeWindowsTableProps {
 
 export function TimeWindowsTable({ windows, counts, onRowClick, selected }: TimeWindowsTableProps) {
   const columns: Column<TimeWindow>[] = [
-    { key: 'label', header: 'Window', sortValue: (w) => w.index, render: (w) => <span className="font-medium">{w.label}</span> },
-    { key: 'start', header: 'Start (UTC)', numeric: true, sortValue: (w) => w.start, render: (w) => formatDate(w.start) },
+    {
+      key: 'label',
+      header: 'Window',
+      sortValue: (w) => w.index,
+      render: (w) => <span className="font-medium">{w.label}</span>,
+    },
+    {
+      key: 'start',
+      header: 'Start (UTC)',
+      numeric: true,
+      sortValue: (w) => w.start,
+      render: (w) => formatDate(w.start),
+    },
     { key: 'end', header: 'End (UTC)', numeric: true, sortValue: (w) => w.end, render: (w) => formatDate(w.end) },
-    { key: 'duration', header: 'Duration', sortValue: (w) => w.end - w.start, render: (w) => formatDuration(w.end - w.start) },
+    {
+      key: 'duration',
+      header: 'Duration',
+      sortValue: (w) => w.end - w.start,
+      render: (w) => formatDuration(w.end - w.start),
+    },
   ];
   if (counts) {
     columns.push({

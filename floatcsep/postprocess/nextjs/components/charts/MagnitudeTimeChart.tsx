@@ -21,7 +21,14 @@ interface MagnitudeTimeChartProps {
 
 const MAX_BANDS = 200;
 
-export default function MagnitudeTimeChart({ catalog, indices, windows, startMs, zoom, height = 360 }: MagnitudeTimeChartProps) {
+export default function MagnitudeTimeChart({
+  catalog,
+  indices,
+  windows,
+  startMs,
+  zoom,
+  height = 360,
+}: MagnitudeTimeChartProps) {
   const theme = useChartTheme();
 
   const option = useMemo<ChartOption>(() => {
@@ -44,9 +51,7 @@ export default function MagnitudeTimeChart({ catalog, indices, windows, startMs,
     // Alternate shading only reads for back-to-back windows, not cumulative ones.
     const bands =
       windows.length <= MAX_BANDS && windowsAreDisjoint(windows)
-        ? windows
-            .filter((w) => w.index % 2 === 0)
-            .map((w) => [{ xAxis: w.start }, { xAxis: w.end }])
+        ? windows.filter((w) => w.index % 2 === 0).map((w) => [{ xAxis: w.start }, { xAxis: w.end }])
         : [];
 
     return {
@@ -135,9 +140,7 @@ export default function MagnitudeTimeChart({ catalog, indices, windows, startMs,
           name: 'Experiment period (test)',
           data: test,
           ...point(theme.events.test),
-          markArea: bands.length
-            ? { silent: true, itemStyle: { color: theme.chrome.band }, data: bands }
-            : undefined,
+          markArea: bands.length ? { silent: true, itemStyle: { color: theme.chrome.band }, data: bands } : undefined,
           markLine: Number.isFinite(startMs)
             ? {
                 silent: true,
@@ -157,11 +160,5 @@ export default function MagnitudeTimeChart({ catalog, indices, windows, startMs,
     };
   }, [theme, catalog, indices, windows, startMs, zoom]);
 
-  return (
-    <EChart
-      option={option}
-      height={height}
-      ariaLabel={`Magnitude against time for ${indices.length} events`}
-    />
-  );
+  return <EChart option={option} height={height} ariaLabel={`Magnitude against time for ${indices.length} events`} />;
 }

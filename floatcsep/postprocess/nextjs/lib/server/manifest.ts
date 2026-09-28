@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { HttpError } from './http';
-import type { Manifest, Model, Region, ResultFigure, Test } from '@/lib/types';
+import type { EvaluationFile, Manifest, Model, Region, ResultFigure, SummaryFigure, Test } from '@/lib/types';
 
 /** The manifest plus server-side facts the API routes need. */
 export interface LoadedManifest {
@@ -66,8 +66,7 @@ async function exists(file: string): Promise<boolean> {
 const str = (value: unknown): string | null =>
   value === null || value === undefined || value === '' ? null : String(value);
 
-const num = (value: unknown): number | null =>
-  typeof value === 'number' && Number.isFinite(value) ? value : null;
+const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 function normalizeRegion(region: Raw | null | undefined): Region | null {
   if (!region || typeof region !== 'object') return null;
@@ -92,9 +91,7 @@ function plotFunctionNames(value: unknown): string[] {
 }
 
 async function normalizeManifest(raw: Raw, manifestPath: string): Promise<LoadedManifest> {
-  const appRoot = path.resolve(
-    str(raw.app_root) ?? process.env.APP_ROOT ?? path.dirname(manifestPath),
-  );
+  const appRoot = path.resolve(str(raw.app_root) ?? process.env.APP_ROOT ?? path.dirname(manifestPath));
   const timeWindows: string[] = Array.isArray(raw.time_windows) ? raw.time_windows.map(String) : [];
   const windowIndex = new Map(timeWindows.map((tw, i) => [tw, i]));
   const isFile = (relative: string) => exists(resolveFromRoot(appRoot, relative));
@@ -102,9 +99,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
   const models: Model[] = await Promise.all(
     (Array.isArray(raw.models) ? raw.models : []).map(async (m: Raw) => {
       const forecasts = timeWindows.map((tw) => str(m.forecasts?.[tw]));
-      const forecast_available = await Promise.all(
-        forecasts.map((f) => (f ? isFile(f) : Promise.resolve(false))),
-      );
+      const forecast_available = await Promise.all(forecasts.map((f) => (f ? isFile(f) : Promise.resolve(false))));
       return {
         name: String(m.name ?? 'Unnamed model'),
         forecast_unit: str(m.forecast_unit),
@@ -151,6 +146,60 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
   const present = await Promise.all(candidates.map((figure) => isFile(figure.path)));
   const results = candidates.filter((_, i) => present[i]);
 
+  // Saved evaluations follow floatCSEP's layout: <window>/evaluations/<test>_<model>.json
+  const evaluationCandidates: EvaluationFile[] = [];
+  timeWindows.forEach((tw, window) => {
+    const folder = tw.replace(/\s+to\s+/, '_');
+    for (const test of tests) {
+      for (const model of models) {
+        evaluationCandidates.push({
+          window,
+          test: test.name,
+          model: model.name,
+          path: path.posix.join(folder, 'evaluations', `${test.name}_${model.name}.json`),
+        });
+      }
+    }
+  });
+  const evaluationPresent = await Promise.all(evaluationCandidates.map((e) => isFile(e.path)));
+  const evaluations = evaluationCandidates.filter((_, i) => evaluationPresent[i]);
+
+  // Results saved outside the configured tests (e.g. by a plot_custom script),
+  // named <test>_<model>.json like floatCSEP's own.
+  const known = new Set(evaluations.map((e) => e.path));
+  const modelsByLength = [...models.map((m) => m.name)].sort((a, b) => b.length - a.length);
+  await Promise.all(
+    timeWindows.map(async (tw, window) => {
+      const folder = path.posix.join(tw.replace(/\s+to\s+/, '_'), 'evaluations');
+      let names: string[] = [];
+      try {
+        names = await fs.readdir(path.join(appRoot, folder));
+      } catch {
+        return;
+      }
+      for (const name of names) {
+        const relative = path.posix.join(folder, name);
+        if (!name.endsWith('.json') || known.has(relative)) continue;
+        const model = modelsByLength.find((m) => name.endsWith(`_${m}.json`));
+        if (!model) continue;
+        const test = name.slice(0, -`_${model}.json`.length);
+        if (test) evaluations.push({ window, test, model, path: relative });
+      }
+    }),
+  );
+
+  // Figures for the whole experiment, e.g. written by a plot_custom script.
+  let summaryFigures: SummaryFigure[] = [];
+  try {
+    const entries = await fs.readdir(path.join(appRoot, 'figures'), { withFileTypes: true });
+    summaryFigures = entries
+      .filter((e) => e.isFile() && /\.(png|jpe?g|svg|webp)$/i.test(e.name))
+      .map((e) => ({ name: e.name, path: path.posix.join('figures', e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    // no summary figures
+  }
+
   const catalogPath = str(raw.catalog?.path);
 
   const manifest: Manifest = {
@@ -177,6 +226,8 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
       available: catalogPath ? await isFile(catalogPath) : false,
     },
     results,
+    evaluations,
+    summary_figures: summaryFigures,
     exp_class: str(raw.exp_class),
     n_intervals: num(raw.n_intervals),
     horizon: str(raw.horizon),
@@ -198,6 +249,6 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
     manifest,
     manifestPath,
     appRoot,
-    figures: new Set(results.map((figure) => path.posix.normalize(figure.path))),
+    figures: new Set([...results, ...summaryFigures].map((figure) => path.posix.normalize(figure.path))),
   };
 }

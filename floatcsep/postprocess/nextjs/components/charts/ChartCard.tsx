@@ -19,7 +19,16 @@ interface ChartCardProps {
   bodyClassName?: string;
 }
 
-export function ChartCard({ title, description, actions, table, footer, children, className, bodyClassName }: ChartCardProps) {
+export function ChartCard({
+  title,
+  description,
+  actions,
+  table,
+  footer,
+  children,
+  className,
+  bodyClassName,
+}: ChartCardProps) {
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const label = typeof title === 'string' ? title : 'Chart';
 

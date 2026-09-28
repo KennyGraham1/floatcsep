@@ -1,23 +1,34 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Download, ExternalLink, FileChartColumn, Maximize2 } from 'lucide-react';
+import {
+  ChartColumnBig,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  FileChartColumn,
+  Images,
+  Maximize2,
+} from 'lucide-react';
 import { Suspense, useMemo, useState } from 'react';
 import { FilterBar, PageHeader } from '@/components/layout/PageHeader';
 import { shortFunctionName } from '@/components/overview/TestsTable';
 import { CoverageMatrix } from '@/components/results/CoverageMatrix';
+import { EvaluationsView } from '@/components/results/EvaluationsView';
 import { FigureImage } from '@/components/results/FigureImage';
 import { Badge } from '@/components/ui/Badge';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { DefinitionList } from '@/components/ui/DefinitionList';
 import { Lightbox, type LightboxItem } from '@/components/ui/Lightbox';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Select } from '@/components/ui/Select';
 import { EmptyState, Skeleton } from '@/components/ui/States';
 import { useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
 import { pluralize } from '@/lib/format';
 import { formatDate, parseTimeWindows } from '@/lib/time';
-import type { ResultFigure, Test } from '@/lib/types';
+import type { Manifest, ResultFigure, Test } from '@/lib/types';
 import { figureUrl } from '@/lib/utils';
 
 export default function ResultsPage() {
@@ -76,6 +87,92 @@ function TestDetails({ test }: { test: Test }) {
 function ResultsView() {
   const manifest = useLoadedManifest();
   const { params, set } = useQueryState();
+  const hasCharts = manifest.evaluations.length > 0;
+  const view = !hasCharts || params.get('view') === 'figures' ? 'figures' : 'charts';
+
+  return (
+    <>
+      <PageHeader
+        title="Results"
+        description={
+          view === 'charts'
+            ? 'Evaluation results by test, model, grid and time window. Hover for details; click a heatmap cell to select it.'
+            : 'Figures produced by the evaluation tests and the experiment. Click a figure to enlarge it.'
+        }
+        actions={
+          hasCharts && (
+            <SegmentedControl<'charts' | 'figures'>
+              label="Results view"
+              size="md"
+              value={view}
+              onChange={(value) => set({ view: value === 'charts' ? null : value })}
+              options={[
+                {
+                  value: 'charts',
+                  label: (
+                    <>
+                      <ChartColumnBig /> Charts
+                    </>
+                  ),
+                },
+                {
+                  value: 'figures',
+                  label: (
+                    <>
+                      <Images /> Figures
+                    </>
+                  ),
+                },
+              ]}
+            />
+          )
+        }
+      />
+      {view === 'charts' ? <EvaluationsView manifest={manifest} /> : <FiguresView manifest={manifest} />}
+    </>
+  );
+}
+
+function ExperimentFigures({ manifest }: { manifest: Manifest }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const figures = manifest.summary_figures;
+  if (figures.length === 0) return null;
+  const items: LightboxItem[] = figures.map((figure) => ({
+    src: figureUrl(figure.path),
+    downloadHref: figureUrl(figure.path, true),
+    title: figure.name.replace(/\.[a-z]+$/i, '').replace(/_/g, ' '),
+    subtitle: 'Experiment figure',
+  }));
+  return (
+    <Card className="mb-5">
+      <CardHeader
+        title="Experiment figures"
+        description={`${pluralize(figures.length, 'figure')} summarizing the whole experiment (e.g. from a plot_custom script)`}
+      />
+      <CardBody>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {figures.map((figure, k) => (
+            <figure key={figure.path} className="min-w-0">
+              <FigureImage src={figureUrl(figure.path)} alt={items[k].title} onOpen={() => setOpen(k)} />
+              <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs">
+                <span className="truncate font-medium text-ink" title={figure.name}>
+                  {items[k].title}
+                </span>
+                <a href={figureUrl(figure.path, true)} className="link shrink-0 text-ink-3">
+                  Download
+                </a>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </CardBody>
+      <Lightbox items={items} index={open} onIndexChange={setOpen} />
+    </Card>
+  );
+}
+
+function FiguresView({ manifest }: { manifest: Manifest }) {
+  const { params, set } = useQueryState();
   const windows = useMemo(() => parseTimeWindows(manifest.time_windows), [manifest.time_windows]);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
@@ -100,7 +197,7 @@ function ResultsView() {
   if (manifest.results.length === 0) {
     return (
       <>
-        <PageHeader title="Results" description="Evaluation figures of the experiment." />
+        <ExperimentFigures manifest={manifest} />
         <Card>
           <EmptyState
             icon={FileChartColumn}
@@ -132,10 +229,7 @@ function ResultsView() {
   const window = windows[windowIndex];
   const entry = byKey.get(`${windowIndex}|${testName}`) ?? { summary: null, models: [] };
 
-  const items: LightboxItem[] = [
-    ...(entry.summary ? [entry.summary] : []),
-    ...entry.models,
-  ].map((figure) => ({
+  const items: LightboxItem[] = [...(entry.summary ? [entry.summary] : []), ...entry.models].map((figure) => ({
     src: figureUrl(figure.path),
     downloadHref: figureUrl(figure.path, true),
     title: figure.model ? `${testName} · ${figure.model}` : testName,
@@ -146,10 +240,7 @@ function ResultsView() {
 
   return (
     <>
-      <PageHeader
-        title="Results"
-        description="Figures produced by the evaluation tests. Click a figure to enlarge it."
-      />
+      <ExperimentFigures manifest={manifest} />
 
       <FilterBar>
         <Select
@@ -212,7 +303,13 @@ function ResultsView() {
                     <Button size="sm" variant="ghost" onClick={() => setLightbox(0)}>
                       <Maximize2 /> Expand
                     </Button>
-                    <LinkButton size="sm" variant="ghost" href={figureUrl(entry.summary.path)} target="_blank" rel="noopener noreferrer">
+                    <LinkButton
+                      size="sm"
+                      variant="ghost"
+                      href={figureUrl(entry.summary.path)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       <ExternalLink /> Open
                     </LinkButton>
                     <LinkButton size="sm" variant="ghost" href={figureUrl(entry.summary.path, true)}>
@@ -264,7 +361,11 @@ function ResultsView() {
                         />
                         <figcaption className="mt-2 flex items-center justify-between gap-2 text-xs">
                           <span className="truncate font-medium text-ink">{figure.model}</span>
-                          <a href={figureUrl(figure.path, true)} className="link shrink-0 text-ink-3" aria-label={`Download ${figure.model} figure`}>
+                          <a
+                            href={figureUrl(figure.path, true)}
+                            className="link shrink-0 text-ink-3"
+                            aria-label={`Download ${figure.model} figure`}
+                          >
                             Download
                           </a>
                         </figcaption>
@@ -282,7 +383,13 @@ function ResultsView() {
             <CardHeader
               title="Test details"
               description={test.func ? undefined : 'Configuration of the evaluation'}
-              actions={testsWithFigures.has(testName) ? <Badge tone="info">{pluralize(manifest.results.filter((f) => f.test === testName).length, 'figure')}</Badge> : undefined}
+              actions={
+                testsWithFigures.has(testName) ? (
+                  <Badge tone="info">
+                    {pluralize(manifest.results.filter((f) => f.test === testName).length, 'figure')}
+                  </Badge>
+                ) : undefined
+              }
             />
             <CardBody>
               <TestDetails test={test} />

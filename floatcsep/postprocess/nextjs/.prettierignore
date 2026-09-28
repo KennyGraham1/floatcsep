@@ -1,0 +1,10 @@
+.next
+.next-prod
+.cache
+node_modules
+package-lock.json
+next-env.d.ts
+tsconfig.tsbuildinfo
+# Hand-formatted prose and the file Next.js rewrites on build.
+*.md
+tsconfig.json

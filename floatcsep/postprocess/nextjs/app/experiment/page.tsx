@@ -1,34 +1,31 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 import { ChartCard } from '@/components/charts/ChartCard';
 import TimeWindowsChart from '@/components/charts/TimeWindowsChart';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { GridCard } from '@/components/overview/GridCard';
 import { ModelsTable } from '@/components/overview/ModelsTable';
 import { TestsTable } from '@/components/overview/TestsTable';
 import { TimeWindowsTable } from '@/components/overview/TimeWindowsTable';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { DefinitionList } from '@/components/ui/DefinitionList';
-import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { StatGrid, StatTile } from '@/components/ui/StatTile';
-import { Skeleton } from '@/components/ui/States';
 import { useObservedCatalog } from '@/hooks/useObservedCatalog';
 import { countPerWindow, TEST } from '@/lib/catalog';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
-import { formatInt, pluralize } from '@/lib/format';
+import { formatInt, magnitudeDecimals, pluralize } from '@/lib/format';
+import { modelGrid } from '@/lib/modelGrid';
 import { formatDuration, parseTimeWindows, parseUtc } from '@/lib/time';
 import { doiUrl } from '@/lib/utils';
 
-const MAP_HEIGHT = 380;
-
-const RegionMap = dynamic(() => import('@/components/maps/RegionMap'), {
-  ssr: false,
-  loading: () => <Skeleton className="h-[380px] w-full rounded-lg" />,
-});
-
 function Mono({ children }: { children: string }) {
   return <code className="break-all text-xs text-ink-2">{children}</code>;
+}
+
+function magnitudeRange(min: number, max: number | null): string {
+  const decimals = magnitudeDecimals(max === null ? [min] : [min, max]);
+  return `M ${min.toFixed(decimals)}–${max === null ? '?' : max.toFixed(decimals)}`;
 }
 
 export default function OverviewPage() {
@@ -57,6 +54,7 @@ export default function OverviewPage() {
   const catalogModels = manifest.models.filter((m) => m.is_catalog_forecast).length;
   const region = manifest.region;
   const cells = region?.origins?.length ?? null;
+  const grids = modelGrid(manifest.models);
 
   const details = [
     { label: 'Experiment class', value: manifest.exp_class },
@@ -121,22 +119,42 @@ export default function OverviewPage() {
                 : `${catalogModels} catalog-based`
           }
         />
-        <StatTile label="Tests" value={formatInt(manifest.tests.length)} caption={pluralize(manifest.results.length, 'result figure')} />
+        <StatTile
+          label="Tests"
+          value={formatInt(manifest.tests.length)}
+          caption={pluralize(manifest.results.length, 'result figure')}
+        />
         <StatTile
           label="Magnitude range"
-          value={manifest.mag_min !== null ? `M ${manifest.mag_min.toFixed(1)}–${manifest.mag_max?.toFixed(1) ?? '?'}` : '—'}
+          value={manifest.mag_min !== null ? magnitudeRange(manifest.mag_min, manifest.mag_max) : '—'}
           caption={manifest.mag_bin ? `${manifest.magnitudes.length} bins of ${manifest.mag_bin}` : undefined}
         />
         <StatTile
           label="Depth range"
-          value={manifest.depth_min !== null && manifest.depth_max !== null ? `${manifest.depth_min}–${manifest.depth_max} km` : '—'}
+          value={
+            manifest.depth_min !== null && manifest.depth_max !== null
+              ? `${manifest.depth_min}–${manifest.depth_max} km`
+              : '—'
+          }
           caption="hypocentral depth"
         />
-        <StatTile
-          label="Region cells"
-          value={cells !== null ? formatInt(cells) : '—'}
-          caption={region?.dh ? `${region.dh}° grid${region.name ? ` · ${region.name}` : ''}` : region?.name ?? undefined}
-        />
+        {cells !== null || !grids ? (
+          <StatTile
+            label="Region cells"
+            value={cells !== null ? formatInt(cells) : '—'}
+            caption={
+              region?.dh
+                ? `${region.dh}° grid${region.name ? ` · ${region.name}` : ''}`
+                : (region?.name ?? 'each forecast has its own grid')
+            }
+          />
+        ) : (
+          <StatTile
+            label="Forecast grids"
+            value={formatInt(grids.grids.length)}
+            caption={`${grids.models.length} models on each grid`}
+          />
+        )}
       </StatGrid>
 
       <div className="mb-5 grid gap-5 xl:grid-cols-12">
@@ -146,21 +164,7 @@ export default function OverviewPage() {
             <DefinitionList items={details} />
           </CardBody>
         </Card>
-        <Card className="xl:col-span-7">
-          <CardHeader
-            title="Testing region"
-            description={region?.name ? `Grid cells of ${region.name}` : 'Grid cells where forecasts are evaluated'}
-          />
-          <CardBody className="p-3">
-            <ErrorBoundary label="The region map">
-              {region ? (
-                <RegionMap region={region} height={MAP_HEIGHT} />
-              ) : (
-                <p className="px-2 py-10 text-center text-xs text-ink-3">This experiment has no spatial region.</p>
-              )}
-            </ErrorBoundary>
-          </CardBody>
-        </Card>
+        <GridCard manifest={manifest} className="xl:col-span-7" />
       </div>
 
       {windows.length > 0 && (

@@ -6,7 +6,10 @@ import type { Manifest, Test } from '@/lib/types';
 /** "csep.core.poisson_evaluations.number_test" -> "poisson_evaluations.number_test" */
 export function shortFunctionName(name: string | null): string | null {
   if (!name) return null;
-  return name.replace(/^csep\.core\./, '').replace(/^csep\.utils\./, '').replace(/^floatcsep\.utils\./, '');
+  return name
+    .replace(/^csep\.core\./, '')
+    .replace(/^csep\.utils\./, '')
+    .replace(/^floatcsep\.utils\./, '');
 }
 
 export function TestsTable({ manifest }: { manifest: Manifest }) {

@@ -22,7 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/experiment', label: 'Overview', icon: LayoutDashboard },
   { href: '/catalogs', label: 'Catalog', icon: Activity },
   { href: '/forecasts', label: 'Forecasts', icon: MapIcon, count: (m) => m.models.length },
-  { href: '/results', label: 'Results', icon: ChartColumn, count: (m) => m.results.length },
+  { href: '/results', label: 'Results', icon: ChartColumn },
 ];
 
 const LINKS = [
@@ -51,7 +51,9 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {manifest.exp_class && <Badge tone="accent">{manifest.exp_class}</Badge>}
-            <Badge>{manifest.time_windows.length === 1 ? '1 window' : `${formatInt(manifest.time_windows.length)} windows`}</Badge>
+            <Badge>
+              {manifest.time_windows.length === 1 ? '1 window' : `${formatInt(manifest.time_windows.length)} windows`}
+            </Badge>
           </div>
           <p className="mt-2 text-xs tabular text-ink-3">
             {manifest.start_date} → {manifest.end_date}
@@ -77,7 +79,10 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   )}
                 >
                   {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-r bg-accent" aria-hidden />}
-                  <Icon className={cn('size-4', active ? 'text-accent' : 'text-ink-3 group-hover:text-ink-2')} aria-hidden />
+                  <Icon
+                    className={cn('size-4', active ? 'text-accent' : 'text-ink-3 group-hover:text-ink-2')}
+                    aria-hidden
+                  />
                   {item.label}
                   {count !== null && count !== undefined && (
                     <span className="ml-auto text-2xs tabular text-ink-3">{formatInt(count)}</span>

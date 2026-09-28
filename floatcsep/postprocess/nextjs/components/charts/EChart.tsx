@@ -48,12 +48,6 @@ export default function EChart({ option, height, ariaLabel, className, onEvents 
   }, [onEvents]);
 
   return (
-    <div
-      ref={containerRef}
-      role="img"
-      aria-label={ariaLabel}
-      className={cn('w-full', className)}
-      style={{ height }}
-    />
+    <div ref={containerRef} role="img" aria-label={ariaLabel} className={cn('w-full', className)} style={{ height }} />
   );
 }

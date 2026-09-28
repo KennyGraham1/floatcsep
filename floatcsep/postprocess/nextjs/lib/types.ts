@@ -53,6 +53,20 @@ export interface ResultFigure {
   path: string;
 }
 
+/** A saved evaluation result (pyCSEP EvaluationResult JSON). */
+export interface EvaluationFile {
+  window: number;
+  test: string;
+  model: string;
+  path: string;
+}
+
+/** A figure made for the whole experiment (e.g. by a plot_custom script). */
+export interface SummaryFigure {
+  name: string;
+  path: string;
+}
+
 export interface CatalogInfo {
   path: string | null;
   available: boolean;
@@ -79,6 +93,8 @@ export interface Manifest {
   time_windows: string[];
   catalog: CatalogInfo;
   results: ResultFigure[];
+  evaluations: EvaluationFile[];
+  summary_figures: SummaryFigure[];
   exp_class: string | null;
   n_intervals: number | null;
   horizon: string | null;
@@ -109,25 +125,28 @@ export interface CatalogPayload {
 }
 
 /**
- * Expected rates of one forecast. Cells with a positive rate are listed by their
- * integer grid position (`ix`, `iy`) on a regular grid of spacing `dh` whose
- * lower-left cell corner is (`lon0`, `lat0`).
+ * Expected events of one forecast in its time window, for the cells with a
+ * positive rate. Cells are either on a regular grid of spacing `dh` (integer
+ * positions `ix`, `iy` from the lower-left corner `lon0`, `lat0`) or quadtree
+ * tiles given by their quadkeys.
  */
 export interface ForecastPayload {
   version: number;
   kind: 'gridded' | 'catalog';
+  grid: 'regular' | 'quadtree';
   model: string;
   time_window: string;
   path: string;
-  dh: number;
-  lon0: number;
-  lat0: number;
-  nx: number;
-  ny: number;
+  dh?: number;
+  lon0?: number;
+  lat0?: number;
+  nx?: number;
+  ny?: number;
+  ix?: number[];
+  iy?: number[];
+  quadkeys?: string[];
   n_cells: number;
   n_active: number;
-  ix: number[];
-  iy: number[];
   rate: number[];
   total: number;
   /** log10 of the smallest / largest positive cell rate. */
@@ -136,6 +155,31 @@ export interface ForecastPayload {
   magnitudes: (number | null)[];
   magnitude_rates: number[];
   n_catalogs: number | null;
+}
+
+/**
+ * One evaluation result, condensed for charts:
+ * - "number": N-test; `interval` is the 95% range of Poisson(`expected`);
+ * - "consistency": M/S/CL/L tests; `interval` is the 2.5–97.5% range of the
+ *   simulated statistic;
+ * - "comparative": T/W-tests against `reference`; `interval` is the 95% CI of
+ *   the information gain (`observed`);
+ * - "sequential": one value per time window (`series`).
+ */
+export interface EvaluationSummary {
+  window: number;
+  test: string;
+  model: string;
+  name: string;
+  kind: 'number' | 'consistency' | 'comparative' | 'sequential' | 'other';
+  observed: number | null;
+  quantile: number | null;
+  interval: [number, number] | null;
+  expected: number | null;
+  reference: string | null;
+  /** true = not rejected / significantly better; false = rejected / worse. */
+  passed: boolean | null;
+  series: number[] | null;
 }
 
 export interface ApiErrorBody {

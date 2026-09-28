@@ -20,17 +20,9 @@ import { StatGrid, StatTile } from '@/components/ui/StatTile';
 import { EmptyState, ErrorState, LoadingState, Skeleton } from '@/components/ui/States';
 import { useElapsed } from '@/hooks/useElapsed';
 import { useObservedCatalog } from '@/hooks/useObservedCatalog';
-import {
-  bValue,
-  countPerWindow,
-  filterEvents,
-  INPUT,
-  magnitudeFrequency,
-  TEST,
-  type Catalog,
-} from '@/lib/catalog';
+import { bValue, countPerWindow, filterEvents, INPUT, magnitudeFrequency, TEST, type Catalog } from '@/lib/catalog';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
-import { formatInt, formatMagnitude } from '@/lib/format';
+import { formatInt, formatMagnitude, magnitudeDecimals } from '@/lib/format';
 import { formatDate, formatDuration, parseTimeWindows, parseUtc, windowsAreDisjoint } from '@/lib/time';
 import type { Manifest } from '@/lib/types';
 import { extent } from '@/lib/utils';
@@ -87,7 +79,12 @@ export default function CatalogPage() {
       <>
         {header}
         <Card>
-          <ErrorState title="The catalog could not be loaded" message={error.message} details={error.details} onRetry={() => reload()} />
+          <ErrorState
+            title="The catalog could not be loaded"
+            message={error.message}
+            details={error.details}
+            onRetry={() => reload()}
+          />
         </Card>
       </>
     );
@@ -154,7 +151,7 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
 
   const mfd = useMemo(() => magnitudeFrequency(catalog.mag, indices, MFD_BIN), [catalog, indices]);
   const completeness = Math.max(minMagnitude, manifest.mag_min ?? -Infinity);
-  const b = useMemo(() => bValue(catalog.mag, indices, completeness, MFD_BIN), [catalog, indices, completeness]);
+  const b = useMemo(() => bValue(catalog.mag, indices, completeness), [catalog, indices, completeness]);
 
   const testIndices = useMemo(() => indices.filter((i) => catalog.kind[i] === TEST), [catalog, indices]);
   const counts = useMemo(() => countPerWindow(catalog, testIndices, windows), [catalog, testIndices, windows]);
@@ -209,7 +206,11 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
       </FilterBar>
 
       <StatGrid className="mb-5">
-        <StatTile label="Events" value={formatInt(indices.length)} caption={filtered ? 'matching the filters' : 'in the catalog'} />
+        <StatTile
+          label="Events"
+          value={formatInt(indices.length)}
+          caption={filtered ? 'matching the filters' : 'in the catalog'}
+        />
         <StatTile label="Before start" value={formatInt(stats.input)} caption={`before ${manifest.start_date}`} />
         <StatTile label="Experiment period" value={formatInt(stats.test)} caption={`from ${manifest.start_date}`} />
         <StatTile
@@ -237,7 +238,12 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
           />
           <div className="p-3">
             <ErrorBoundary label="The map">
-              <CatalogMap catalog={catalog} indices={indices} height={440} fallbackBounds={manifest.region?.bbox ?? null} />
+              <CatalogMap
+                catalog={catalog}
+                indices={indices}
+                height={440}
+                fallbackBounds={manifest.region?.bbox ?? null}
+              />
             </ErrorBoundary>
           </div>
         </Card>
@@ -246,16 +252,33 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
           title="Magnitude–frequency distribution"
           description={
             b
-              ? `b ≈ ${b.b.toFixed(2)} ± ${b.sigma.toFixed(2)} (Aki–Utsu, M ≥ ${b.completeness.toFixed(1)}, ${formatInt(b.n)} events)`
+              ? `b ≈ ${b.b.toFixed(2)} ± ${b.sigma.toFixed(2)} (Aki–Utsu, M ≥ ${b.completeness.toFixed(magnitudeDecimals([b.completeness]))}, ${formatInt(b.n)} events)`
               : 'Gutenberg–Richter plot of the selected events'
           }
           table={
             <DataTable
               caption="Events per magnitude bin"
               columns={[
-                { key: 'm', header: 'Magnitude bin', numeric: true, render: (k: number) => `${mfd.magnitudes[k].toFixed(1)}–${(mfd.magnitudes[k] + MFD_BIN).toFixed(1)}` },
-                { key: 'n', header: 'Events', align: 'right', numeric: true, render: (k: number) => formatInt(mfd.incremental[k]) },
-                { key: 'c', header: 'Events ≥ M', align: 'right', numeric: true, render: (k: number) => formatInt(mfd.cumulative[k]) },
+                {
+                  key: 'm',
+                  header: 'Magnitude bin',
+                  numeric: true,
+                  render: (k: number) => `${mfd.magnitudes[k].toFixed(1)}–${(mfd.magnitudes[k] + MFD_BIN).toFixed(1)}`,
+                },
+                {
+                  key: 'n',
+                  header: 'Events',
+                  align: 'right',
+                  numeric: true,
+                  render: (k: number) => formatInt(mfd.incremental[k]),
+                },
+                {
+                  key: 'c',
+                  header: 'Events ≥ M',
+                  align: 'right',
+                  numeric: true,
+                  render: (k: number) => formatInt(mfd.cumulative[k]),
+                },
               ]}
               rows={mfd.magnitudes.map((_, k) => k)}
               rowKey={(k) => String(k)}
@@ -291,7 +314,14 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
         }
         table={<EventsTable catalog={catalog} indices={indices} caption="Catalog events" />}
       >
-        <MagnitudeTimeChart catalog={catalog} indices={indices} windows={windows} startMs={startMs} zoom={zoomRange} height={380} />
+        <MagnitudeTimeChart
+          catalog={catalog}
+          indices={indices}
+          windows={windows}
+          startMs={startMs}
+          zoom={zoomRange}
+          height={380}
+        />
       </ChartCard>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -306,7 +336,13 @@ function CatalogView({ manifest, catalog }: { manifest: Manifest; catalog: Catal
         )}
         <Card className={windows.length > 1 ? undefined : 'xl:col-span-2'}>
           <CardHeader title="Largest events" description="The ten largest events matching the filters" />
-          <EventsTable catalog={catalog} indices={indices} limit={10} caption="Largest events" compact={windows.length > 1} />
+          <EventsTable
+            catalog={catalog}
+            indices={indices}
+            limit={10}
+            caption="Largest events"
+            compact={windows.length > 1}
+          />
         </Card>
       </div>
     </>

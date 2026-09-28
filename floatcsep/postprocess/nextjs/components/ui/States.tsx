@@ -5,10 +5,7 @@ import { Button } from './Button';
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div
-      aria-hidden
-      className={cn('relative overflow-hidden rounded-md bg-surface-2', className)}
-    >
+    <div aria-hidden className={cn('relative overflow-hidden rounded-md bg-surface-2', className)}>
       <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-surface-3/60 to-transparent" />
     </div>
   );
@@ -22,7 +19,10 @@ interface LoadingStateProps {
 
 export function LoadingState({ title = 'Loading…', description, className }: LoadingStateProps) {
   return (
-    <div role="status" className={cn('flex flex-col items-center justify-center gap-3 px-6 py-12 text-center', className)}>
+    <div
+      role="status"
+      className={cn('flex flex-col items-center justify-center gap-3 px-6 py-12 text-center', className)}
+    >
       <LoaderCircle className="size-5 animate-spin text-ink-3" aria-hidden />
       <div>
         <p className="text-[0.8rem] font-medium text-ink">{title}</p>
@@ -42,7 +42,10 @@ interface ErrorStateProps {
 
 export function ErrorState({ title, message, details, onRetry, className }: ErrorStateProps) {
   return (
-    <div role="alert" className={cn('flex flex-col items-center justify-center gap-3 px-6 py-12 text-center', className)}>
+    <div
+      role="alert"
+      className={cn('flex flex-col items-center justify-center gap-3 px-6 py-12 text-center', className)}
+    >
       <span className="flex size-9 items-center justify-center rounded-full bg-critical/10 text-critical">
         <TriangleAlert className="size-[18px]" aria-hidden />
       </span>

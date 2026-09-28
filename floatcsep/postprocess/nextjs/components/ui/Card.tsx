@@ -16,7 +16,12 @@ interface CardHeaderProps {
 
 export function CardHeader({ title, description, actions, className, id }: CardHeaderProps) {
   return (
-    <header className={cn('flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b px-5 py-3.5 sm:flex-nowrap', className)}>
+    <header
+      className={cn(
+        'flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b px-5 py-3.5 sm:flex-nowrap',
+        className,
+      )}
+    >
       <div className="min-w-[min(100%,15rem)] flex-1">
         <h2 id={id} className="text-[0.84rem] font-semibold leading-6 text-ink">
           {title}

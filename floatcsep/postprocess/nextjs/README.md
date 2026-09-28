@@ -8,14 +8,27 @@ Tailwind CSS, Apache ECharts and Leaflet.
 
 | Page | What it shows |
 | --- | --- |
-| **Overview** | Key figures, experiment configuration, map of the testing region, time-window timeline, models and tests. |
+| **Overview** | Key figures, experiment configuration, map of the testing region (or of the forecasts' own grids, such as quadtree grids, with a grid selector), time-window timeline, models and tests. |
 | **Catalog** | Filterable event map (before start / experiment period, minimum magnitude), magnitude over time with the forecast windows, magnitude–frequency distribution with an Aki–Utsu b-value, events per time window, largest events. |
-| **Forecasts** | Per model and time window: map of expected events per cell with the observed events on top, colour-scale histogram and range, expected vs observed events per magnitude bin, headline numbers (Σλ, observed, peak cell). |
-| **Results** | Every evaluation figure by test and time window, per-model figures, a full-screen viewer with download, test configuration and a coverage grid of which figures exist. |
+| **Forecasts** | Per model and time window: map of expected events per cell or per 10⁴ km² (rate density, for cells of different sizes) with the observed events on top, colour-scale histogram and range, expected vs observed events per magnitude bin, headline numbers (Σλ, observed, peak). Regular and quadtree grids. |
+| **Results** | *Charts*: heatmaps of the test scores (models × time windows, and models × grids for multi-grid experiments) and the per-model test intervals, read from the saved evaluation results. *Figures*: every evaluation figure by test and time window, per-model figures, the experiment's own figures (`results/figures/`), a full-screen viewer with download, test configuration and a coverage grid. |
 
 Every chart has a table view, selections live in the URL (views can be
 bookmarked), and the interface follows the light/dark system theme with a
 manual override. Dates are UTC throughout.
+
+### Multi-grid experiments
+
+When every model is named `<MODEL>=<GRID>` (for example `GEAR1=N50L11`) and
+there are at least two grids, the dashboard treats the experiment as the same
+models on several grids: the Forecasts page selects a model and a grid, and the
+Results page adds heatmaps of models × grids. Tutorial K is such an experiment.
+
+### Experiment figures
+
+Images in the results folder's `figures/` directory (PNG, JPEG, SVG or WebP),
+for example written by a `plot_custom` script, are shown under *Experiment
+figures* in the Results page.
 
 ## Running
 
@@ -74,13 +87,21 @@ floatcsep view config.yml --ui nextjs
        Browser ──► /api/manifest            normalized manifest (existing files only)
                ──► /api/catalog             catalog as columns   ┐ manifest_api.py via the
                ──► /api/forecasts?model&window  cell rates        ┘ floatCSEP interpreter
+               ──► /api/evaluations         summaries of the saved evaluation results
                ──► /api/results/<path>      result figure (listed in the manifest only)
 ```
 
 - **Data loading.** `manifest_api.py` parses catalogs and forecasts with
-  floatCSEP's own parsers (gridded `.dat/.csv/.xml/.hdf5` and catalog-based
-  forecasts, whose expected rates are computed on the experiment grid). It writes
-  compact, column-oriented JSON; times are epoch milliseconds (UTC).
+  floatCSEP's own parsers (gridded `.dat/.csv/.xml/.hdf5`, quadtree `.csv` and
+  catalog-based forecasts, whose expected rates are computed on the experiment
+  grid), and scales rates to the time window like floatCSEP does. It writes
+  compact, column-oriented JSON; times are epoch milliseconds (UTC). Regular
+  grids are sent as cell indices, quadtree grids as quadkeys.
+- **Evaluations.** `/api/evaluations` condenses every saved result
+  (`<window>/evaluations/<test>_<model>.json`, including results written by a
+  `plot_custom` script) into scores, intervals and pass/fail verdicts. Results
+  of simulation-based tests can hold 10,000 values each, so the summaries are
+  cached on disk; `NaN` and `Infinity` written by Python are tolerated.
 - **Caching.** Results are cached in `FLOATCSEP_DASHBOARD_CACHE`, keyed on the
   source file's path, size and modification time, so re-running an experiment
   invalidates them. Responses carry an `ETag`; the browser caches with SWR.
@@ -89,8 +110,9 @@ floatcsep view config.yml --ui nextjs
   the manifest are served. Python runs through `execFile` (no shell), and the
   server binds to `localhost`.
 - **Maps.** Leaflet with keyless basemaps (Esri light/dark gray canvas,
-  OpenStreetMap, Esri imagery). Forecast and region grids are drawn as one image
-  resampled along Web Mercator, so large grids stay fast.
+  OpenStreetMap, Esri imagery). Forecast and region grids, regular or quadtree,
+  are painted tile by tile on canvas (`components/maps/CellLayer.tsx`), so large
+  grids stay fast.
 - **Charts.** Apache ECharts, registered module by module in `lib/echarts.ts`.
 
 ### Layout
@@ -98,11 +120,13 @@ floatcsep view config.yml --ui nextjs
 ```
 app/                      pages (experiment, catalogs, forecasts, results) and API routes
 components/charts/        ECharts wrapper, chart theme and chart components
-components/maps/          Leaflet map, raster and event layers, legends
+components/maps/          Leaflet map, grid cell and event layers, legends
+components/overview/      Overview tables and the grid map card
+components/results/       evaluation charts and figure browser
 components/layout/        app shell, sidebar, page header
 components/ui/            cards, tables, controls, states, lightbox
 hooks/ lib/               data hooks, formatting, time (UTC), colours, grid helpers
-lib/server/               manifest normalization, Python runner, HTTP helpers
+lib/server/               manifest normalization, evaluation summaries, Python runner, HTTP helpers
 manifest_api.py           catalog/forecast parsing (called by the API)
 server.py runtime.py      launcher and Node.js/npm management
 schemas.py                manifest serialization (Pydantic)

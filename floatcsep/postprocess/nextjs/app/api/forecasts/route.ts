@@ -38,9 +38,7 @@ export async function GET(request: NextRequest) {
     const key = await sourceKey('forecast', file, {
       catalog: model.is_catalog_forecast,
       nSims: model.func_kwargs?.n_sims ?? null,
-      grid: model.is_catalog_forecast
-        ? [region?.dh, region?.origins?.length, region?.bbox, manifest.magnitudes]
-        : null,
+      grid: model.is_catalog_forecast ? [region?.dh, region?.origins?.length, region?.bbox, manifest.magnitudes] : null,
     });
     const etag = `"${key}"`;
     const cachedResponse = notModified(request, etag);

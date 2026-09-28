@@ -186,8 +186,13 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
     try:
         cat_map = reg.get_figure_key("main_catalog_map")
         cat_time = reg.get_figure_key("main_catalog_time")
-        cat_path = _rel(reg.run_dir / cat_repo.cat_path, app_root)
-        catalog["path"] = cat_path
+        # The main catalog is stored where the configuration points (relative to the
+        # experiment's working directory); a finished run also keeps a copy of it in
+        # the results folder (Experiment.make_repr).
+        cat_file = reg.abs(cat_repo.cat_path)
+        if not os.path.isfile(cat_file):
+            cat_file = os.path.join(reg.abs(reg.run_dir), os.path.basename(cat_repo.cat_path))
+        catalog["path"] = _rel(cat_file, app_root)
         catalog["map"] = _rel(cat_map, app_root)
         catalog["time"] = _rel(cat_time, app_root)
     except Exception:

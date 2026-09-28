@@ -17,7 +17,16 @@ interface RangeSliderProps {
  * A two-thumb slider built from two native range inputs, so both thumbs keep
  * native keyboard, touch and screen-reader support.
  */
-export function RangeSlider({ min, max, step, value, onChange, label, formatValue = String, className }: RangeSliderProps) {
+export function RangeSlider({
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  label,
+  formatValue = String,
+  className,
+}: RangeSliderProps) {
   const span = max - min || 1;
   const [lo, hi] = value;
   const left = ((lo - min) / span) * 100;

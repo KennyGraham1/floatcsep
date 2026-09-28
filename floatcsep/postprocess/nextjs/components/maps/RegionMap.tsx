@@ -1,53 +1,98 @@
 'use client';
 
+import L from 'leaflet';
 import { useMemo, useState } from 'react';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { REGION_FILL } from '@/lib/colors';
+import { HEAT, REGION_FILL, rampGradient, rampTable } from '@/lib/colors';
 import { formatInt, formatLatLon } from '@/lib/format';
-import { regionRaster, solidTable } from '@/lib/grid';
-import type { Region } from '@/lib/types';
+import { gridExtent, solidTable, type CellGrid } from '@/lib/grid';
+import { CellLayer, type HoveredCell } from './CellLayer';
 import MapView from './MapView';
-import { LegendDot, MapPanel } from './MapOverlays';
-import { gridBounds, RasterLayer, type HoveredCell } from './RasterLayer';
+import { ColorScaleLegend, LegendDot, MapPanel } from './MapOverlays';
 
-export default function RegionMap({ region, height }: { region: Region; height: number }) {
+interface RegionMapProps {
+  grid: CellGrid;
+  /** Region or grid name for the legend. */
+  label: string;
+  height: number;
+}
+
+/**
+ * The cells of a testing region or forecast grid. Quadtree grids are shaded by
+ * zoom level, so their multi-resolution structure is visible.
+ */
+export default function RegionMap({ grid, label, height }: RegionMapProps) {
   const mode = useThemeMode();
-  const grid = useMemo(() => regionRaster(region), [region]);
-  const table = useMemo(() => solidTable(REGION_FILL[mode]), [mode]);
-  const bounds = useMemo(() => (grid ? gridBounds(grid) : null), [grid]);
+  const extent = useMemo(() => gridExtent(grid), [grid]);
+  const bounds = useMemo(() => L.latLngBounds([extent[0], extent[1]], [extent[2], extent[3]]), [extent]);
   const [hover, setHover] = useState<HoveredCell | null>(null);
-  const domain = useMemo<[number, number]>(() => [0, 1], []);
+
+  const levels = useMemo(() => {
+    if (grid.type !== 'quadtree') return null;
+    return {
+      values: Float64Array.from(grid.quadkeys, (q) => q.length),
+      min: grid.levels[0],
+      max: grid.levels[grid.levels.length - 1],
+    };
+  }, [grid]);
+  const values = useMemo(() => levels?.values ?? new Float64Array(grid.n).fill(1), [levels, grid.n]);
+  const table = useMemo(() => (levels ? rampTable(HEAT[mode]) : solidTable(REGION_FILL[mode])), [levels, mode]);
+  const domain = useMemo<[number, number]>(
+    () => (levels ? [levels.min, Math.max(levels.max, levels.min + 1)] : [0, 1]),
+    [levels],
+  );
 
   return (
     <MapView
       bounds={bounds}
-      fitKey={`${region.name}:${grid?.nx}:${grid?.ny}`}
+      fitKey={`${label}:${grid.type}:${grid.n}`}
       height={height}
-      ariaLabel="Map of the experiment's testing region"
+      ariaLabel={`Map of the cells of ${label}`}
       labelsOnTop
       overlays={
         <>
-          {hover && grid && (
+          {hover && (
             <MapPanel position="top-left" live>
-              <span className="tabular">{formatLatLon(hover.lat, hover.lon)}</span>
-              <span className="text-ink-3"> · cell centre</span>
+              {grid.type === 'quadtree' ? (
+                <>
+                  <div className="font-medium tabular">Level {grid.quadkeys[hover.index].length}</div>
+                  <div className="font-mono text-2xs text-ink-3">{grid.quadkeys[hover.index]}</div>
+                </>
+              ) : (
+                <div className="font-medium">Cell</div>
+              )}
+              <div className="tabular text-ink-3">{formatLatLon(hover.lat, hover.lon)}</div>
             </MapPanel>
           )}
           <MapPanel position="bottom-left">
-            <div className="flex items-center gap-2">
-              <LegendDot color={REGION_FILL[mode]} />
-              <span className="font-medium">Testing region</span>
-              {grid && (
+            {levels ? (
+              <ColorScaleLegend
+                title={`${label} · ${formatInt(grid.n)} cells · zoom level`}
+                gradient={rampGradient(HEAT[mode])}
+                min={`${levels.min} (coarse)`}
+                max={`${levels.max} (fine)`}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <LegendDot color={REGION_FILL[mode]} />
+                <span className="font-medium">{label}</span>
                 <span className="tabular text-ink-3">
-                  {formatInt(grid.ix.length)} cells · {region.dh}°
+                  {formatInt(grid.n)} cells{grid.type === 'regular' ? ` · ${grid.dh}°` : ''}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </MapPanel>
         </>
       }
     >
-      {grid && <RasterLayer grid={grid} table={table} domain={domain} opacity={0.4} onHover={setHover} />}
+      <CellLayer
+        grid={grid}
+        values={values}
+        table={table}
+        domain={domain}
+        opacity={levels ? 0.6 : 0.4}
+        onHover={setHover}
+      />
     </MapView>
   );
 }

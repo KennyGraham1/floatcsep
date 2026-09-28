@@ -1,5 +1,5 @@
 import useSWR, { preload, type SWRConfiguration } from 'swr';
-import type { ApiErrorBody, CatalogPayload, ForecastPayload } from './types';
+import type { ApiErrorBody, CatalogPayload, EvaluationSummary, ForecastPayload } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -55,6 +55,10 @@ export function useCatalog(enabled = true) {
 export function useForecast(model: number | null, window: number | null) {
   const key = model !== null && window !== null ? forecastUrl(model, window) : null;
   return useSWR<ForecastPayload, ApiError>(key, fetchJson, DATA_OPTIONS);
+}
+
+export function useEvaluations(enabled = true) {
+  return useSWR<EvaluationSummary[], ApiError>(enabled ? '/api/evaluations' : null, fetchJson, DATA_OPTIONS);
 }
 
 /** Warm the SWR cache (e.g. the next time window) without rendering anything. */

@@ -42,7 +42,10 @@ export function Select({ label, value, options, onChange, className, addon, hide
               </option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-3" aria-hidden />
+          <ChevronDown
+            className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-3"
+            aria-hidden
+          />
         </div>
         {addon}
       </div>

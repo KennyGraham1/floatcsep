@@ -102,12 +102,7 @@ export interface BValue {
  * Maximum-likelihood Gutenberg–Richter b-value (Aki, 1965; Utsu binning
  * correction) of the events at or above the completeness magnitude.
  */
-export function bValue(
-  mags: ArrayLike<number>,
-  indices: ArrayLike<number>,
-  completeness: number,
-  binWidth = 0.1,
-): BValue | null {
+export function bValue(mags: ArrayLike<number>, indices: ArrayLike<number>, completeness: number): BValue | null {
   const values: number[] = [];
   for (let j = 0; j < indices.length; j++) {
     const m = mags[indices[j]];
@@ -115,8 +110,18 @@ export function bValue(
   }
   const n = values.length;
   if (n < 30) return null;
+  values.sort((a, b) => a - b);
+  // The catalog's magnitude resolution, from the data: 0.1 for magnitudes binned
+  // at 0.1, 0.01 for moment magnitudes such as GCMT's. The binning correction
+  // is half of it, below the smallest magnitude used.
+  let resolution = Infinity;
+  for (let k = 1; k < n; k++) {
+    const step = values[k] - values[k - 1];
+    if (step > 1e-6 && step < resolution) resolution = step;
+  }
+  if (!Number.isFinite(resolution)) return null;
   const mean = values.reduce((sum, m) => sum + m, 0) / n;
-  const denominator = mean - (completeness - binWidth / 2);
+  const denominator = mean - (values[0] - resolution / 2);
   if (denominator <= 0) return null;
   const b = Math.LOG10E / denominator;
   const variance = values.reduce((sum, m) => sum + (m - mean) ** 2, 0) / (n * (n - 1));

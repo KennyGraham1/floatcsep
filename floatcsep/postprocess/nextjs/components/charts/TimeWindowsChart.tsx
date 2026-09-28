@@ -113,11 +113,5 @@ export default function TimeWindowsChart({ windows, counts }: TimeWindowsChartPr
     };
   }, [theme, windows, counts, scroll]);
 
-  return (
-    <EChart
-      option={option}
-      height={height}
-      ariaLabel={`Timeline of ${windows.length} forecast time windows`}
-    />
-  );
+  return <EChart option={option} height={height} ariaLabel={`Timeline of ${windows.length} forecast time windows`} />;
 }

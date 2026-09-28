@@ -65,6 +65,11 @@ export default function EventsPerWindowChart({ windows, counts, onSelect, height
   );
 
   return (
-    <EChart option={option} height={height} onEvents={events} ariaLabel="Number of observed events in each time window" />
+    <EChart
+      option={option}
+      height={height}
+      onEvents={events}
+      ariaLabel="Number of observed events in each time window"
+    />
   );
 }

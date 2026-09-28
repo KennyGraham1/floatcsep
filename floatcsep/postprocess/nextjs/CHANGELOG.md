@@ -12,7 +12,7 @@ All notable changes to the floatCSEP Next.js Dashboard.
   view, tooltips escape catalog text, and dates are shown in UTC.
 - Maps use keyless basemaps (Esri light/dark gray canvas, OpenStreetMap, Esri
   imagery); CARTO tiles now require an API key. Forecast and region grids are
-  drawn as one Mercator-resampled image with O(1) cell hover.
+  painted tile by tile on canvas, for regular and quadtree grids alike.
 - Upgraded to Next.js 15.5 and React 19 (fixes the Next.js 14 security
   advisories); `npm audit` reports no vulnerabilities.
 - `floatcsep view --ui nextjs` builds and serves a production build (rebuilt
@@ -27,7 +27,14 @@ All notable changes to the floatCSEP Next.js Dashboard.
   b-value, events per time window, largest events.
 - Forecasts: observed events overlay, expected vs observed counts, colour-scale
   histogram with range slider and opacity, neighbouring windows prefetched.
-- Results: coverage grid, per-model figures, full-screen viewer with download.
+- Forecasts: quadtree forecasts, and a rate-density view (events per 10⁴ km²)
+  for cells of different sizes.
+- Results: *Charts* view with heatmaps of the test scores (models × time
+  windows, models × grids) and per-model intervals, from `/api/evaluations`.
+- Results: coverage grid, per-model figures, full-screen viewer with download,
+  and the experiment's own figures (`results/figures/`).
+- Multi-grid experiments (models named `<MODEL>=<GRID>`): model and grid
+  selectors, and a map of each forecast grid on the Overview.
 - Overview: time-window timeline, models and tests tables.
 
 ### Fixed
@@ -38,6 +45,15 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - Colour-range changes were lost when panning the forecast map.
 - Model registry internals and empty plot functions leaked into the manifest.
 - Arbitrary paths could be read through the catalog/forecast/results routes.
+- Forecasts of time-independent models were not scaled to the time window.
+- The catalog path in the manifest assumed a copy inside the results folder,
+  which exists only once a run has finished.
+- Global grids and catalogs opened at zoom 0 (a small, repeated world), and
+  events of a global grid could be drawn a world away from their location.
+- The b-value assumed magnitudes binned at 0.1; the binning correction now
+  follows the catalog's magnitude resolution (e.g. 0.01 for gCMT Mw).
+- Magnitude bins such as 7.45 were rounded to one decimal.
+- Evaluation results containing `NaN` or `Infinity` could not be read.
 
 ## [1.1.0] - 2025
 

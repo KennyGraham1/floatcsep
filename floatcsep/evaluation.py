@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Dict, Callable, Union, Sequence, List, Any
 
+import numpy
 from csep.core.catalogs import CSEPCatalog
 from csep.core.forecasts import GriddedForecast
 from matplotlib import pyplot
@@ -12,6 +13,30 @@ from floatcsep.infrastructure.registries import ExperimentRegistry
 from floatcsep.utils.helpers import parse_csep_func
 
 log = logging.getLogger("floatLogger")
+
+
+def filter_to_region(catalog: CSEPCatalog, region) -> CSEPCatalog:
+    """
+    Keeps only the events of a catalog that fall inside the cells of a region.
+
+    Cartesian grids provide a mask (``get_masked``); quadtree grids do not, so their
+    events are kept when they lie within the bounds of any of the grid's cells.
+    """
+    if hasattr(region, "get_masked"):
+        return catalog.filter_spatial(region=region, in_place=True)
+    catalog.region = region
+    if catalog.event_count == 0:
+        return catalog
+    west, south, east, north = numpy.asarray(region.bounds).T
+    inside = numpy.array(
+        [
+            numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
+            for lon, lat in zip(catalog.get_longitudes(), catalog.get_latitudes())
+        ],
+        dtype=bool,
+    )
+    catalog.catalog = catalog.catalog[inside]
+    return catalog
 
 
 class Evaluation:
@@ -277,7 +302,7 @@ class Evaluation:
             _check_region_mismatch(forecast.region, experiment_region, timewindow)
             # Filter catalog to forecast region to prevent spatial test failures
             if forecast.region is not None:
-                eval_cat.filter_spatial(region=forecast.region, in_place=True)
+                filter_to_region(eval_cat, forecast.region)
 
         else:
             eval_cat = [self.catalog_repo.get_test_cat(i) for i in timewindow]
@@ -290,7 +315,7 @@ class Evaluation:
                 _check_region_mismatch(fc.region, experiment_region, tw_str)
                 # Filter catalog to forecast region
                 if fc.region is not None:
-                    cat.filter_spatial(region=fc.region, in_place=True)
+                    filter_to_region(cat, fc.region)
 
         return eval_cat
 

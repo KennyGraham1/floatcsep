@@ -5,16 +5,14 @@ import path from 'path';
 import { HttpError } from './http';
 
 /** Bump together with FORMAT_VERSION in manifest_api.py. */
-const DATA_VERSION = 3;
+const DATA_VERSION = 4;
 
 const SCRIPT = path.join(process.cwd(), 'manifest_api.py');
 
 // `floatcsep view` passes its own interpreter; a bare `python` may be another env.
-const pythonExecutable = () =>
-  process.env.FLOATCSEP_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+const pythonExecutable = () => process.env.FLOATCSEP_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
-const cacheDir = () =>
-  process.env.FLOATCSEP_DASHBOARD_CACHE || path.join(process.cwd(), '.cache', 'data');
+const cacheDir = () => process.env.FLOATCSEP_DASHBOARD_CACHE || path.join(process.cwd(), '.cache', 'data');
 
 const inflight = new Map<string, Promise<string>>();
 

@@ -51,10 +51,22 @@ const CHOICES: readonly BasemapChoice[] = ['default', 'streets', 'satellite'];
 
 const WORLD = L.latLngBounds([-60, -180], [75, 180]);
 
+/**
+ * Web Mercator stretches the poles, so fitting a global extent up to ±85° would
+ * drop to zoom 0 (a tiny, repeated world): fit such extents to the populated
+ * latitudes instead. Events and cells beyond them are still drawn.
+ */
+function fitTarget(bounds: L.LatLngBounds): L.LatLngBounds {
+  if (bounds.getEast() - bounds.getWest() < 180) return bounds;
+  const south = Math.max(bounds.getSouth(), WORLD.getSouth());
+  const north = Math.min(bounds.getNorth(), WORLD.getNorth());
+  return south < north ? L.latLngBounds([south, bounds.getWest()], [north, bounds.getEast()]) : bounds;
+}
+
 function FitBounds({ bounds, fitKey }: { bounds: L.LatLngBounds | null; fitKey: string }) {
   const map = useMap();
   useEffect(() => {
-    if (bounds?.isValid()) map.fitBounds(bounds, { padding: [24, 24], animate: false, maxZoom: 11 });
+    if (bounds?.isValid()) map.fitBounds(fitTarget(bounds), { padding: [24, 24], animate: false, maxZoom: 11 });
     // Refit only when the data extent changes, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, fitKey]);
@@ -121,11 +133,15 @@ export default function MapView({
     <div
       role="region"
       aria-label={ariaLabel}
-      className={cn('relative isolate overflow-hidden rounded-lg border', height === undefined && 'min-h-0 flex-1', className)}
+      className={cn(
+        'relative isolate overflow-hidden rounded-lg border',
+        height === undefined && 'min-h-0 flex-1',
+        className,
+      )}
       style={height === undefined ? undefined : { height }}
     >
       <MapContainer
-        bounds={bounds?.isValid() ? bounds : WORLD}
+        bounds={bounds?.isValid() ? fitTarget(bounds) : WORLD}
         boundsOptions={{ padding: [24, 24], maxZoom: 11 }}
         // Whole zoom levels: fractional zoom scales tiles and leaves hairline gaps.
         zoomSnap={1}

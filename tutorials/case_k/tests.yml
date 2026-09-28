@@ -1,0 +1,50 @@
+- Poisson N-test:
+    func: poisson_evaluations.number_test
+    plot_func: plot_consistency_test
+    plot_args:
+      title: Poisson N-test
+      xlabel: Number of events
+      figsize: [7, 15]      # 72 forecasts: tall enough for legible model names
+      ylabel_fontsize: 8
+
+- Poisson M-test:
+    func: poisson_evaluations.magnitude_test
+    func_kwargs:
+      num_simulations: 10000
+      seed: 23
+    plot_func: plot_consistency_test
+    plot_args:
+      title: Poisson M-test
+      xlabel: Log-likelihood
+      figsize: [7, 15]      # 72 forecasts: tall enough for legible model names
+      ylabel_fontsize: 8
+    plot_kwargs:
+      one_sided_lower: True
+
+- Poisson S-test:
+    func: poisson_evaluations.spatial_test
+    func_kwargs:
+      num_simulations: 10000
+      seed: 23
+    plot_func: plot_consistency_test
+    plot_args:
+      title: Poisson S-test
+      xlabel: Log-likelihood
+      figsize: [7, 15]      # 72 forecasts: tall enough for legible model names
+      ylabel_fontsize: 8
+    plot_kwargs:
+      one_sided_lower: True
+
+- Poisson CL-test:
+    func: poisson_evaluations.conditional_likelihood_test
+    func_kwargs:
+      num_simulations: 10000
+      seed: 23
+    plot_func: plot_consistency_test
+    plot_args:
+      title: Poisson CL-test
+      xlabel: Log-likelihood
+      figsize: [7, 15]      # 72 forecasts: tall enough for legible model names
+      ylabel_fontsize: 8
+    plot_kwargs:
+      one_sided_lower: True

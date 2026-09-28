@@ -44,10 +44,7 @@ export function EventsLayer({
   }, [tooltip]);
 
   // Largest first, so smaller events stay visible on top.
-  const order = useMemo(
-    () => Array.from(indices).sort((a, b) => catalog.mag[b] - catalog.mag[a]),
-    [catalog, indices],
-  );
+  const order = useMemo(() => Array.from(indices).sort((a, b) => catalog.mag[b] - catalog.mag[a]), [catalog, indices]);
   const lonOf = useMemo(
     () => (i: number) => (unwrap && catalog.lon[i] < 0 ? catalog.lon[i] + 360 : catalog.lon[i]),
     [catalog, unwrap],
@@ -147,7 +144,10 @@ export function EventsLayer({
         if (i === shown) return;
         shown = i;
         const latlng = L.latLng(catalog.lat[i], lonOf(i));
-        highlight.setLatLng(latlng).setRadius(radiusFor(catalog.mag[i]) + 2).addTo(map);
+        highlight
+          .setLatLng(latlng)
+          .setRadius(radiusFor(catalog.mag[i]) + 2)
+          .addTo(map);
         tip.setLatLng(latlng).setContent(tooltipRef.current(i));
         map.openTooltip(tip);
       });
@@ -174,7 +174,10 @@ export function magnitudeRadius(minMagnitude: number) {
   return (magnitude: number) => Math.min(16, 2.5 + Math.max(0, magnitude - minMagnitude) * 2.1);
 }
 
-/** Whether longitudes should be unwrapped to keep data near 180° contiguous. */
+/**
+ * Whether longitudes should be unwrapped to keep data near 180° contiguous: only
+ * when that clearly shortens their span, so global data keep the usual frame.
+ */
 export function needsUnwrap(lons: ArrayLike<number>): boolean {
   let min = Infinity;
   let max = -Infinity;
@@ -188,5 +191,5 @@ export function needsUnwrap(lons: ArrayLike<number>): boolean {
     if (shifted < minShifted) minShifted = shifted;
     if (shifted > maxShifted) maxShifted = shifted;
   }
-  return max - min > 180 && maxShifted - minShifted < max - min;
+  return max - min > 180 && maxShifted - minShifted < max - min - 45;
 }

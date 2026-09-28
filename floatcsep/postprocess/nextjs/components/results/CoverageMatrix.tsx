@@ -22,7 +22,12 @@ export function CoverageMatrix({ tests, windows, counts, selected, onSelect }: C
 
   return (
     <div className="scrollbar-thin overflow-x-auto pb-1">
-      <div role="grid" aria-label="Result figures per test and time window" className="grid min-w-min gap-1 pr-3" style={{ gridTemplateColumns: columns }}>
+      <div
+        role="grid"
+        aria-label="Result figures per test and time window"
+        className="grid min-w-min gap-1 pr-3"
+        style={{ gridTemplateColumns: columns }}
+      >
         <div role="row" className="contents">
           {/* The cell must stay in the grid flow; only its text is visually hidden. */}
           <span role="columnheader">

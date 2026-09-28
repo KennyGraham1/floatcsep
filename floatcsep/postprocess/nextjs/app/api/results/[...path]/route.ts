@@ -31,9 +31,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     const { path: segments } = await context.params;
     const { appRoot, figures } = await loadManifest();
 
-    const candidates = [segments.join('/'), segments.map(safeDecode).join('/')].map((p) =>
-      path.posix.normalize(p),
-    );
+    const candidates = [segments.join('/'), segments.map(safeDecode).join('/')].map((p) => path.posix.normalize(p));
     const relative = candidates.find((p) => figures.has(p));
     if (!relative) throw new HttpError(404, 'Figure not found');
 
@@ -62,7 +60,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     }
     if (request.nextUrl.searchParams.has('download')) {
       const name = path.basename(file).replace(/"/g, '');
-      headers['Content-Disposition'] = `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(file))}`;
+      headers['Content-Disposition'] =
+        `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(file))}`;
     }
 
     return new NextResponse(await fs.readFile(file), { headers });

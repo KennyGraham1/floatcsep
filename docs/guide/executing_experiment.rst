@@ -117,8 +117,9 @@ This starts a local server and opens a browser at ``http://localhost:<port>`` wh
 
 - View the experiment overview: configuration, testing region, time windows, models and tests
 - Explore the observed catalog: epicentre map, magnitude over time, magnitude-frequency distribution and events per time window
-- Browse forecast maps for each model and time window, with observed events, colour-scale controls and expected versus observed events per magnitude bin
-- Review the evaluation figures (e.g. N-test, S-test) of every test and time window
+- Browse forecast maps for each model and time window (regular or quadtree grids), with observed events, colour-scale controls and expected versus observed events per magnitude bin
+- Compare the evaluation results in charts: heatmaps of the test scores by model and time window (and by grid, when the models are named ``<MODEL>=<GRID>``), and each test's intervals per model
+- Review the evaluation figures (e.g. N-test, S-test) of every test and time window, and the figures written to ``results/figures`` (e.g. by a ``plot_custom`` script)
 
 .. note::
 

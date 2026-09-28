@@ -49,7 +49,11 @@ export function ModelsTable({ manifest }: { manifest: Manifest }) {
       key: 'type',
       header: 'Forecast type',
       sortValue: (m) => (m.is_catalog_forecast ? 1 : 0),
-      render: (m) => <Badge tone={m.is_catalog_forecast ? 'info' : 'neutral'}>{m.is_catalog_forecast ? 'Catalog-based' : 'Gridded'}</Badge>,
+      render: (m) => (
+        <Badge tone={m.is_catalog_forecast ? 'info' : 'neutral'}>
+          {m.is_catalog_forecast ? 'Catalog-based' : 'Gridded'}
+        </Badge>
+      ),
     },
     {
       key: 'source',

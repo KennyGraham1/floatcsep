@@ -10,7 +10,8 @@ the caller, keyed on the source file's path, size and modification time.
 Usage::
 
     python manifest_api.py catalog --path <catalog file> --out <json>
-    python manifest_api.py forecast --manifest <manifest.json> --model <i> --window <j> --out <json>
+    python manifest_api.py forecast --manifest <manifest.json> --model <i> --window <j> \
+        --out <json>
 """
 
 import argparse
@@ -25,7 +26,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 # Bump when the JSON layout changes, so cached documents are regenerated.
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 
 
 def _write_json(payload: Dict[str, Any], out_path: str) -> None:
@@ -200,12 +201,41 @@ def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Di
 
     if rates.ndim == 1:
         rates = rates[:, None]
-    origins = np.asarray(region.origins(), dtype=float)
-    dh = float(region.dh)
-
     cell_rates = rates.sum(axis=1)
     magnitude_rates = rates.sum(axis=0)
+    active = np.isfinite(cell_rates) & (cell_rates > 0)
+    log_rates = np.log10(cell_rates[active]) if active.any() else np.array([0.0, 1.0])
 
+    if hasattr(region, "quadkeys"):
+        # Multi-resolution quadtree: cells are Web Mercator tiles.
+        quadkeys = np.asarray(region.quadkeys).astype(str)
+        grid = {"grid": "quadtree", "quadkeys": quadkeys[active].tolist()}
+    else:
+        grid = _regular_grid(region, active)
+
+    return {
+        "version": FORMAT_VERSION,
+        "kind": "catalog" if is_catalog else "gridded",
+        **grid,
+        "model": model.get("name"),
+        "time_window": window,
+        "path": rel_path,
+        "n_cells": int(len(cell_rates)),
+        "n_active": int(active.sum()),
+        "rate": _significant(cell_rates[active]),
+        "total": float(np.nansum(cell_rates)),
+        "vmin": float(log_rates.min()),
+        "vmax": float(log_rates.max()),
+        "magnitudes": _rounded(magnitudes, 4),
+        "magnitude_rates": _significant(magnitude_rates),
+        "n_catalogs": n_catalogs,
+    }
+
+
+def _regular_grid(region, active: np.ndarray) -> Dict[str, Any]:
+    """Integer cell positions of a CartesianGrid2D, from its lower-left corner."""
+    origins = np.asarray(region.origins(), dtype=float)
+    dh = float(region.dh)
     lon = origins[:, 0]
     lat = origins[:, 1]
     # Keep regions that straddle the antimeridian contiguous (e.g. 179°E -> 181°E).
@@ -217,32 +247,15 @@ def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Di
     lat0 = float(lat.min())
     ix = np.rint((lon - lon0) / dh).astype(np.int64)
     iy = np.rint((lat - lat0) / dh).astype(np.int64)
-
-    active = np.isfinite(cell_rates) & (cell_rates > 0)
-    log_rates = np.log10(cell_rates[active]) if active.any() else np.array([0.0, 1.0])
-
     return {
-        "version": FORMAT_VERSION,
-        "kind": "catalog" if is_catalog else "gridded",
-        "model": model.get("name"),
-        "time_window": window,
-        "path": rel_path,
+        "grid": "regular",
         "dh": dh,
         "lon0": lon0,
         "lat0": lat0,
         "nx": int(ix.max()) + 1,
         "ny": int(iy.max()) + 1,
-        "n_cells": int(len(origins)),
-        "n_active": int(active.sum()),
         "ix": ix[active].tolist(),
         "iy": iy[active].tolist(),
-        "rate": _significant(cell_rates[active]),
-        "total": float(np.nansum(cell_rates)),
-        "vmin": float(log_rates.min()),
-        "vmax": float(log_rates.max()),
-        "magnitudes": _rounded(magnitudes, 4),
-        "magnitude_rates": _significant(magnitude_rates),
-        "n_catalogs": n_catalogs,
     }
 
 

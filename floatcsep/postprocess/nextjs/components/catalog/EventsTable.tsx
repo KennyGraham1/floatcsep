@@ -30,9 +30,7 @@ export function EventsTable({ catalog, indices, pageSize = 10, caption, limit, c
     return all.sort((a, b) => catalog.mag[b] - catalog.mag[a]).slice(0, limit);
   }, [catalog, indices, limit]);
 
-  const dot = (i: number) => (
-    <LegendDot color={catalog.kind[i] === INPUT ? colors.input : colors.test} size={8} />
-  );
+  const dot = (i: number) => <LegendDot color={catalog.kind[i] === INPUT ? colors.input : colors.test} size={8} />;
 
   const all: Column<number>[] = [
     {

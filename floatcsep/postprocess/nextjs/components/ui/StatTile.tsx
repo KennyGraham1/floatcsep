@@ -15,7 +15,11 @@ export function StatTile({ label, value, caption, className }: StatTileProps) {
     <div className={cn('min-w-0 rounded-xl border bg-surface px-4 py-3.5 shadow-card', className)}>
       <div className="truncate text-xs font-medium text-ink-3">{label}</div>
       <div className="mt-1 truncate text-[1.4rem] font-semibold leading-8 tracking-tight text-ink">{value}</div>
-      {caption && <div className="mt-0.5 truncate text-xs text-ink-3">{caption}</div>}
+      {caption && (
+        <div className="mt-0.5 truncate text-xs text-ink-3" title={typeof caption === 'string' ? caption : undefined}>
+          {caption}
+        </div>
+      )}
     </div>
   );
 }
