@@ -15,9 +15,13 @@ Written into the results directory:
     figures/T_ranked.png            information gain vs GEAR1, per model and grid
     figures/annual_consistency.png  N/M/S/CL outcomes by year (primary grid)
     figures/annual_ig_heatmap.png   information gain vs GEAR1 by year (primary grid)
+    figures/annual_consistency_native.png, annual_ig_heatmap_native.png
+                                    the same on the native 0.1° grid
     figures/annual_counts.png       forecast vs observed events by year (primary grid)
     figures/annual_pooled_ig.png    T-test pooled over the years (primary grid)
     figures/quadtree_grids.png      the quadtree grids
+    figures/grid_levels.png         the grids compared: cells per zoom level, cells against N
+    figures/quadtree_japan.png      three grids and the native 0.1° lattice around Japan
 
 Results on the models' native 0.1-degree grid (FULL01, 6.48 million cells),
 computed by the global experiment for the whole period with the same forecasts
@@ -25,7 +29,6 @@ and tests, are copied by prepare.py into imported/. They are stored next to
 floatCSEP's own results and shown as a ninth grid in the whole-period figures.
 """
 
-import datetime
 import json
 import logging
 import os
@@ -38,7 +41,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from csep.core import poisson_evaluations  # noqa: E402
-from matplotlib.collections import PatchCollection  # noqa: E402
+from matplotlib.collections import LineCollection, PatchCollection  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
@@ -60,9 +63,8 @@ TESTS = {
     "CL": "Poisson CL-test",
     "T": T_TEST,
 }
-# The models' native 0.1-degree grid, evaluated by the global experiment (2014-2022)
+# The models' native 0.1-degree grid (results from imported/, see native_grid.py)
 NATIVE = "FULL01"
-NATIVE_WINDOW = (datetime.datetime(2014, 1, 1), datetime.datetime(2022, 1, 1))
 ORDER = ["GEAR1", "KJSS", "SHIFT2F_GSRM", "TEAM", "WHEEL", "GSSGSRM", "SUP", "PPE", "EEPASfull"]
 GRID_ORDER = [
     "N10L11",
@@ -109,6 +111,10 @@ INK, INK2, MUTED = "#0b0b0b", "#52514e", "#8a8983"
 GOOD, BAD = "#1baf7a", "#e34948"
 PASS, FAIL, TIE = "#1e8449", "#c0392b", "#7f8c8d"
 EDGE = "#1b4f72"
+ORANGE = "#eb6834"
+EQUATOR_KM = 40075.0
+# Epicentre of the 2011 Tohoku earthquake: the anchor of the nested quadkeys in quadtree_japan
+TOHOKU = (142.37, 38.30)
 DIVERGING = LinearSegmentedColormap.from_list("bl_rd", [RED, NEUTRAL, BLUE])
 STYLE = {
     "figure.facecolor": "white",
@@ -168,11 +174,21 @@ class Layout:
         self.primary = PRIMARY_GRID if PRIMARY_GRID in self.grids else self.grids[0]
         # Grids of the whole-period figures: these, and the native grid once imported
         self.columns = list(self.grids)
+        self._regions = {}
         windows = list(experiment.time_windows)
         self.full = max(windows, key=years_between)
         self.annual = [
             w for w in windows if w is not self.full and abs(years_between(w) - 1) < 0.01
         ]
+
+    def region(self, grid):
+        """The quadtree region of a grid (from the forecast of one of its models)."""
+        if grid not in self._regions:
+            model = self.models.get((REF, grid)) or next(
+                m for (_, g), m in self.models.items() if g == grid
+            )
+            self._regions[grid] = model.get_forecast(timewindow2str(self.full)).region
+        return self._regions[grid]
 
     def path(self, window, test, name):
         return os.path.join(
@@ -218,25 +234,21 @@ def same_grid_ttests(layout):
 
 def import_native_results(layout):
     """
-    Results on the native 0.1-degree grid, which prepare.py copies from the global
-    experiment: there, pyCSEP's likelihood tests take hours on 6.48 million cells.
-    They are stored like floatCSEP's own results, in the whole-period window.
+    Results on the native 0.1-degree grid, from imported/<window>/: prepare.py copies
+    the global experiment's whole-period results there, and native_grid.py computes
+    them for every window. They are stored like floatCSEP's own results.
     """
-    source = layout.experiment.registry.abs("imported")
-    if not os.path.isdir(source):
-        return
-    if tuple(layout.full) != NATIVE_WINDOW:
-        log.warning("The native-grid results cover 2014-2022 only: not imported")
-        return
     copied = 0
-    for name in sorted(os.listdir(source)):
-        match = re.fullmatch(r"Poisson_(N|M|S|CL|T)_(.+)\.json", name)
-        if match:
-            key, model = match.groups()
-            target = layout.path(layout.full, TESTS[key], model)
-            shutil.copyfile(os.path.join(source, name), target)
-            copied += 1
-    if copied:
+    for window in layout.experiment.time_windows:
+        source = layout.experiment.registry.abs("imported", timewindow2str(window))
+        if not os.path.isdir(source):
+            continue
+        for name in sorted(os.listdir(source)):
+            if name.endswith(f"={NATIVE}.json"):
+                target = os.path.join(os.path.dirname(layout.path(window, "", "")), name)
+                shutil.copyfile(os.path.join(source, name), target)
+                copied += 1
+    if os.path.isfile(layout.path(layout.full, TESTS["S"], f"{REF}={NATIVE}")):
         layout.columns.append(NATIVE)
     log.info(f"Imported {copied} results on the native 0.1-degree grid")
 
@@ -686,8 +698,8 @@ def t_ranked(layout, out_dir):
 # ------------------------------------------------- annual: primary grid
 
 
-def annual_consistency(layout, out_dir):
-    grid, models = layout.primary, layout.model_names
+def annual_consistency(layout, out_dir, grid=None, suffix=""):
+    grid, models = grid or layout.primary, layout.model_names
     years = [str(w[0].year) for w in layout.annual]
     fig, axes = plt.subplots(
         2, 2, figsize=(8.6, 0.62 * len(models) + 2.6), sharey=True, sharex=True
@@ -725,17 +737,17 @@ def annual_consistency(layout, out_dir):
         ax.set_yticks(np.arange(len(models)), models, fontsize=8.5)
     fig.suptitle(
         "Consistency test outcomes by forecast year: "
-        f"'+' not rejected, '×' rejected at α = {ALPHA} (grid {grid})",
+        f"'+' not rejected, '×' rejected at α = {ALPHA} (grid {grid_label(grid)})",
         x=0.01,
         ha="left",
     )
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.savefig(os.path.join(out_dir, "annual_consistency.png"), dpi=170)
+    fig.savefig(os.path.join(out_dir, f"annual_consistency{suffix}.png"), dpi=170)
     plt.close(fig)
 
 
-def annual_ig_heatmap(layout, out_dir):
-    grid = layout.primary
+def annual_ig_heatmap(layout, out_dir, grid=None, suffix=""):
+    grid = grid or layout.primary
     rows = [m for m in layout.model_names if m != REF]
     years = [str(w[0].year) for w in layout.annual]
     mat = np.full((len(rows), len(years)), np.nan)
@@ -774,7 +786,8 @@ def annual_ig_heatmap(layout, out_dir):
                     color="white" if abs(mat[i, j]) > 0.55 * lim else INK,
                 )
     ax.set_title(
-        f"Information gain per earthquake against {REF} by forecast year (grid {grid})\n"
+        f"Information gain per earthquake against {REF} by forecast year "
+        f"(grid {grid_label(grid)})\n"
         f"target events per year in brackets; colour scale saturates at ±{lim:.1f}",
         loc="left",
     )
@@ -786,7 +799,7 @@ def annual_ig_heatmap(layout, out_dir):
         label=f"information gain per earthquake against {REF}",
     )
     fig.tight_layout()
-    fig.savefig(os.path.join(out_dir, "annual_ig_heatmap.png"), dpi=170)
+    fig.savefig(os.path.join(out_dir, f"annual_ig_heatmap{suffix}.png"), dpi=170)
     plt.close(fig)
 
 
@@ -921,16 +934,12 @@ def quadtree_grids(layout, out_dir):
     except ImportError:
         log.warning("cartopy is not installed; skipping quadtree_grids.png")
         return
-    window_str = timewindow2str(layout.full)
     grids = layout.grids
     ncol = 3 if len(grids) > 4 else len(grids)
     nrow = int(np.ceil(len(grids) / ncol))
     fig = plt.figure(figsize=(7.4, 1.75 * nrow + 0.3))
     for i, grid in enumerate(grids):
-        model = layout.models.get((REF, grid)) or next(
-            m for (_, g), m in layout.models.items() if g == grid
-        )
-        region = model.get_forecast(window_str).region
+        region = layout.region(grid)
         bounds = np.asarray(region.bounds)
         levels = [len(q) for q in region.quadkeys]
         ax = fig.add_subplot(nrow, ncol, i + 1, projection=ccrs.Robinson(central_longitude=180))
@@ -970,6 +979,277 @@ def quadtree_grids(layout, out_dir):
     plt.close(fig)
 
 
+def grid_levels(layout, out_dir):
+    """The grids compared: how many cells each has at each zoom level, and in all."""
+    grids = layout.grids
+    counts = {
+        g: np.bincount([len(k) for k in layout.region(g).quadkeys], minlength=12) for g in grids
+    }
+    levels = [z for z in range(1, 12) if any(counts[g][z] for g in grids)]
+    table = np.array([[counts[g][z] for z in levels] for g in grids], dtype=float)
+    totals = table.sum(axis=1)
+
+    fig, (ax, ax2) = plt.subplots(
+        1,
+        2,
+        figsize=(11.4, 0.42 * len(grids) + 2.0),
+        gridspec_kw={"width_ratios": [3.2, 1.2], "wspace": 0.3},
+    )
+    shown = np.where(table > 0, np.log10(np.maximum(table, 1)), np.nan)
+    vmax = np.nanmax(shown)
+    cmap = LinearSegmentedColormap.from_list("cells", ["#eaf2fc", BLUE, "#0b2f5c"])
+    ax.imshow(shown, cmap=cmap, vmin=0, vmax=vmax, aspect="auto")
+    for i in range(len(grids)):
+        for j in range(len(levels)):
+            if table[i, j] > 0:
+                color = "white" if shown[i, j] > 0.55 * vmax else INK
+                ax.text(
+                    j,
+                    i,
+                    f"{int(table[i, j]):,}",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color=color,
+                )
+        ax.text(
+            len(levels) - 0.3,
+            i,
+            f"{int(totals[i]):,}",
+            ha="left",
+            va="center",
+            fontsize=8.5,
+            fontweight="bold",
+            color=INK,
+        )
+    ax.text(
+        len(levels) - 0.3, -0.65, "all cells", ha="left", va="bottom", fontsize=8, color=INK2
+    )
+    ax.set_xticks(
+        range(len(levels)), [f"L{z}\n{EQUATOR_KM / 2**z:,.0f}" for z in levels], fontsize=7.5
+    )
+    ax.set_yticks(range(len(grids)), [grid_label(g) for g in grids], fontsize=8.5)
+    ax.set_xticks(np.arange(-0.5, len(levels), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(grids), 1), minor=True)
+    ax.grid(which="minor", color="white", lw=1.5)
+    ax.grid(which="major", visible=False)
+    n_catalogue = sum(1 for g in grids if not g.startswith("SN"))
+    if 0 < n_catalogue < len(grids):
+        ax.axhline(n_catalogue - 0.5, color=INK, lw=1.2)
+    ax.tick_params(which="both", length=0)
+    for side in ("top", "right", "left", "bottom"):
+        ax.spines[side].set_visible(False)
+    ax.set_xlabel("zoom level, and the width of its cells at the equator (km)", fontsize=8.5)
+    ax.set_title("(a) Cells at each zoom level", loc="left", fontsize=10, color=INK)
+    if NATIVE in layout.columns:
+        ax.text(
+            0,
+            -0.165,
+            "The results are also shown on the models' native grid: a regular 0.1° lattice of "
+            "6,480,000 cells, 11 km wide at the equator.",
+            transform=ax.transAxes,
+            fontsize=8,
+            color=INK2,
+            va="top",
+        )
+
+    for prefix, color, name in (
+        ("N", BLUE, "catalogue ($N$)"),
+        ("SN", ORANGE, "catalogue and strain ($SN$)"),
+    ):
+        points = []
+        for i, grid in enumerate(grids):
+            match = re.fullmatch(r"(S?N)(\d+)L\d+", grid)
+            if match and match.group(1) == prefix:
+                points.append((int(match.group(2)), totals[i]))
+        if points:
+            x, y = zip(*sorted(points))
+            ax2.plot(
+                x,
+                y,
+                "-o",
+                color=color,
+                lw=2,
+                ms=6,
+                markeredgecolor="white",
+                mew=1.2,
+                label=name,
+            )
+    ax2.set_xscale("log")
+    ax2.set_yscale("log")
+    ax2.set_xticks([10, 25, 50, 100], ["10", "25", "50", "100"])
+    ax2.set_yticks([1000, 2000, 5000, 10000], ["1,000", "2,000", "5,000", "10,000"])
+    ax2.minorticks_off()
+    ax2.grid(True)
+    ax2.set_xlabel("$N$, the most points a cell may hold", fontsize=8.5)
+    ax2.legend(frameon=False, fontsize=8, loc="lower left")
+    ax2.set_title("(b) Cells against $N$", loc="left", fontsize=10, color=INK)
+    fig.savefig(os.path.join(out_dir, "grid_levels.png"), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def quadtree_japan(layout, out_dir):
+    """Cells of three grids around Japan, and how a cell's quadkey extends its parents'."""
+    try:
+        import cartopy.crs as ccrs
+        import cartopy.feature as cfeature
+        import mercantile
+    except ImportError:
+        log.warning("cartopy or mercantile is not installed; skipping quadtree_japan.png")
+        return
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+
+    west, east, south, north = 126.0, 150.0, 26.0, 47.0
+    grids = [g for g in ("N10L11", "N50L11", "SN10L11") if g in layout.grids] or layout.grids[
+        :3
+    ]
+    cmap = LinearSegmentedColormap.from_list("levels", ["#f4f8fd", "#9cc3ee", BLUE, "#0b2f5c"])
+    norm = Normalize(vmin=2, vmax=11)
+    native = NATIVE in layout.columns
+    n_panels = len(grids) + native
+    ncol = 2 if n_panels == 4 else n_panels
+    nrow = int(np.ceil(n_panels / ncol))
+    fig = plt.figure(figsize=(3.9 * ncol + 0.6, 4.4 * nrow))
+    axes = []
+    for i, grid in enumerate(grids):
+        ax = fig.add_subplot(nrow, ncol, i + 1, projection=ccrs.Mercator())
+        ax.set_extent((west, east, south, north), crs=ccrs.PlateCarree())
+        region = layout.region(grid)
+        bounds = np.asarray(region.bounds)
+        levels = np.array([len(k) for k in region.quadkeys])
+        inside = (
+            (bounds[:, 2] > west)
+            & (bounds[:, 0] < east)
+            & (bounds[:, 3] > south)
+            & (bounds[:, 1] < north)
+        )
+        cells = PatchCollection(
+            [Rectangle((w, s), e - w, n - s) for w, s, e, n in bounds[inside]],
+            transform=ccrs.PlateCarree(),
+            cmap=cmap,
+            norm=norm,
+            edgecolor="#123a63",
+            linewidth=0.3,
+        )
+        cells.set_array(levels[inside])
+        ax.add_collection(cells)
+        try:
+            ax.add_feature(cfeature.COASTLINE, linewidth=0.6, edgecolor="#262626")
+        except Exception:  # Natural Earth data unavailable offline
+            pass
+        ax.spines["geo"].set_linewidth(0.6)
+        ax.set_title(
+            f"{grid}: {int(inside.sum()):,} cells in view", loc="left", fontsize=9.5, color=INK
+        )
+        axes.append(ax)
+
+        if grid == "N50L11":
+            # The cell holding the Tohoku epicentre, and two of the tiles it was split from
+            keys = set(region.quadkeys)
+            key = mercantile.quadkey(mercantile.tile(*TOHOKU, 11))
+            leaf = next((key[:z] for z in range(11, 0, -1) if key[:z] in keys), None)
+            if leaf:
+                chain = sorted({max(1, len(leaf) - 4), max(1, len(leaf) - 2), len(leaf)})
+                for n_tile, level in enumerate(chain):
+                    b = mercantile.bounds(mercantile.quadkey_to_tile(leaf[:level]))
+                    is_leaf = level == len(leaf)
+                    ax.add_patch(
+                        Rectangle(
+                            (b.west, b.south),
+                            b.east - b.west,
+                            b.north - b.south,
+                            transform=ccrs.PlateCarree(),
+                            fill=False,
+                            edgecolor=INK,
+                            linewidth=1.6 if is_leaf else 1.1,
+                            linestyle="-" if is_leaf else "--",
+                            zorder=5,
+                        )
+                    )
+                    # Tags: outer tile at its top-left corner, middle at its bottom-left,
+                    # the cell itself beside it
+                    if is_leaf:
+                        x, y, ha, va = b.east + 0.35, (b.south + b.north) / 2, "left", "center"
+                    elif n_tile == 0:
+                        x, y, ha, va = b.west + 0.25, b.north - 0.25, "left", "top"
+                    else:
+                        x, y, ha, va = b.west + 0.2, b.south + 0.2, "left", "bottom"
+                    ax.text(
+                        x,
+                        y,
+                        f"L{level}",
+                        transform=ccrs.PlateCarree(),
+                        ha=ha,
+                        va=va,
+                        fontsize=7.5,
+                        fontweight="bold",
+                        color=INK,
+                        zorder=6,
+                        bbox=dict(
+                            boxstyle="round,pad=0.15",
+                            facecolor="white",
+                            edgecolor="none",
+                            alpha=0.85,
+                        ),
+                    )
+                keys = "\n".join(f"L{level:<2} {leaf[:level]}" for level in chain)
+                ax.text(
+                    0.03,
+                    0.97,
+                    f"Tohoku 2011 epicentre:\n{keys}",
+                    transform=ax.transAxes,
+                    ha="left",
+                    va="top",
+                    fontsize=7.5,
+                    family="monospace",
+                    color=INK,
+                    zorder=6,
+                    bbox=dict(
+                        boxstyle="round,pad=0.35",
+                        facecolor="white",
+                        edgecolor="none",
+                        alpha=0.92,
+                    ),
+                )
+    if native:
+        # The models' native grid: a regular 0.1-degree lattice, finer than any quadtree cell
+        ax = fig.add_subplot(nrow, ncol, n_panels, projection=ccrs.Mercator())
+        ax.set_extent((west, east, south, north), crs=ccrs.PlateCarree())
+        lons = np.arange(west, east + 1e-9, 0.1)
+        lats = np.arange(south, north + 1e-9, 0.1)
+        lattice = [[(x, south), (x, north)] for x in lons] + [
+            [(west, y), (east, y)] for y in lats
+        ]
+        ax.add_collection(
+            LineCollection(
+                lattice, transform=ccrs.PlateCarree(), colors="#123a63", linewidths=0.12
+            )
+        )
+        try:
+            ax.add_feature(cfeature.COASTLINE, linewidth=0.6, edgecolor="#262626")
+        except Exception:  # Natural Earth data unavailable offline
+            pass
+        ax.spines["geo"].set_linewidth(0.6)
+        ax.set_title(
+            f"0.1° native: {(len(lons) - 1) * (len(lats) - 1):,} cells in view",
+            loc="left",
+            fontsize=9.5,
+            color=INK,
+        )
+        axes.append(ax)
+    fig.colorbar(
+        ScalarMappable(norm=norm, cmap=cmap),
+        ax=axes,
+        fraction=0.02,
+        pad=0.02,
+        ticks=range(2, 12),
+        label="zoom level of the quadtree cells",
+    )
+    fig.savefig(os.path.join(out_dir, "quadtree_japan.png"), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main(experiment):
     layout = Layout(experiment)
     out_dir = os.path.join(layout.run_dir, "figures")
@@ -985,7 +1265,14 @@ def main(experiment):
         if layout.annual:
             annual_consistency(layout, out_dir)
             annual_ig_heatmap(layout, out_dir)
+            if all(
+                layout.result(w, "S", REF, NATIVE) for w in layout.annual
+            ):  # native_grid.py has run
+                annual_consistency(layout, out_dir, NATIVE, "_native")
+                annual_ig_heatmap(layout, out_dir, NATIVE, "_native")
             annual_counts(layout, out_dir)
             annual_pooled_ig(layout, out_dir)
         quadtree_grids(layout, out_dir)
+        grid_levels(layout, out_dir)
+        quadtree_japan(layout, out_dir)
     log.info(f"Summary figures written to {out_dir}")

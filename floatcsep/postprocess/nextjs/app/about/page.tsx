@@ -106,7 +106,7 @@ export default function AboutPage() {
       h2: ({ children }) => (
         <h3
           id={slug(textOf(children))}
-          className="mt-10 scroll-mt-6 border-t pt-8 text-base font-semibold tracking-tight text-ink"
+          className="mt-8 scroll-mt-6 border-t pt-6 text-base font-semibold tracking-tight text-ink"
         >
           {children}
         </h3>
@@ -116,7 +116,7 @@ export default function AboutPage() {
         // A paragraph holding only an image is a figure, which may not sit inside <p>.
         const only = node?.children.length === 1 ? node.children[0] : null;
         if (only?.type === 'element' && only.tagName === 'img') return <div className="my-6">{children}</div>;
-        return <p className="mt-3 max-w-[75ch] text-[0.9rem] leading-7 text-ink-2">{children}</p>;
+        return <p className="mt-3 text-[0.9rem] leading-7 text-ink-2">{children}</p>;
       },
       a: ({ href, children }) => {
         const external = /^https?:\/\//i.test(href ?? '');
@@ -127,17 +127,13 @@ export default function AboutPage() {
         );
       },
       ul: ({ children }) => (
-        <ul className="mt-3 max-w-[75ch] list-disc space-y-1.5 pl-5 text-[0.9rem] leading-7 text-ink-2">{children}</ul>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[0.9rem] leading-7 text-ink-2">{children}</ul>
       ),
       ol: ({ children }) => (
-        <ol className="mt-3 max-w-[75ch] list-decimal space-y-1.5 pl-5 text-[0.9rem] leading-7 text-ink-2">
-          {children}
-        </ol>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[0.9rem] leading-7 text-ink-2">{children}</ol>
       ),
       blockquote: ({ children }) => (
-        <blockquote className="mt-4 max-w-[75ch] border-l-2 border-accent/60 pl-4 text-ink-2 [&>p]:mt-1">
-          {children}
-        </blockquote>
+        <blockquote className="mt-4 border-l-2 border-accent/60 pl-4 text-ink-2 [&>p]:mt-1">{children}</blockquote>
       ),
       code: ({ children }) => (
         <code className="rounded bg-surface-2 px-1 py-0.5 font-mono text-[0.8em] text-ink">{children}</code>

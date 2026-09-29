@@ -15,9 +15,30 @@ export interface LoadedManifest {
 
 type Raw = Record<string, any>;
 
-let cached: { key: string; value: LoadedManifest } | null = null;
+let cached: { key: string; folders: string; value: LoadedManifest } | null = null;
 
-/** Read and normalize the manifest written by `floatcsep view` (cached by mtime). */
+/**
+ * Modification times of the folders whose files the manifest lists (results and
+ * figures): results written while the dashboard runs are then picked up.
+ */
+async function folderSignature({ manifest, appRoot }: LoadedManifest): Promise<string> {
+  const windows = manifest.time_windows.map((tw) => path.join(appRoot, tw.replace(/\s+to\s+/, '_')));
+  const folders = [
+    path.join(appRoot, 'figures'),
+    ...windows.flatMap((w) => [path.join(w, 'evaluations'), path.join(w, 'figures')]),
+  ];
+  const times = await Promise.all(
+    folders.map((f) =>
+      fs.stat(f).then(
+        (s) => s.mtimeMs,
+        () => 0,
+      ),
+    ),
+  );
+  return times.join(',');
+}
+
+/** Read and normalize the manifest written by `floatcsep view` (cached while it and the results are unchanged). */
 export async function loadManifest(): Promise<LoadedManifest> {
   const manifestPath = process.env.MANIFEST_PATH;
   if (!manifestPath) {
@@ -36,7 +57,7 @@ export async function loadManifest(): Promise<LoadedManifest> {
   }
 
   const key = `${manifestPath}:${stat.mtimeMs}:${stat.size}`;
-  if (cached?.key === key) return cached.value;
+  if (cached?.key === key && cached.folders === (await folderSignature(cached.value))) return cached.value;
 
   let raw: Raw;
   try {
@@ -46,7 +67,7 @@ export async function loadManifest(): Promise<LoadedManifest> {
   }
 
   const value = await normalizeManifest(raw, manifestPath);
-  cached = { key, value };
+  cached = { key, folders: await folderSignature(value), value };
   return value;
 }
 

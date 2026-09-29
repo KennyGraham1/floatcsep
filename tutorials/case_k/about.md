@@ -18,9 +18,7 @@ points, down to a maximum zoom level L. Each tile is named by its quadkey: every
 selects a quadrant of the parent tile (0, 1, 2, 3 = NW, NE, SW, SE), so the length of
 the key is the tile's zoom level and a child's key extends its parent's.
 
-![Quadtree refinement: a cell is split when it holds more than N points, down to zoom level 11. The eight grids of the experiment, from fine (N = 10) to coarse (N = 100).](about/quadtree.png)
-
-![Building a quadtree, step by step: the root tile is split, then every child holding more than N points, until no cell holds more than N points.](about/fig_quadtree_build.png)
+![Building a quadtree, step by step, on synthetic points with N = 8: the root tile is split, then every child holding more than N points, until no cell holds more than N points.](about/fig_quadtree_build.png)
 
 The names of the grids encode the refinement rule:
 
@@ -39,9 +37,11 @@ The names of the grids encode the refinement rule:
 | N50L11  | 1,780 | SN50L11  | 2,683  |
 | N100L11 | 922   | SN100L11 | 1,432  |
 
+![The eight grids compared: (a) the number of cells at each zoom level, with the width of the cells at the equator; (b) the number of cells against N. A smaller N, or adding the strain-rate points, gives more and smaller cells.](results/figures/grid_levels.png)
+
 ![The evaluation grids on Pacific-centred maps: (a–h) the eight quadtree grids, (i) the models' native 0.1° grid of 6.48 million cells, drawn at 2° spacing, with the true cells over central Japan in the inset.](about/quadtree_grids.png)
 
-![How the refinement follows the seismicity: N50L11 around Japan and the Kuril arc, with the M ≥ 5.95 epicentres of 1976–2013 that drove it. Three cells are outlined with their quadkeys at zoom levels 5, 7 and 9.](about/quadtree_excerpt.png)
+![Grids around Japan. Three quadtree grids, with their cells shaded by zoom level: N10L11 is finer than N50L11, and SN10L11 adds cells where the strain-rate points are dense. In N50L11, the cell holding the 2011 Tohoku epicentre (L9) is outlined with two of the tiles it was split from (L7, L5): each digit of a quadkey selects a quadrant, so a child's key extends its parent's. Last, the models' native 0.1° grid, a regular lattice finer than any quadtree cell.](results/figures/quadtree_japan.png)
 
 As Web-Mercator grids, the tiles end at latitude ±85.05°: the forecasts and the tests
 are defined on that domain, and all the target earthquakes fall inside every grid.
@@ -55,6 +55,20 @@ of its latitude range, measured in sin(latitude), which is exact on the sphere. 
 of a tile is the weighted sum of the source rates, with no resampling.
 
 ![Exact area-weighted aggregation: (a) the weight of a source cell in a tile; (b) the weights on a real tile of N50L11; (c) the check against the distributed GEFE forecast for that tile.](about/aggregation.png)
+
+## The native 0.1° grid
+
+Every forecast is also tested on the grid it was made on, without any aggregation: the
+regular 0.1° lattice of 3,600 × 1,800 = 6.48 million cells (about 11 km at the
+equator), with the same 16 magnitude bins, in every time window. In the results this
+grid is named **FULL01** (0.1°): it shows how much the verdicts on the quadtree grids
+depend on the size of their cells.
+
+The tests and their settings are the same as on the quadtree grids. pyCSEP's S- and
+CL-tests, however, clear and rescan the whole forecast in each of the 10,000
+simulations, 104 million bins for the CL-test, which takes hours per forecast on this
+grid. `native_grid.py` draws the same random numbers and sums the same terms over the
+sampled bins only, which gives the same results as pyCSEP within rounding, in seconds.
 
 ## Models
 
@@ -76,8 +90,6 @@ EEPAS-family and GSSGSRM forecasts are fitted on data before 2014 only.
 
 ![The nine forecasts on SN10L11: rate density on a common logarithmic scale.](about/rate_density_maps.png)
 
-![Where each of the other GEFE forecasts differs from GEAR1 on SN10L11.](about/model_similarity_maps.png)
-
 ## Tests
 
 - **N-test:** the total number of events.
@@ -93,13 +105,11 @@ seed. A forecast is rejected when its quantile is below 0.05, or, for the two-si
 N-test, when either tail probability is below 0.025. The eight quadtree grids are
 correlated views of the same forecasts, not independent replications.
 
-![The S-test on N50L11: the simulated distributions of the spatial log-likelihood of five forecasts, and the observed values (vertical lines).](about/S_test_explained.png)
-
 ## In this dashboard
 
 - **Overview:** a map of every quadtree grid.
 - **Forecasts:** every model on every grid, as expected events per cell or per 10⁴ km².
-- **Results, Charts:** the test scores as heatmaps, models × grids (with the native
-  0.1° grid) and models × years.
+- **Results, Charts:** the test scores as heatmaps, models × grids (the native 0.1°
+  grid included) and models × years for any grid, the native one too.
 - **Results, Figures:** the plots of every test, and the summary figures of the
   experiment.

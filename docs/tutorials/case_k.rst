@@ -6,8 +6,8 @@ K — A Global Experiment on Quadtree Grids
 **Goal.** Test global forecasts of M7.45+ earthquakes on multi-resolution *quadtree* grids. Nine
 forecasting models are each set up on eight quadtree grids (72 forecasts), evaluated year by year
 and over the whole 2014–2021 testing period with Poisson consistency tests, and compared with the
-GEAR1 benchmark on the same grid. The results of the global experiment on the models' native 0.1°
-grid are shown alongside. A custom post-processing script adds the summary figures of the
+GEAR1 benchmark on the same grid. The same tests are run on the models' native 0.1° grid, in
+every time window, for comparison. A custom post-processing script adds the summary figures of the
 experiment (score heatmaps across grids, information-gain rankings, yearly outcomes, a map of the
 grids), and the Next.js dashboard shows the quadtree forecasts, the test scores, the grids and an
 *About* page describing the experiment.
@@ -35,6 +35,14 @@ grids), and the Next.js dashboard shows the quadtree forecasts, the test scores,
 
         $ python prepare.py --source /path/to/globalExperiment --grids N50L11
 
+    To add the tests on the models' native 0.1° grid in every time window (about 10 minutes), point
+    ``native_grid.py`` to the global experiment's 0.1° forecast arrays and redraw the figures:
+
+    .. code-block:: console
+
+        $ python native_grid.py --forecasts /path/to/fullgrid_cache
+        $ floatcsep plot config.yml
+
     The forecasts, test scores and figures can then be explored in the **Experiment Dashboard**:
 
     .. code-block:: console
@@ -61,9 +69,10 @@ After running ``prepare.py``, the experiment folder contains:
         ├── catalog.csv       # gCMT catalog, M5.95+, 1976-2022 (written by prepare.py)
         ├── config.yml
         ├── custom_plots.py
-        ├── imported/         # results on the native 0.1° grid (copied by prepare.py)
+        ├── imported/         # results on the native 0.1° grid, by time window
         ├── models/           # 72 forecasts, <MODEL>=<GRID>.csv (copied by prepare.py)
         ├── models.yml        # rewritten by prepare.py
+        ├── native_grid.py
         ├── prepare.py
         └── tests.yml
 
@@ -116,12 +125,29 @@ N100L11     922       SN100L11    1,432
 
 ``prepare.py`` also copies:
 
-- The global experiment's results on the models' **native 0.1° grid** (``FULL01``, 6.48 million
-  cells) for the whole period, into ``imported/``. They were computed with the same forecasts and
-  tests, but pyCSEP's likelihood tests take hours on that many cells, so they are not recomputed
-  here (skip them with ``--no-native``). ``custom_plots.py`` shows them as a ninth grid.
+- The global experiment's results on the models' **native 0.1° grid** for the whole period, into
+  ``imported/`` (skip them with ``--no-native``). ``native_grid.py`` recomputes them, and those
+  of every year (see `The native 0.1° grid`_).
 - The figures of ``about.md`` (how quadtree grids are built, the grids, the aggregation, the
   forecasts), into ``about/``.
+
+
+The native 0.1° grid
+--------------------
+
+The forecasts were made on a regular 0.1° grid before being aggregated onto the quadtree grids.
+``native_grid.py`` tests them on that grid too, named ``FULL01``: 3,600 × 1,800 = 6.48 million
+cells of about 11 km at the equator, with the same 16 magnitude bins. It reads the global
+experiment's nine forecast arrays (``<MODEL>_01deg_rates.npy``, expected events per year) where
+they are, and runs the tests of ``tests.yml`` with their settings, plus the paired T-test against
+GEAR1 on the same grid, in every time window. The test catalogues are those of the floatCSEP run,
+so ``floatcsep run`` comes first. The results go to ``imported/<time window>/``, where
+``custom_plots.py`` picks them up, and ``floatcsep plot config.yml`` redraws the figures with them.
+
+pyCSEP's S- and CL-tests clear and rescan the whole forecast in each of the 10,000 simulations
+(104 million bins for the CL-test), which takes hours per forecast on this grid. ``native_grid.py``
+draws the same random numbers and sums the same terms over the sampled bins only. Its results
+agree with pyCSEP's within rounding, and with those of the global experiment.
 
 
 Configuration
@@ -233,9 +259,9 @@ done, and:
 1. Runs the paired T-test of every model against GEAR1 on the same grid, in every time window, with
    :func:`csep.core.poisson_evaluations.paired_t_test`. Each result is stored like floatCSEP's own,
    as ``results/<window>/evaluations/Paired T-test_<MODEL>=<GRID>.json``.
-2. Stores the imported results on the native grid the same way, in the whole-period window.
+2. Stores the results on the native grid from ``imported/`` the same way, in their windows.
 3. Draws the summary figures of the global experiment into ``results/figures/``, with the native
-   grid as a ninth column of the whole-period figures:
+   grid as a ninth column of the whole-period figures, and yearly figures for it:
 
    ==============================  ==============================================================
    Figure                          Content
@@ -249,7 +275,13 @@ done, and:
    ``annual_ig_heatmap.png``       Information gain against GEAR1 by year, on grid N50L11
    ``annual_counts.png``           Forecast and observed numbers of events by year
    ``annual_pooled_ig.png``        T-test pooling the events of the eight annual windows
+   ``annual_*_native.png``         The yearly test outcomes and information gains on the native
+                                   grid (after ``native_grid.py``)
    ``quadtree_grids.png``          Map of the grids (drawn only if ``cartopy`` is installed)
+   ``grid_levels.png``             The grids compared: cells per zoom level, cells against N
+   ``quadtree_japan.png``          Three grids and the native 0.1° lattice around Japan,
+                                   and how quadkeys nest
+                                   (``cartopy``)
    ==============================  ==============================================================
 
 
@@ -271,7 +303,8 @@ Outputs
 
 You should find:
 
-- Test results (JSON) in ``results/{time_window}/evaluations``, including the same-grid T-tests
+- Test results (JSON) in ``results/{time_window}/evaluations``, including the same-grid T-tests and
+  the results on the native grid (``<test>_<MODEL>=FULL01.json``)
 - Consistency plots in ``results/{time_window}/figures``
 - The summary figures in ``results/figures``
 - A Markdown report summarizing the experiment in ``results/report.md``

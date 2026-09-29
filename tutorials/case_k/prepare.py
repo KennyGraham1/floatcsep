@@ -16,11 +16,11 @@ to match. The source directory is only read.
 
 The global experiment also tested the models on their native 0.1-degree grid
 (FULL01, 6.48 million cells) over the whole period, with the same forecasts and
-tests. pyCSEP's likelihood tests take hours on that grid, so its results are
-copied into ``imported/`` (skip with ``--no-native``) and custom_plots.py shows
-them next to the quadtree grids. The figures that about.md shows in the
-dashboard's About page (the grids, how quadtrees are built, the forecasts) are
-copied into ``about/``.
+tests. Its results are copied into ``imported/<window>/`` (skip with
+``--no-native``), and custom_plots.py shows them next to the quadtree grids;
+native_grid.py computes them for every time window, the years included. The
+figures that about.md shows in the dashboard's About page (the grids, how
+quadtrees are built, the forecasts) are copied into ``about/``.
 """
 
 import argparse
@@ -50,16 +50,21 @@ FORECASTS = REGEN / "m745_models"
 M745_RESULTS = REGEN / "m745_experiment" / "results" / "20230329T235959"
 NATIVE_RESULTS = M745_RESULTS / "evaluations"
 NATIVE_GRID = "FULL01"
+NATIVE_WINDOW = "2014-01-01_2022-01-01"  # the whole testing period, as floatCSEP names it
+# The global experiment's test names, as in tests.yml (and the T-test of custom_plots.py)
+NATIVE_TESTS = {
+    "N": "Poisson N-test",
+    "M": "Poisson M-test",
+    "S": "Poisson S-test",
+    "CL": "Poisson CL-test",
+    "T": "Paired T-test",
+}
 # Figures of about.md, by their name in about/
 ABOUT_FIGURES = {
-    "quadtree.png": Path("figs", "png", "quadtree.png"),
     "fig_quadtree_build.png": M745_RESULTS / "figures" / "fig_quadtree_build.png",
     "quadtree_grids.png": M745_RESULTS / "figures" / "quadtree_grids.png",
-    "quadtree_excerpt.png": M745_RESULTS / "figures" / "quadtree_excerpt.png",
     "aggregation.png": M745_RESULTS / "figures" / "aggregation.png",
     "rate_density_maps.png": M745_RESULTS / "figures" / "rate_density_maps.png",
-    "model_similarity_maps.png": M745_RESULTS / "figures" / "model_similarity_maps.png",
-    "S_test_explained.png": M745_RESULTS / "figures" / "S_test_explained.png",
 }
 CATALOG = Path("eepasModel", "run", "gcmt_M595_1976_2022.dat")
 
@@ -106,15 +111,21 @@ def write_models_yml(grids) -> None:
 
 
 def copy_native_results(source: Path) -> int:
-    """Copies the global experiment's whole-period results on the native 0.1-degree grid."""
-    target = HERE / "imported"
-    target.mkdir(exist_ok=True)
+    """Copies the global experiment's whole-period results on the native 0.1-degree grid.
+
+    They are named as floatCSEP names its results: <test>_<MODEL>=FULL01.json.
+    """
+    target = HERE / "imported" / NATIVE_WINDOW
+    target.mkdir(parents=True, exist_ok=True)
     copied = 0
     for model in MODELS:
-        for test in ("N", "M", "S", "CL", "T"):
-            name = f"Poisson_{test}_{model}={NATIVE_GRID}.json"
+        for key, test in NATIVE_TESTS.items():
+            name = f"Poisson_{key}_{model}={NATIVE_GRID}.json"
             if (source / NATIVE_RESULTS / name).is_file():
-                shutil.copyfile(source / NATIVE_RESULTS / name, target / name)
+                shutil.copyfile(
+                    source / NATIVE_RESULTS / name,
+                    target / f"{test}_{model}={NATIVE_GRID}.json",
+                )
                 copied += 1
     return copied
 
