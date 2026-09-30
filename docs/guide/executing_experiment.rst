@@ -121,6 +121,7 @@ This starts a local server and opens a browser at ``http://localhost:<port>`` wh
 - Compare the evaluation results in charts: heatmaps of the test scores by model and time window (and by grid, when the models are named ``<MODEL>=<GRID>``), and each test's intervals per model
 - Review the evaluation figures (e.g. N-test, S-test) of every test and time window, and the figures written to ``results/figures`` (e.g. by a ``plot_custom`` script)
 - Read about the experiment: an ``about.md`` placed next to the configuration file is shown in the *About* page, with the images it links to
+- Download any table as CSV
 
 .. note::
 

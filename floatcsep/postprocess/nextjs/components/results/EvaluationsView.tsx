@@ -20,7 +20,7 @@ import { useElapsed } from '@/hooks/useElapsed';
 import { useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
 import { useEvaluations } from '@/lib/api';
 import { formatRate } from '@/lib/format';
-import { gridLabel, modelGrid, shortGridName, splitModelName } from '@/lib/modelGrid';
+import { gridLabel, modelGrid, regularGridSizes, shortGridNames, splitModelName } from '@/lib/modelGrid';
 import { formatDate, parseTimeWindows, type TimeWindow } from '@/lib/time';
 import type { EvaluationSummary, Manifest } from '@/lib/types';
 
@@ -100,6 +100,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
     for (const e of manifest.evaluations) names.add(e.model);
     return modelGrid([...names].map((name) => ({ name })));
   }, [manifest.models, manifest.evaluations]);
+  const gridSizes = useMemo(() => regularGridSizes(manifest.models), [manifest.models]);
 
   const tests = useMemo(() => {
     const present = new Set((data ?? []).map((s) => s.test));
@@ -164,9 +165,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
   const gridName = grids
     ? grids.grids.includes(params.get('grid') ?? '')
       ? params.get('grid')!
-      : grids.grids.includes('N50L11')
-        ? 'N50L11'
-        : grids.grids[0]
+      : grids.grids[0]
     : null;
 
   const models = grids ? grids.models : manifest.models.map((m) => m.name);
@@ -262,9 +261,15 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
     );
   };
 
-  const summaryTable = (cells: HeatCell[], rowsLabel: string[], colsLabel: string[], colHeader: string) => (
+  const summaryTable = (
+    cells: HeatCell[],
+    rowsLabel: string[],
+    colsLabel: string[],
+    colHeader: string,
+    caption: string,
+  ) => (
     <DataTable
-      caption={`${test} results`}
+      caption={caption}
       columns={[
         { key: 'model', header: 'Model', render: (c: HeatCell) => rowsLabel[c.row] },
         { key: 'col', header: colHeader, render: (c: HeatCell) => colsLabel[c.col] },
@@ -275,6 +280,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
           numeric: true,
           sortValue: (c: HeatCell) => c.value ?? -Infinity,
           render: (c: HeatCell) => c.label,
+          csv: (c: HeatCell) => c.value,
         },
         {
           key: 'verdict',
@@ -299,7 +305,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
   );
 
   const windowColumns = gridWindows.map(windowName);
-  const gridColumns = grids ? grids.grids.map(shortGridName) : [];
+  const gridColumns = grids ? shortGridNames(grids.grids, gridSizes) : [];
 
   return (
     <>
@@ -328,7 +334,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
             className="w-full sm:w-40"
             value={gridName}
             onChange={(value) => set({ grid: value })}
-            options={grids.grids.map((g) => ({ value: g, label: gridLabel(g) }))}
+            options={grids.grids.map((g) => ({ value: g, label: gridLabel(g, gridSizes) }))}
           />
         )}
       </FilterBar>
@@ -347,7 +353,13 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
             <ChartCard
               title={`${test} by model and grid`}
               description={`${windowName(window)} · click a cell to show that grid below`}
-              table={summaryTable(gridCells, rowModels, gridColumns, 'Grid')}
+              table={summaryTable(
+                gridCells,
+                rowModels,
+                gridColumns,
+                'Grid',
+                `${test} by model and grid, ${windowName(window)}`,
+              )}
               footer={heatLegend(gridCells)}
             >
               <EvaluationHeatmap
@@ -368,7 +380,13 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
               <ChartCard
                 title={`${test} by model and time window`}
                 description={`${gridName ? `Grid ${gridName} · ` : ''}click a cell to show that window`}
-                table={summaryTable(timeCells, rowModels, windowColumns, 'Window')}
+                table={summaryTable(
+                  timeCells,
+                  rowModels,
+                  windowColumns,
+                  'Window',
+                  `${test} by model and time window${gridName ? `, ${gridName}` : ''}`,
+                )}
                 footer={heatLegend(timeCells)}
               >
                 <EvaluationHeatmap
@@ -407,6 +425,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                       numeric: true,
                       sortValue: (r: IntervalRow) => r.observed ?? -Infinity,
                       render: (r: IntervalRow) => fmt(r.observed, comparative ? 3 : 2),
+                      csv: (r: IntervalRow) => r.observed,
                     },
                     {
                       key: 'lo',
@@ -414,6 +433,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                       align: 'right',
                       numeric: true,
                       render: (r: IntervalRow) => fmt(r.lower, comparative ? 3 : 2),
+                      csv: (r: IntervalRow) => r.lower,
                     },
                     {
                       key: 'hi',
@@ -421,6 +441,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                       align: 'right',
                       numeric: true,
                       render: (r: IntervalRow) => fmt(r.upper, comparative ? 3 : 2),
+                      csv: (r: IntervalRow) => r.upper,
                     },
                     {
                       key: 'verdict',

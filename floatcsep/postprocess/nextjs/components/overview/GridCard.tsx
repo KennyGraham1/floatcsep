@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -31,7 +32,24 @@ function cellSizeKm(grid: CellGrid): string | null {
 export function GridCard({ manifest, className }: { manifest: Manifest; className?: string }) {
   const region = manifest.region;
   const fixedGrid = useMemo(() => regionGrid(region), [region]);
-  const dimension = useMemo(() => modelGrid(manifest.models), [manifest.models]);
+  // Grids of forecast files; forecasts of every cell of a regular grid (external,
+  // e.g. the models' native grid) are too large to draw as a grid, and are listed below.
+  const dimension = useMemo(() => modelGrid(manifest.models.filter((m) => !m.external)), [manifest.models]);
+  const otherGrids = useMemo(() => {
+    const shown = new Set(dimension?.grids ?? []);
+    const others = new Map<string, { model: string | null; cells: number | null; dh: number | null }>();
+    for (const m of manifest.models) {
+      const grid = splitModelName(m.name).grid;
+      if (m.external && grid && !shown.has(grid) && !others.has(grid)) {
+        others.set(grid, { model: m.name, cells: m.external.grid.nx * m.external.grid.ny, dh: m.external.grid.dh });
+      }
+    }
+    for (const e of manifest.evaluations) {
+      const grid = splitModelName(e.model).grid;
+      if (grid && !shown.has(grid) && !others.has(grid)) others.set(grid, { model: null, cells: null, dh: null });
+    }
+    return [...others.entries()];
+  }, [manifest.models, manifest.evaluations, dimension]);
   const [gridName, setGridName] = useState(() => dimension?.grids[0] ?? null);
 
   // Without a fixed region, show the grid of a forecast (the first model on the grid).
@@ -107,6 +125,26 @@ export function GridCard({ manifest, className }: { manifest: Manifest; classNam
             {extent ? ` · ${extent}` : ''}
           </p>
         )}
+        {otherGrids.map(([name, other]) => (
+          <p key={name} className="mt-1.5 px-1 text-xs text-ink-3">
+            Also tested on <span className="font-medium text-ink-2">{name}</span>
+            {other.cells !== null && other.dh !== null
+              ? `, a regular ${other.dh}° grid of ${formatInt(other.cells)} cells`
+              : ''}
+            {' · '}
+            {other.model && (
+              <>
+                <Link href={`/forecasts?model=${encodeURIComponent(other.model)}`} className="link">
+                  forecasts
+                </Link>
+                {' · '}
+              </>
+            )}
+            <Link href={`/results?grid=${encodeURIComponent(name)}`} className="link">
+              results
+            </Link>
+          </p>
+        ))}
       </CardBody>
     </Card>
   );

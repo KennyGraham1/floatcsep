@@ -84,6 +84,24 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
+/** The grid of a forecast evaluated outside floatCSEP (schemas.external_models). */
+function externalGrid(value: unknown): Model['external'] {
+  const grid = (value as Raw | null)?.grid;
+  if (!grid || typeof grid !== 'object') return null;
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
+  const spec = {
+    name: String(grid.name ?? 'external'),
+    lon0: n(grid.lon0),
+    lat0: n(grid.lat0),
+    dh: n(grid.dh),
+    nx: n(grid.nx),
+    ny: n(grid.ny),
+    order: String(grid.order ?? 'lon-major'),
+  };
+  const valid = [spec.lon0, spec.lat0, spec.dh, spec.nx, spec.ny].every(Number.isFinite) && spec.order === 'lon-major';
+  return valid ? { grid: spec } : null;
+}
+
 const str = (value: unknown): string | null =>
   value === null || value === undefined || value === '' ? null : String(value);
 
@@ -137,6 +155,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
         is_catalog_forecast: m.forecast_class === 'CatalogForecastRepository',
         forecasts,
         forecast_available,
+        external: externalGrid(m.external),
       };
     }),
   );

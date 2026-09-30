@@ -33,6 +33,19 @@ export interface Model {
   forecasts: (string | null)[];
   /** Whether each forecast file exists on disk. */
   forecast_available: boolean[];
+  /** A forecast evaluated outside floatCSEP, on a regular grid of every cell. */
+  external: { grid: ExternalGrid } | null;
+}
+
+export interface ExternalGrid {
+  name: string;
+  lon0: number;
+  lat0: number;
+  dh: number;
+  nx: number;
+  ny: number;
+  /** Cell order of the rates: "lon-major" (all latitudes of a column in turn). */
+  order: string;
 }
 
 export interface Test {
@@ -135,7 +148,8 @@ export interface CatalogPayload {
 export interface ForecastPayload {
   version: number;
   kind: 'gridded' | 'catalog';
-  grid: 'regular' | 'quadtree';
+  /** "dense": every cell of a regular grid, rates fetched as binary (see rateData). */
+  grid: 'regular' | 'quadtree' | 'dense';
   model: string;
   time_window: string;
   path: string;
@@ -147,6 +161,11 @@ export interface ForecastPayload {
   ix?: number[];
   iy?: number[];
   quadkeys?: string[];
+  order?: string;
+  /** Dense grids: the binary rates are per forecast unit, times this factor. */
+  rate_scale?: number;
+  /** Dense grids: the rate of every cell, attached by the client. */
+  rateData?: Float32Array;
   n_cells: number;
   n_active: number;
   rate: number[];

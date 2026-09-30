@@ -14,9 +14,10 @@ Tailwind CSS, Apache ECharts and Leaflet.
 | **Forecasts** | Per model and time window: map of expected events per cell or per 10⁴ km² (rate density, for cells of different sizes) with the observed events on top, colour-scale histogram and range, a choice of colour palettes (Turbo by default, as in the global experiment's figures; Viridis, Cividis, Plasma, Magma, Inferno, Heat), expected vs observed events per magnitude bin, headline numbers (Σλ, observed, peak). Regular and quadtree grids. |
 | **Results** | *Charts*: heatmaps of the test scores (models × time windows, and models × grids for multi-grid experiments) and the per-model test intervals, read from the saved evaluation results. *Figures*: every evaluation figure by test and time window, per-model figures, the experiment's own figures (`results/figures/`), a full-screen viewer with download, test configuration and a coverage grid. |
 
-Every chart has a table view, selections live in the URL (views can be
-bookmarked), and the interface follows the light/dark system theme with a
-manual override. Dates are UTC throughout.
+Every chart has a table view, every table downloads as CSV (all rows, full
+precision), selections live in the URL (views can be bookmarked), and the
+interface follows the light/dark system theme with a manual override. Dates are
+UTC throughout.
 
 ### Multi-grid experiments
 
@@ -25,7 +26,19 @@ there are at least two grids, the dashboard treats the experiment as the same
 models on several grids: the Forecasts page selects a model and a grid, and the
 Results page adds heatmaps of models × grids. Results saved for grids without
 forecasts in the experiment (e.g. computed elsewhere, as `<test>_<MODEL>=<GRID>.json`)
-join the heatmaps as extra grids. Tutorial K is such an experiment.
+join the heatmaps as extra grids. The heatmap columns leave out a suffix all grid
+names share, such as the zoom level (`N50L11` → `N50`), and show a declared regular
+grid (below) by its cell size. Tutorial K is such an experiment.
+
+### Forecasts evaluated outside floatCSEP
+
+Forecasts too large for floatCSEP's evaluation can still be mapped: an
+`external_forecasts.json` next to the configuration declares a regular grid and a
+NumPy array per model (expected events per forecast unit, cells × magnitude bins,
+in longitude-major order). They are added to the models as `<MODEL>=<grid>`, and
+the browser receives the rate of every cell as binary float32 (26 MB for the
+6.48 million cells of a global 0.1° grid), scaled to each time window. Tutorial
+K's `native_grid.py` writes such a file for the models' native grid.
 
 ### About page
 
@@ -103,7 +116,8 @@ floatcsep view config.yml --ui nextjs
   └─ server.py: manifest (.cache/manifest.json) → npm install/build → next start
        Browser ──► /api/manifest            normalized manifest (existing files only)
                ──► /api/catalog             catalog as columns   ┐ manifest_api.py via the
-               ──► /api/forecasts?model&window  cell rates        ┘ floatCSEP interpreter
+               ──► /api/forecasts?model&window  cell rates        ┤ floatCSEP interpreter
+               ──► /api/forecasts/rates?model   every cell (binary)  ┘
                ──► /api/evaluations         summaries of the saved evaluation results
                ──► /api/about               about.md; its images from /api/about/assets/<n>
                ──► /api/results/<path>      result figure (listed in the manifest only)

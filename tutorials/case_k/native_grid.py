@@ -9,7 +9,13 @@ after ``floatcsep run config.yml`` (the test catalogues come from its results)::
     python native_grid.py --forecasts /work/kennyg/eepas_spliced_shm_fullgrid_cache
 
 then ``floatcsep plot config.yml`` to add the results to the figures. The arrays are
-read where they are, not copied.
+read where they are, not copied. Written:
+
+    imported/<window>/<test>_<MODEL>=FULL01.json   the results, as floatCSEP names them
+    imported/<window>/native_target_rates.json     each model's rates at the target events,
+                                                   for the T-test pooled over the years
+    external_forecasts.json                        where the arrays are, for the dashboard's
+                                                   forecast maps
 
 The tests are those of tests.yml, with their settings, plus the paired T-test
 against GEAR1 on the same grid, as on the quadtree grids. pyCSEP's S- and CL-tests
@@ -131,6 +137,38 @@ def likelihood_test(
     return qs, obs_ll, simulated_ll
 
 
+def self_check():
+    """Checks, on a small random forecast, that likelihood_test still gives pyCSEP's numbers.
+
+    It relies on pyCSEP's internals (the global random generator, the order of the
+    sums), so a pyCSEP upgrade could change them without any error.
+    """
+    from csep.core.poisson_evaluations import _poisson_likelihood_test
+
+    rng = numpy.random.default_rng(1)
+    forecast = rng.gamma(0.5, 1e-3, size=(400, 5))
+    observed = numpy.zeros_like(forecast)
+    observed.ravel()[rng.choice(forecast.size, size=6, replace=False)] = [1, 1, 2, 1, 1, 3]
+    for normalize in (True, False):
+        options = dict(
+            num_simulations=300,
+            seed=7,
+            use_observed_counts=True,
+            normalize_likelihood=normalize,
+        )
+        expected = _poisson_likelihood_test(forecast, observed, verbose=False, **options)
+        found = likelihood_test(forecast, observed, **options)
+        if not (
+            expected[0] == found[0]
+            and expected[1] == found[1]
+            and numpy.array_equal(expected[2], found[2])
+        ):
+            raise RuntimeError(
+                "The fast likelihood test no longer reproduces pyCSEP's: check native_grid.py "
+                "against this pyCSEP version."
+            )
+
+
 def _likelihood_result(name, forecast, catalog, qs, obs_ll, simulated_ll):
     result = EvaluationResult()
     result.test_distribution = simulated_ll
@@ -199,6 +237,7 @@ def main(argv=None):
         )
         return 1
 
+    self_check()
     os.chdir(HERE)
     experiment = Experiment.from_yml(config_yml="config.yml")
     experiment.stage_models()
@@ -271,11 +310,45 @@ def main(argv=None):
                 with open(os.path.join(out_dir, f"{name}_{model}={GRID}.json"), "w") as f:
                     json.dump(result.to_dict(), f, indent=4, cls=_NumpyEncoder)
                 written += 1
+
+        # Each model's rates at the target events (in the catalogue's order) and its
+        # expected number of events, for the T-test pooled over several windows
+        target = {}
+        for model in MODELS:
+            event_rates, total = forecasts[model].target_event_rates(catalog)
+            target[model] = {
+                "rates": numpy.asarray(event_rates).tolist(),
+                "total": float(total),
+            }
+        with open(os.path.join(out_dir, "native_target_rates.json"), "w") as f:
+            json.dump({"n_events": int(catalog.event_count), "models": target}, f)
         print(
             f"{window_str}: {catalog.event_count} events, {time.time() - t0:.0f} s", flush=True
         )
 
     print(f"Wrote {written} results on the native grid into imported/.")
+
+    # The forecast arrays, for the dashboard's maps: they stay where they are
+    declaration = {
+        "grid": {
+            "name": GRID,
+            "lon0": -180.0,
+            "lat0": -90.0,
+            "dh": DH,
+            "nx": 3600,
+            "ny": 1800,
+            "order": "lon-major",
+        },
+        "magnitudes": magnitudes.tolist(),
+        "forecast_unit": 1,
+        "forecasts": {
+            m: os.path.abspath(os.path.join(args.forecasts, f"{m}_01deg_rates.npy"))
+            for m in MODELS
+        },
+    }
+    with open(os.path.join(HERE, "external_forecasts.json"), "w") as f:
+        json.dump(declaration, f, indent=2)
+    print("Wrote external_forecasts.json, for the dashboard's maps.")
     return 0
 
 

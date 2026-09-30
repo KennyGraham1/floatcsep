@@ -1,7 +1,8 @@
 'use client';
 
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
+import { downloadText, fileSlug, textOf, toCsv } from '@/lib/csv';
 import { formatInt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
@@ -16,6 +17,8 @@ export interface Column<T> {
   /** Numeric columns get tabular figures. */
   numeric?: boolean;
   className?: string;
+  /** The value in CSV downloads (default: the text of the cell), e.g. an unrounded number. */
+  csv?: (row: T) => string | number | null;
 }
 
 interface DataTableProps<T> {
@@ -61,6 +64,17 @@ export function DataTable<T>({
   const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
   const current = Math.min(page, pageCount - 1);
   const visible = sorted.slice(current * pageSize, (current + 1) * pageSize);
+
+  const downloadCsv = () => {
+    const header = columns.map((c) => c.header);
+    const body = sorted.map((row) =>
+      columns.map((c) => {
+        const value = c.csv ? c.csv(row) : textOf(c.render(row));
+        return value === null || value === undefined ? '' : String(value);
+      }),
+    );
+    downloadText(`${fileSlug(caption)}.csv`, toCsv(header, body));
+  };
 
   const toggleSort = (key: string) => {
     setPage(0);
@@ -155,31 +169,44 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
-      {sorted.length > pageSize && (
-        <div className="flex items-center justify-between gap-3 border-t px-5 py-2.5 text-xs text-ink-3">
+      {sorted.length > 0 && (
+        <div className="flex items-center justify-between gap-3 border-t px-5 py-2 text-xs text-ink-3">
           <span className="tabular">
-            {formatInt(current * pageSize + 1)}–{formatInt(Math.min(sorted.length, (current + 1) * pageSize))} of{' '}
-            {formatInt(sorted.length)}
+            {sorted.length > pageSize
+              ? `${formatInt(current * pageSize + 1)}–${formatInt(Math.min(sorted.length, (current + 1) * pageSize))} of ${formatInt(sorted.length)}`
+              : `${formatInt(sorted.length)} ${sorted.length === 1 ? 'row' : 'rows'}`}
           </span>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              aria-label="Previous page"
-              disabled={current === 0}
-              onClick={() => setPage(current - 1)}
+              size="sm"
+              onClick={downloadCsv}
+              title={`Download all ${formatInt(sorted.length)} rows as CSV`}
             >
-              <ChevronLeft />
+              <Download /> CSV
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Next page"
-              disabled={current >= pageCount - 1}
-              onClick={() => setPage(current + 1)}
-            >
-              <ChevronRight />
-            </Button>
+            {sorted.length > pageSize && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Previous page"
+                  disabled={current === 0}
+                  onClick={() => setPage(current - 1)}
+                >
+                  <ChevronLeft />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Next page"
+                  disabled={current >= pageCount - 1}
+                  onClick={() => setPage(current + 1)}
+                >
+                  <ChevronRight />
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -8,6 +8,9 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - Redesigned interface: sidebar navigation, stat tiles, cards and tables,
   light/dark/system themes, responsive layout down to phone widths, floatCSEP
   branding and Noto Sans (bundled, works offline).
+- The logos of the Panel dashboard: the floatCSEP logo, which opens the GitHub
+  repository, the tab icon, and the Read the Docs, GitHub and CSEP logos by
+  their links.
 - All charts use **Apache ECharts** (Highcharts removed). Every chart has a table
   view, tooltips escape catalog text, and dates are shown in UTC.
 - Maps use keyless basemaps (Esri light/dark gray canvas, OpenStreetMap, Esri
@@ -41,6 +44,9 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - About page: the experiment's `about.md` with its figures, and its citation
   details.
 - Global maps are Pacific-centred.
+- Forecasts evaluated outside floatCSEP (`external_forecasts.json`), e.g. on a
+  global 0.1° grid, are mapped too, with the rate of every cell sent as binary.
+- Every table downloads as CSV.
 - Overview: time-window timeline, models and tests tables.
 
 ### Fixed
@@ -60,6 +66,9 @@ All notable changes to the floatCSEP Next.js Dashboard.
   follows the catalog's magnitude resolution (e.g. 0.01 for gCMT Mw).
 - Magnitude bins such as 7.45 were rounded to one decimal.
 - Evaluation results containing `NaN` or `Infinity` could not be read.
+- Time windows that share a forecast file (time-independent models) were served
+  from one cache entry, so every window showed the first one viewed.
+- Results written while the dashboard runs are picked up without a restart.
 
 ## [1.1.0] - 2025
 

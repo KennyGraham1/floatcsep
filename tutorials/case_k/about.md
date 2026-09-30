@@ -23,8 +23,9 @@ the key is the tile's zoom level and a child's key extends its parent's.
 The names of the grids encode the refinement rule:
 
 - **N** grids are refined from the earthquake catalogue alone; **SN** grids from the
-  catalogue together with the geodetic strain-rate points of the Global Strain Rate
-  Map (GSRM), which makes them denser along plate boundaries.
+  catalogue together with the locations of GPS stations, which makes them denser
+  wherever GPS networks are dense, such as in the eastern United States, Europe and
+  Japan, even far from plate boundaries.
 - The number (10, 25, 50 or 100) is the largest number of points a cell may hold before
   it is split: a smaller number gives a finer grid.
 - **L11** is the maximum zoom level: quadkeys of up to 11 characters, or cells of about
@@ -37,11 +38,11 @@ The names of the grids encode the refinement rule:
 | N50L11  | 1,780 | SN50L11  | 2,683  |
 | N100L11 | 922   | SN100L11 | 1,432  |
 
-![The eight grids compared: (a) the number of cells at each zoom level, with the width of the cells at the equator; (b) the number of cells against N. A smaller N, or adding the strain-rate points, gives more and smaller cells.](results/figures/grid_levels.png)
+![The eight grids compared: (a) the number of cells at each zoom level, with the width of the cells at the equator; (b) the number of cells against N. A smaller N, or adding the GPS stations, gives more and smaller cells.](results/figures/grid_levels.png)
 
-![The evaluation grids on Pacific-centred maps: (a–h) the eight quadtree grids, (i) the models' native 0.1° grid of 6.48 million cells, drawn at 2° spacing, with the true cells over central Japan in the inset.](about/quadtree_grids.png)
+![The evaluation grids on Pacific-centred maps: (a–h) the eight quadtree grids, (i) the models' native 0.1° grid of 6.48 million cells, drawn at 2° spacing, with the true cells over central Japan in the inset.](results/figures/quadtree_grids.png)
 
-![Grids around Japan. Three quadtree grids, with their cells shaded by zoom level: N10L11 is finer than N50L11, and SN10L11 adds cells where the strain-rate points are dense. In N50L11, the cell holding the 2011 Tohoku epicentre (L9) is outlined with two of the tiles it was split from (L7, L5): each digit of a quadkey selects a quadrant, so a child's key extends its parent's. Last, the models' native 0.1° grid, a regular lattice finer than any quadtree cell.](results/figures/quadtree_japan.png)
+![Grids around Japan. Three quadtree grids, with their cells shaded by zoom level: N10L11 is finer than N50L11, and SN10L11 adds cells where GPS stations are dense. In N50L11, the cell holding the 2011 Tohoku epicentre (L9) is outlined with two of the tiles it was split from (L7, L5): each digit of a quadkey selects a quadrant, so a child's key extends its parent's. Last, the models' native 0.1° grid, a regular lattice finer than any quadtree cell.](results/figures/quadtree_japan.png)
 
 As Web-Mercator grids, the tiles end at latitude ±85.05°: the forecasts and the tests
 are defined on that domain, and all the target earthquakes fall inside every grid.
@@ -107,9 +108,12 @@ correlated views of the same forecasts, not independent replications.
 
 ## In this dashboard
 
-- **Overview:** a map of every quadtree grid.
-- **Forecasts:** every model on every grid, as expected events per cell or per 10⁴ km².
+- **Overview:** a map of every quadtree grid, and links to the native grid.
+- **Forecasts:** every model on every grid, the native 0.1° grid included, as expected
+  events per cell or per 10⁴ km².
 - **Results, Charts:** the test scores as heatmaps, models × grids (the native 0.1°
   grid included) and models × years for any grid, the native one too.
 - **Results, Figures:** the plots of every test, and the summary figures of the
   experiment.
+
+Every table can be downloaded as CSV.

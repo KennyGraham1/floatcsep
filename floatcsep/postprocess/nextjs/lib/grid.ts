@@ -100,6 +100,23 @@ export function regularGrid(
   return { type: 'regular', n: ix.length, lon0, lat0, dh, nx, ny, ix, iy, lookup };
 }
 
+/** Every cell of a regular grid, in longitude-major order: cell k = column * ny + row. */
+export function denseGrid(lon0: number, lat0: number, dh: number, nx: number, ny: number): RegularGrid {
+  const n = nx * ny;
+  const ix = new Uint16Array(n);
+  const iy = new Uint16Array(n);
+  const lookup = new Int32Array(n);
+  let k = 0;
+  for (let col = 0; col < nx; col++) {
+    for (let row = 0; row < ny; row++, k++) {
+      ix[k] = col;
+      iy[k] = row;
+      lookup[row * nx + col] = k;
+    }
+  }
+  return { type: 'regular', n, lon0, lat0, dh, nx, ny, ix, iy, lookup };
+}
+
 export function quadtreeGrid(quadkeys: string[]): QuadtreeGrid {
   const index = new Map<string, number>();
   const levels = new Set<number>();
@@ -172,6 +189,18 @@ export interface ForecastCells {
 }
 
 export function forecastCells(forecast: ForecastPayload): ForecastCells {
+  if (forecast.grid === 'dense') {
+    const grid = denseGrid(forecast.lon0!, forecast.lat0!, forecast.dh!, forecast.nx!, forecast.ny!);
+    const data = forecast.rateData;
+    const scale = forecast.rate_scale ?? 1;
+    const rates = new Float64Array(grid.n);
+    if (data && data.length === grid.n) for (let k = 0; k < grid.n; k++) rates[k] = data[k] * scale;
+    // Cells k < ny are the first column, one per row; every row shares its area.
+    const rowAreas = Float64Array.from({ length: grid.ny }, (_, row) => cellArea(grid, row));
+    const areas = new Float64Array(grid.n);
+    for (let k = 0; k < grid.n; k++) areas[k] = rowAreas[k % grid.ny];
+    return { grid, rates, areas };
+  }
   const grid =
     forecast.grid === 'quadtree'
       ? quadtreeGrid(forecast.quadkeys ?? [])

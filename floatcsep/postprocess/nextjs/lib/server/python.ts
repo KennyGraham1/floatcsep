@@ -29,11 +29,12 @@ export async function sourceKey(kind: string, file: string, extra: unknown = nul
 }
 
 /**
- * Return the path of the JSON document for `key`, running the Python helper to
- * create it when it is not cached yet. Concurrent requests share one run.
+ * Return the path of the output for `key` (a JSON document, or `extension`),
+ * running the Python helper to create it when it is not cached yet. Concurrent
+ * requests share one run.
  */
-export async function cachedPythonJob(key: string, args: string[]): Promise<string> {
-  const out = path.join(cacheDir(), `${key}.json`);
+export async function cachedPythonJob(key: string, args: string[], extension = '.json'): Promise<string> {
+  const out = path.join(cacheDir(), `${key}${extension}`);
   try {
     await fs.access(out);
     return out;

@@ -106,7 +106,8 @@ Model               Description
 Every model is aggregated onto eight quadtree grids, named after how they were refined:
 
 - ``N`` grids are refined from the earthquake catalog alone, ``SN`` grids from the catalog and
-  geodetic strain-rate data, so they are denser along plate boundaries.
+  the locations of GPS stations, so they are also denser where GPS networks are dense, even far
+  from plate boundaries (for example in the eastern United States and Europe).
 - The number (10, 25, 50 or 100) is the largest number of data points a cell may hold before it is
   split in four: a smaller number gives a finer grid.
 - ``L11`` is the deepest zoom level: quadkeys of up to 11 characters, or cells of about 20 km at the
@@ -128,8 +129,8 @@ N100L11     922       SN100L11    1,432
 - The global experiment's results on the models' **native 0.1° grid** for the whole period, into
   ``imported/`` (skip them with ``--no-native``). ``native_grid.py`` recomputes them, and those
   of every year (see `The native 0.1° grid`_).
-- The figures of ``about.md`` (how quadtree grids are built, the grids, the aggregation, the
-  forecasts), into ``about/``.
+- The figures of ``about.md`` (how quadtree grids are built, the aggregation, the forecasts), into
+  ``about/``. The other figures it shows are drawn by ``custom_plots.py``.
 
 
 The native 0.1° grid
@@ -147,7 +148,17 @@ so ``floatcsep run`` comes first. The results go to ``imported/<time window>/``,
 pyCSEP's S- and CL-tests clear and rescan the whole forecast in each of the 10,000 simulations
 (104 million bins for the CL-test), which takes hours per forecast on this grid. ``native_grid.py``
 draws the same random numbers and sums the same terms over the sampled bins only. Its results
-agree with pyCSEP's within rounding, and with those of the global experiment.
+agree with pyCSEP's within rounding, and with those of the global experiment. Because this relies
+on pyCSEP's internals, the script first checks, on a small random forecast, that it still gives
+exactly pyCSEP's numbers, and stops if it does not.
+
+``native_grid.py`` also writes:
+
+- ``imported/<time window>/native_target_rates.json``: each model's rates at the target events,
+  for the T-test pooled over the years (``annual_pooled_ig_native.png``);
+- ``external_forecasts.json``: where the forecast arrays are, so that the dashboard maps them too.
+  The dashboard reads the arrays where they are and sends each browser the rate of every cell, so
+  the forecasts can be explored down to the 0.1° cells.
 
 
 Configuration
@@ -275,9 +286,10 @@ done, and:
    ``annual_ig_heatmap.png``       Information gain against GEAR1 by year, on grid N50L11
    ``annual_counts.png``           Forecast and observed numbers of events by year
    ``annual_pooled_ig.png``        T-test pooling the events of the eight annual windows
-   ``annual_*_native.png``         The yearly test outcomes and information gains on the native
-                                   grid (after ``native_grid.py``)
-   ``quadtree_grids.png``          Map of the grids (drawn only if ``cartopy`` is installed)
+   ``annual_*_native.png``         The yearly test outcomes, information gains and pooled T-test on
+                                   the native grid (after ``native_grid.py``)
+   ``quadtree_grids.png``          Maps of the quadtree grids and of the native 0.1° grid
+                                   (``cartopy``)
    ``grid_levels.png``             The grids compared: cells per zoom level, cells against N
    ``quadtree_japan.png``          Three grids and the native 0.1° lattice around Japan,
                                    and how quadkeys nest
@@ -316,18 +328,22 @@ Exploring the results in the dashboard
 The Next.js dashboard (``floatcsep view config.yml --ui nextjs``, see :ref:`running`) recognizes the
 quadtree grids and the ``<MODEL>=<GRID>`` names. Global maps are centred on the Pacific.
 
-- **Overview** maps the forecast grids, with a selector for the eight grids; each cell is shaded by
-  its zoom level.
+- **Overview** maps the forecast grids, with a selector for the eight quadtree grids; each cell is
+  shaded by its zoom level. The native grid is listed below the map, with links to its forecasts
+  and results.
 - **About** shows ``about.md``: how the quadtree grids are built, the aggregation of the 0.1°
   forecasts onto them, the models and the tests, with the global experiment's figures.
-- **Forecasts** selects a model and a grid. The map shows the expected number of events per cell or,
-  better suited to cells of very different sizes, per 10⁴ km² (the *rate density*), with the
-  observed events of the time window on top.
+- **Forecasts** selects a model and a grid, the native 0.1° grid included once ``native_grid.py``
+  has run. The map shows the expected number of events per cell or, better suited to cells of very
+  different sizes, per 10⁴ km² (the *rate density*), with the observed events of the time window on
+  top.
 - **Results**, *Charts* view: heatmaps of the test scores, as models × grids for a time window
   (with the native 0.1° grid for the whole period) or models × time windows for a grid, including
   the same-grid T-tests. Selecting a cell shows the intervals of that test for every model.
 - **Results**, *Figures* view: the consistency plots of every test and window, and the summary
   figures of ``results/figures`` under *Experiment figures*.
+
+Every chart has a table view, and every table can be downloaded as CSV.
 
 
 pyCSEP under the hood

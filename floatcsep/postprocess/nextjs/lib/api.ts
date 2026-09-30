@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetchJson<T>(url: string): Promise<T> {
+async function request(url: string): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(url);
@@ -28,7 +28,30 @@ export async function fetchJson<T>(url: string): Promise<T> {
     }
     throw new ApiError(response.status, body.error || `Request failed (${response.status})`, body.details);
   }
-  return response.json() as Promise<T>;
+  return response;
+}
+
+export async function fetchJson<T>(url: string): Promise<T> {
+  return (await request(url)).json() as Promise<T>;
+}
+
+// The cell rates of dense forecasts, per model and file: the same for every time
+// window (each window's document gives its factor), so fetched once.
+const denseRates = new Map<string, Promise<Float32Array>>();
+
+/** A forecast document; for dense grids, with the rate of every cell attached. */
+async function fetchForecast(url: string): Promise<ForecastPayload> {
+  const payload = await fetchJson<ForecastPayload>(url);
+  if (payload.grid !== 'dense') return payload;
+  const model = new URL(url, 'http://dashboard').searchParams.get('model');
+  const key = `${model}:${payload.path}`;
+  let rates = denseRates.get(key);
+  if (!rates) {
+    rates = request(`/api/forecasts/rates?model=${model}`).then(async (r) => new Float32Array(await r.arrayBuffer()));
+    denseRates.set(key, rates);
+    rates.catch(() => denseRates.delete(key));
+  }
+  return { ...payload, rateData: await rates };
 }
 
 // Catalogs and forecasts only change when the experiment is re-run, and loading
@@ -54,7 +77,14 @@ export function useCatalog(enabled = true) {
 
 export function useForecast(model: number | null, window: number | null) {
   const key = model !== null && window !== null ? forecastUrl(model, window) : null;
-  return useSWR<ForecastPayload, ApiError>(key, fetchJson, DATA_OPTIONS);
+  return useSWR<ForecastPayload, ApiError>(key, fetchForecast, DATA_OPTIONS);
+}
+
+/** Warm the SWR cache with a forecast (e.g. the next time window). */
+export function prefetchForecast(model: number, window: number): void {
+  preload(forecastUrl(model, window), fetchForecast).catch(() => {
+    // Errors surface when the forecast is actually requested.
+  });
 }
 
 export function useEvaluations(enabled = true) {

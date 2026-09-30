@@ -1,23 +1,74 @@
-.idea/
-__pycache__
+# Python and packaging
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
 version
-# Only ignore results and models directories within tutorial case folders
-tutorials/case*/results/
-tutorials/case*/models/
-tutorials/case*/imported/
-tutorials/case*/about/
-tutorials/case*/pymock*
-tutorials/case*/*.json
-tutorials/case*/**/*.csv
-tests/artifacts/models/
+.venv/
+venv/
+
+# Test, lint and coverage output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Documentation build
+docs/_build/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Personal notes
+notes.kg
+
+# Tests: data downloaded or written while the tests run. The fixtures in
+# tests/artifacts/models/ are tracked.
 tests/artifacts/catalogs/
 tests/artifacts/zenodo/
 tests/artifacts/zenodo_test/
-notes.kg
+tests/artifacts/models/zenodo_test/
 
-# Next.js
-floatcsep/postprocess/nextjs/.next/
-floatcsep/postprocess/nextjs/.next-prod/
+# Tutorials: what running them writes. Their inputs (catalogues, model files and the pymock
+# sources) are tracked, so name the generated paths here instead of broad patterns, which
+# would also hide new inputs.
+tutorials/case*/results/
+# Model environments that floatCSEP creates in a model's folder: <model>_<8-character hash>
+tutorials/**/*_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+# Input catalogues that floatCSEP writes for source-code models
+tutorials/**/input/catalog.csv
+# Forecasts written by the pymock models (case_f's ETAS forecasts are inputs)
+tutorials/case*/pymock*/forecasts/
+# Catalogues fetched by a catalogue query
+tutorials/case_d/catalog.json
+tutorials/case_e/catalog.json
+# Models downloaded from Zenodo or cloned from Git
+tutorials/case_d/models/
+tutorials/case_h/models/
+tutorials/case_j/models/
+tutorials/case_jken/models/
+
+# Tutorial K: prepare.py copies unpublished forecasts, figures and results from the global
+# experiment, and native_grid.py writes results next to them. Never commit these.
+tutorials/case_k/catalog.csv
+tutorials/case_k/models/
+tutorials/case_k/results/
+tutorials/case_k/about/
+tutorials/case_k/imported/
+tutorials/case_k/external_forecasts.json
+
+# Next.js dashboard
+floatcsep/postprocess/nextjs/.next*/
 floatcsep/postprocess/nextjs/next-env.d.ts
 floatcsep/postprocess/nextjs/tsconfig.tsbuildinfo
 floatcsep/postprocess/nextjs/node_modules/
@@ -28,6 +79,6 @@ floatcsep/postprocess/nextjs/.cache/
 floatcsep/postprocess/nextjs/.env*.local
 floatcsep/postprocess/nextjs/package-lock.json
 
-# General Node.js
+# Node.js
 node_modules/
 package-lock.json

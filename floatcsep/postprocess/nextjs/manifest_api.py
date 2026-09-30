@@ -12,6 +12,12 @@ Usage::
     python manifest_api.py catalog --path <catalog file> --out <json>
     python manifest_api.py forecast --manifest <manifest.json> --model <i> --window <j> \
         --out <json>
+    python manifest_api.py rates --manifest <manifest.json> --model <i> --out <f32>
+
+Forecasts evaluated outside floatCSEP (``external`` models, see
+``schemas.external_models``) can cover millions of cells: their forecast document
+describes the grid, and ``rates`` writes the rate of every cell, per forecast unit,
+as little-endian float32 values, which the dashboard scales to each time window.
 """
 
 import argparse
@@ -152,8 +158,8 @@ def _window_scale(window: str, forecast_unit: Any) -> float:
     return (decimal_year(end) - decimal_year(start)) / unit
 
 
-def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Dict[str, Any]:
-    """Expected rates of one model and time window, as a sparse grid of cell rates."""
+def _forecast_source(manifest_path: str, model_index: int, window_index: int):
+    """The manifest entry of a model, the time window and the forecast file."""
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
@@ -174,6 +180,64 @@ def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Di
     path = (app_root / rel_path).resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Forecast file not found: {rel_path}")
+    return manifest, model, window, rel_path, path
+
+
+def _load_external(model: Dict[str, Any], window: str, rel_path: str, path: Path):
+    """A forecast array on a regular grid of every cell (see schemas.external_models)."""
+    grid = model["external"]["grid"]
+    data = np.load(path, mmap_mode="r")  # (cells, magnitude bins), per forecast unit
+    scale = _window_scale(window, model.get("forecast_unit"))
+    cell_rates = np.asarray(data.sum(axis=1), dtype=float) * scale
+    magnitude_rates = np.asarray(data.sum(axis=0), dtype=float) * scale
+    positive = cell_rates[np.isfinite(cell_rates) & (cell_rates > 0)]
+    log_rates = np.log10(positive) if positive.size else np.array([0.0, 1.0])
+    return {
+        "version": FORMAT_VERSION,
+        "kind": "gridded",
+        "grid": "dense",
+        "lon0": float(grid["lon0"]),
+        "lat0": float(grid["lat0"]),
+        "dh": float(grid["dh"]),
+        "nx": int(grid["nx"]),
+        "ny": int(grid["ny"]),
+        "order": grid.get("order", "lon-major"),
+        # The cell rates come from the `rates` command, per forecast unit
+        "rate_scale": scale,
+        "model": model.get("name"),
+        "time_window": window,
+        "path": rel_path,
+        "n_cells": int(cell_rates.size),
+        "n_active": int(positive.size),
+        "rate": [],
+        "total": float(np.nansum(cell_rates)),
+        "vmin": float(log_rates.min()),
+        "vmax": float(log_rates.max()),
+        "magnitudes": _rounded(np.asarray(model["external"].get("magnitudes") or [], float), 4),
+        "magnitude_rates": _significant(magnitude_rates),
+        "n_catalogs": None,
+    }
+
+
+def write_rates(manifest_path: str, model_index: int, out_path: str) -> None:
+    """The rate of every cell of an external forecast, per forecast unit, as float32."""
+    _, model, _, _, path = _forecast_source(manifest_path, model_index, 0)
+    if not model.get("external"):
+        raise ValueError(f"Model '{model.get('name')}' is not an external forecast")
+    data = np.load(path, mmap_mode="r")
+    rates = np.asarray(data.sum(axis=1), dtype="<f4")
+    tmp = f"{out_path}.{os.getpid()}.tmp"
+    rates.tofile(tmp)
+    os.replace(tmp, out_path)
+
+
+def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Dict[str, Any]:
+    """Expected rates of one model and time window, as a sparse grid of cell rates."""
+    manifest, model, window, rel_path, path = _forecast_source(
+        manifest_path, model_index, window_index
+    )
+    if model.get("external"):
+        return _load_external(model, window, rel_path, path)
 
     is_catalog = model.get("forecast_class") == "CatalogForecastRepository"
     n_catalogs = None
@@ -273,13 +337,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     forecast.add_argument("--window", type=int, required=True)
     forecast.add_argument("--out", required=True)
 
+    rates = sub.add_parser("rates", help="Write the cell rates of an external forecast")
+    rates.add_argument("--manifest", required=True)
+    rates.add_argument("--model", type=int, required=True)
+    rates.add_argument("--out", required=True)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "catalog":
-            payload = load_catalog(args.path)
+            _write_json(load_catalog(args.path), args.out)
+        elif args.command == "rates":
+            write_rates(args.manifest, args.model, args.out)
         else:
-            payload = load_forecast(args.manifest, args.model, args.window)
-        _write_json(payload, args.out)
+            _write_json(load_forecast(args.manifest, args.model, args.window), args.out)
     except Exception as exc:  # reported to the dashboard as a JSON error
         traceback.print_exc(file=sys.stderr)
         print(json.dumps({"ok": False, "error": str(exc) or exc.__class__.__name__}))

@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 from ..panel.manifest import build_manifest
 from .runtime import NodeRuntime, ensure_node_runtime, ensure_nextjs_dependencies
-from .schemas import ManifestModel, finite_json
+from .schemas import ManifestModel, external_models, finite_json
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +213,9 @@ def run_nextjs_app(
     # Build manifest
     logger.info("Building experiment manifest...")
     manifest = build_manifest(experiment)
+    # Forecasts evaluated outside floatCSEP, mapped too (see schemas.external_models)
+    declaration = experiment.registry.abs("external_forecasts.json")
+    manifest.models.extend(external_models(declaration, manifest.time_windows))
 
     # Validate using Pydantic
     manifest_model = ManifestModel.model_validate(manifest)

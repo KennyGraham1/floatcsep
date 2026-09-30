@@ -19,8 +19,8 @@ The global experiment also tested the models on their native 0.1-degree grid
 tests. Its results are copied into ``imported/<window>/`` (skip with
 ``--no-native``), and custom_plots.py shows them next to the quadtree grids;
 native_grid.py computes them for every time window, the years included. The
-figures that about.md shows in the dashboard's About page (the grids, how
-quadtrees are built, the forecasts) are copied into ``about/``.
+figures that about.md shows in the dashboard's About page (how quadtrees are
+built, the aggregation, the forecasts) are copied into ``about/``.
 """
 
 import argparse
@@ -62,7 +62,6 @@ NATIVE_TESTS = {
 # Figures of about.md, by their name in about/
 ABOUT_FIGURES = {
     "fig_quadtree_build.png": M745_RESULTS / "figures" / "fig_quadtree_build.png",
-    "quadtree_grids.png": M745_RESULTS / "figures" / "quadtree_grids.png",
     "aggregation.png": M745_RESULTS / "figures" / "aggregation.png",
     "rate_density_maps.png": M745_RESULTS / "figures" / "rate_density_maps.png",
 }

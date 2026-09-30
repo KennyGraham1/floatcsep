@@ -25,13 +25,13 @@ import { useObservedCatalog } from '@/hooks/useObservedCatalog';
 import { indexByName, useQueryState, windowIndexFromParam } from '@/hooks/useQueryState';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { forecastUrl, prefetch, useForecast } from '@/lib/api';
+import { prefetchForecast, useForecast } from '@/lib/api';
 import { eventsInWindow, regionMask } from '@/lib/catalog';
 import { PALETTE_NAMES, paletteStops, rampGradient, type PaletteName } from '@/lib/colors';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
 import { formatInt, formatLatLon, formatRate, formatSci, magnitudeBinLabel, magnitudeDecimals } from '@/lib/format';
 import { cellBounds, forecastCells } from '@/lib/grid';
-import { modelGrid, splitModelName } from '@/lib/modelGrid';
+import { gridLabel, modelGrid, regularGridSizes, splitModelName } from '@/lib/modelGrid';
 import { formatDate, formatDuration, parseTimeWindows } from '@/lib/time';
 import { clamp, cn } from '@/lib/utils';
 
@@ -75,6 +75,7 @@ function ForecastsView() {
   const windows = useMemo(() => parseTimeWindows(manifest.time_windows), [manifest.time_windows]);
 
   const grids = useMemo(() => modelGrid(manifest.models), [manifest.models]);
+  const gridSizes = useMemo(() => regularGridSizes(manifest.models), [manifest.models]);
   const modelIndex = indexByName(manifest.models, params.get('model'));
   const model = manifest.models[modelIndex];
   const selected = model ? splitModelName(model.name) : null;
@@ -92,7 +93,7 @@ function ForecastsView() {
   useEffect(() => {
     if (!current || !model) return;
     for (const w of [windowIndex + 1, windowIndex - 1]) {
-      if (w >= 0 && w < windows.length && model.forecast_available[w]) prefetch(forecastUrl(modelIndex, w));
+      if (w >= 0 && w < windows.length && model.forecast_available[w]) prefetchForecast(modelIndex, w);
     }
   }, [current, model, modelIndex, windowIndex, windows.length]);
 
@@ -396,6 +397,7 @@ function ForecastsView() {
                         align: 'right',
                         numeric: true,
                         render: (k: number) => formatRate(magnitudeBins.expected[k]),
+                        csv: (k: number) => magnitudeBins.expected[k],
                       },
                       ...(magnitudeBins.counts
                         ? [
@@ -454,7 +456,7 @@ function ForecastsView() {
             />
             <Select
               label="Grid"
-              className="w-full sm:w-40"
+              className="w-full sm:w-48"
               value={selected.grid}
               onChange={(value) => {
                 const index = grids.indexOf(selected.model, value);
@@ -462,7 +464,7 @@ function ForecastsView() {
               }}
               options={grids.grids.map((grid) => ({
                 value: grid,
-                label: grid,
+                label: gridLabel(grid, gridSizes),
                 disabled: grids.indexOf(selected.model, grid) < 0,
               }))}
             />

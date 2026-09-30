@@ -15,11 +15,12 @@ Written into the results directory:
     figures/T_ranked.png            information gain vs GEAR1, per model and grid
     figures/annual_consistency.png  N/M/S/CL outcomes by year (primary grid)
     figures/annual_ig_heatmap.png   information gain vs GEAR1 by year (primary grid)
-    figures/annual_consistency_native.png, annual_ig_heatmap_native.png
-                                    the same on the native 0.1° grid
     figures/annual_counts.png       forecast vs observed events by year (primary grid)
     figures/annual_pooled_ig.png    T-test pooled over the years (primary grid)
-    figures/quadtree_grids.png      the quadtree grids
+    figures/annual_*_native.png     outcomes, information gain and pooled T-test by year,
+                                    on the native 0.1° grid (after native_grid.py)
+    figures/quadtree_grids.png      the quadtree grids, and the native 0.1° grid (after
+                                    native_grid.py)
     figures/grid_levels.png         the grids compared: cells per zoom level, cells against N
     figures/quadtree_japan.png      three grids and the native 0.1° lattice around Japan
 
@@ -253,18 +254,36 @@ def import_native_results(layout):
     log.info(f"Imported {copied} results on the native 0.1-degree grid")
 
 
+def native_target_rates(layout, window):
+    """The rates at the target events on the native grid, saved by native_grid.py."""
+    path = layout.experiment.registry.abs(
+        "imported", timewindow2str(window), "native_target_rates.json"
+    )
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return json.load(f)["models"]
+
+
 def pooled_ttest(layout, model, grid, windows):
     """T-test of model vs GEAR1 on one grid, pooling the target events of `windows`."""
     diffs, count_model, count_ref = [], 0.0, 0.0
     for window in windows:
-        window_str = timewindow2str(window)
-        forecast = layout.models[(model, grid)].get_forecast(window_str)
-        reference = layout.models[(REF, grid)].get_forecast(window_str)
-        catalog = layout.experiment.catalog_repo.get_test_cat(window_str)
-        filter_to_region(catalog, forecast.region)
-        catalog.region = forecast.region
-        rates, n_model = forecast.target_event_rates(catalog)
-        rates_ref, n_ref = reference.target_event_rates(catalog)
+        if grid == NATIVE:
+            saved = native_target_rates(layout, window)
+            if not saved or model not in saved or REF not in saved:
+                return None
+            rates, n_model = np.asarray(saved[model]["rates"]), saved[model]["total"]
+            rates_ref, n_ref = np.asarray(saved[REF]["rates"]), saved[REF]["total"]
+        else:
+            window_str = timewindow2str(window)
+            forecast = layout.models[(model, grid)].get_forecast(window_str)
+            reference = layout.models[(REF, grid)].get_forecast(window_str)
+            catalog = layout.experiment.catalog_repo.get_test_cat(window_str)
+            filter_to_region(catalog, forecast.region)
+            catalog.region = forecast.region
+            rates, n_model = forecast.target_event_rates(catalog)
+            rates_ref, n_ref = reference.target_event_rates(catalog)
         diffs.extend(np.log(rates) - np.log(rates_ref))
         count_model += n_model
         count_ref += n_ref
@@ -377,7 +396,10 @@ def heatmap(layout, key, out_dir):
                 )
     groups = [
         ("catalogue-refined ($N$)", [k for k, g in enumerate(grids) if g.startswith("N")]),
-        ("catalogue and strain ($SN$)", [k for k, g in enumerate(grids) if g.startswith("SN")]),
+        (
+            "catalogue and GPS stations ($SN$)",
+            [k for k, g in enumerate(grids) if g.startswith("SN")],
+        ),
         ("native", [k for k, g in enumerate(grids) if g == NATIVE]),
     ]
     groups = [(label, cols) for label, cols in groups if cols]
@@ -854,13 +876,13 @@ def annual_counts(layout, out_dir):
     plt.close(fig)
 
 
-def annual_pooled_ig(layout, out_dir):
-    grid = layout.primary
-    if (REF, grid) not in layout.models:
+def annual_pooled_ig(layout, out_dir, grid=None, suffix=""):
+    grid = grid or layout.primary
+    if grid != NATIVE and (REF, grid) not in layout.models:
         return
     rows = []
     for m in layout.model_names:
-        if m == REF or (m, grid) not in layout.models:
+        if m == REF or (grid != NATIVE and (m, grid) not in layout.models):
             continue
         r = pooled_ttest(layout, m, grid, layout.annual)
         if r:
@@ -905,7 +927,8 @@ def annual_pooled_ig(layout, out_dir):
     ax.set_xlabel(f"Information gain per earthquake against {REF}")
     ax.set_title(
         f"Pooled information gain against {REF}\n"
-        f"{len(layout.annual)} annual forecasts, N = {rows[0][2]['n']} events, grid {grid}",
+        f"{len(layout.annual)} annual forecasts, N = {rows[0][2]['n']} events, "
+        f"grid {grid_label(grid)}",
         loc="left",
         fontsize=10,
     )
@@ -919,7 +942,7 @@ def annual_pooled_ig(layout, out_dir):
         color=INK2,
     )
     fig.tight_layout(rect=(0, 0.035, 1, 1))
-    fig.savefig(os.path.join(out_dir, "annual_pooled_ig.png"), dpi=170)
+    fig.savefig(os.path.join(out_dir, f"annual_pooled_ig{suffix}.png"), dpi=170)
     plt.close(fig)
 
 
@@ -927,7 +950,8 @@ def annual_pooled_ig(layout, out_dir):
 
 
 def quadtree_grids(layout, out_dir):
-    """Gallery of the grids on Pacific-centred Robinson maps, with their cell counts."""
+    """Gallery of the grids on Pacific-centred Robinson maps, with their cell counts, and
+    the native 0.1-degree grid once native_grid.py has run."""
     try:
         import cartopy.crs as ccrs
         import cartopy.feature as cfeature
@@ -935,13 +959,13 @@ def quadtree_grids(layout, out_dir):
         log.warning("cartopy is not installed; skipping quadtree_grids.png")
         return
     grids = layout.grids
-    ncol = 3 if len(grids) > 4 else len(grids)
-    nrow = int(np.ceil(len(grids) / ncol))
+    native = NATIVE in layout.columns
+    n_panels = len(grids) + native
+    ncol = 3 if n_panels > 4 else n_panels
+    nrow = int(np.ceil(n_panels / ncol))
     fig = plt.figure(figsize=(7.4, 1.75 * nrow + 0.3))
-    for i, grid in enumerate(grids):
-        region = layout.region(grid)
-        bounds = np.asarray(region.bounds)
-        levels = [len(q) for q in region.quadkeys]
+
+    def world_map(i):
         ax = fig.add_subplot(nrow, ncol, i + 1, projection=ccrs.Robinson(central_longitude=180))
         try:
             ax.add_feature(cfeature.LAND, facecolor="#efece6", zorder=0)
@@ -950,6 +974,13 @@ def quadtree_grids(layout, out_dir):
             pass
         ax.set_global()
         ax.spines["geo"].set_linewidth(0.6)
+        return ax
+
+    for i, grid in enumerate(grids):
+        region = layout.region(grid)
+        bounds = np.asarray(region.bounds)
+        levels = [len(q) for q in region.quadkeys]
+        ax = world_map(i)
         rects = [Rectangle((w, s), e - w, n - s) for w, s, e, n in bounds]
         ax.add_collection(
             PatchCollection(
@@ -961,11 +992,68 @@ def quadtree_grids(layout, out_dir):
             )
         )
         kind = (
-            "catalogue + strain-rate refined" if grid.startswith("SN") else "catalogue-refined"
+            "catalogue + GPS-station refined" if grid.startswith("SN") else "catalogue-refined"
         )
         ax.set_title(
             f"({'abcdefghij'[i]}) {grid}: {len(bounds):,} cells\n"
             f"{kind}, levels {min(levels)}–{max(levels)}",
+            fontsize=7.5,
+            loc="left",
+        )
+    if native:
+        # 6.48 million cells are below the resolution of the page: the lattice is drawn at
+        # 2 degrees, and the true 0.1-degree cells over central Japan in an inset
+        ax = world_map(len(grids))
+        ax.gridlines(
+            xlocs=np.arange(-180, 181, 2),
+            ylocs=np.arange(-90, 91, 2),
+            color=EDGE,
+            linewidth=0.1,
+            alpha=0.8,
+        )
+        west, south, east, north = 136.0, 34.0, 141.0, 39.0
+        ax.add_patch(
+            Rectangle(
+                (west, south),
+                east - west,
+                north - south,
+                transform=ccrs.PlateCarree(),
+                fill=False,
+                edgecolor=RED,
+                linewidth=0.8,
+                zorder=5,
+            )
+        )
+        inset = ax.inset_axes([0.40, 0.08, 0.30, 0.52], projection=ccrs.PlateCarree())
+        inset.set_extent((west, east, south, north), crs=ccrs.PlateCarree())
+        lons = np.arange(west, east + 1e-9, 0.1)
+        lats = np.arange(south, north + 1e-9, 0.1)
+        lattice = [[(x, south), (x, north)] for x in lons] + [
+            [(west, y), (east, y)] for y in lats
+        ]
+        inset.add_collection(
+            LineCollection(lattice, transform=ccrs.PlateCarree(), colors=EDGE, linewidths=0.1)
+        )
+        try:
+            inset.add_feature(cfeature.COASTLINE, linewidth=0.4, edgecolor=INK2)
+        except Exception:  # Natural Earth data unavailable offline
+            pass
+        inset.spines["geo"].set_edgecolor(RED)
+        inset.spines["geo"].set_linewidth(0.8)
+        inset.text(
+            0.5,
+            -0.04,
+            f"0.1° cells, {west:.0f}–{east:.0f}°E, {south:.0f}–{north:.0f}°N",
+            transform=inset.transAxes,
+            ha="center",
+            va="top",
+            fontsize=5.5,
+            color=INK,
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.9),
+        )
+        ax.set_title(
+            f"({'abcdefghij'[len(grids)]}) native 0.1° grid: {3600 * 1800:,} cells\n"
+            "regular lattice, drawn at 2° spacing",
             fontsize=7.5,
             loc="left",
         )
@@ -1055,7 +1143,7 @@ def grid_levels(layout, out_dir):
 
     for prefix, color, name in (
         ("N", BLUE, "catalogue ($N$)"),
-        ("SN", ORANGE, "catalogue and strain ($SN$)"),
+        ("SN", ORANGE, "catalogue + GPS ($SN$)"),
     ):
         points = []
         for i, grid in enumerate(grids):
@@ -1082,7 +1170,7 @@ def grid_levels(layout, out_dir):
     ax2.minorticks_off()
     ax2.grid(True)
     ax2.set_xlabel("$N$, the most points a cell may hold", fontsize=8.5)
-    ax2.legend(frameon=False, fontsize=8, loc="lower left")
+    ax2.legend(frameon=False, fontsize=8, loc="upper right")
     ax2.set_title("(b) Cells against $N$", loc="left", fontsize=10, color=INK)
     fig.savefig(os.path.join(out_dir, "grid_levels.png"), dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -1270,6 +1358,7 @@ def main(experiment):
             ):  # native_grid.py has run
                 annual_consistency(layout, out_dir, NATIVE, "_native")
                 annual_ig_heatmap(layout, out_dir, NATIVE, "_native")
+                annual_pooled_ig(layout, out_dir, NATIVE, "_native")
             annual_counts(layout, out_dir)
             annual_pooled_ig(layout, out_dir)
         quadtree_grids(layout, out_dir)

@@ -1,7 +1,7 @@
 'use client';
 
 import { BookOpen } from 'lucide-react';
-import { Children, isValidElement, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -12,21 +12,9 @@ import { Lightbox, type LightboxItem } from '@/components/ui/Lightbox';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAbout } from '@/lib/api';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
+import { textOf } from '@/lib/csv';
 import type { Manifest } from '@/lib/types';
 import { doiUrl } from '@/lib/utils';
-
-/** The plain text of rendered Markdown (for heading anchors). */
-function textOf(children: ReactNode): string {
-  return Children.toArray(children)
-    .map((child) =>
-      typeof child === 'string' || typeof child === 'number'
-        ? String(child)
-        : isValidElement<{ children?: ReactNode }>(child)
-          ? textOf(child.props.children)
-          : '',
-    )
-    .join('');
-}
 
 function slug(text: string): string {
   return text

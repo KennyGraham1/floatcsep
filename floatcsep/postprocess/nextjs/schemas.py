@@ -1,6 +1,7 @@
 """Pydantic schemas for floatCSEP Next.js dashboard."""
 
 import datetime
+import json
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -11,6 +12,42 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # Model entries carry floatCSEP internals (e.g. the file registry) that are not
 # experiment metadata and must not be dumped into the manifest.
 EXCLUDED_MODEL_KEYS = ("registry",)
+
+
+def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str, Any]]:
+    """
+    Forecasts evaluated outside floatCSEP that the dashboard maps too, declared in an
+    external_forecasts.json next to the configuration (e.g. written by Tutorial K's
+    native_grid.py)::
+
+        {"grid": {"name": "FULL01", "lon0": -180, "lat0": -90, "dh": 0.1,
+                  "nx": 3600, "ny": 1800, "order": "lon-major"},
+         "magnitudes": [...], "forecast_unit": 1,
+         "forecasts": {"GEAR1": "/path/GEAR1_01deg_rates.npy", ...}}
+
+    Each .npy array holds the expected events per forecast_unit years of every cell
+    of the grid (in `order`) and magnitude bin. The models are named <MODEL>=<grid>.
+    """
+    declaration = Path(declaration)
+    if not declaration.is_file():
+        return []
+    spec = json.loads(declaration.read_text())
+    grid = spec["grid"]
+    models = []
+    for name, file in spec.get("forecasts", {}).items():
+        path = str((declaration.parent / file).resolve())
+        models.append(
+            {
+                "name": f"{name}={grid['name']}",
+                "forecast_unit": spec.get("forecast_unit", 1),
+                "path": path,
+                "fmt": "npy",
+                "forecast_class": "ExternalGridForecast",
+                "forecasts": {window: path for window in time_windows},
+                "external": {"grid": grid, "magnitudes": spec.get("magnitudes")},
+            }
+        )
+    return models
 
 
 def _callable_name(value: Any) -> str:

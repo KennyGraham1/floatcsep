@@ -9,6 +9,7 @@ import {
   Map as MapIcon,
   type LucideIcon,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Badge } from '@/components/ui/Badge';
@@ -16,7 +17,7 @@ import { useManifest } from '@/lib/contexts/ManifestContext';
 import { formatInt } from '@/lib/format';
 import type { Manifest } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Brand } from './Brand';
+import { Brand, FLOATCSEP_URL } from './Brand';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
 interface NavItem {
@@ -34,11 +35,34 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/results', label: 'Results', icon: ChartColumn },
 ];
 
+// The logos of the Panel dashboard. The GitHub and Read the Docs marks are white, so they
+// are drawn as masks in the text colour; the CSEP globe keeps its own colours.
 const LINKS = [
-  { href: 'https://floatcsep.readthedocs.io', label: 'Documentation' },
-  { href: 'https://github.com/cseptesting/floatcsep', label: 'Source code' },
-  { href: 'https://cseptesting.org', label: 'CSEP' },
+  { href: 'https://floatcsep.readthedocs.io', label: 'Documentation', logo: '/logos/readthedocs.png', mask: true },
+  { href: FLOATCSEP_URL, label: 'Source code', logo: '/logos/github.png', mask: true },
+  { href: 'https://cseptesting.org', label: 'CSEP', logo: '/logos/csep.png', mask: false },
 ];
+
+function LinkLogo({ src, mask }: { src: string; mask: boolean }) {
+  if (!mask) return <Image src={src} alt="" width={64} height={64} className="size-3.5" />;
+  const image = `url(${src})`;
+  return (
+    <span
+      aria-hidden
+      className="size-3.5 bg-current"
+      style={{
+        maskImage: image,
+        WebkitMaskImage: image,
+        maskSize: 'contain',
+        WebkitMaskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        WebkitMaskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        WebkitMaskPosition: 'center',
+      }}
+    />
+  );
+}
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { manifest } = useManifest();
@@ -47,9 +71,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 shrink-0 items-center border-b px-5">
-        <Link href="/experiment" onClick={onNavigate} aria-label="floatCSEP overview" className="rounded-md">
-          <Brand />
-        </Link>
+        <Brand />
       </div>
 
       {manifest && (
@@ -115,8 +137,9 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-ink-2 hover:text-ink"
+                className="inline-flex items-center gap-2 text-ink-2 hover:text-ink"
               >
+                <LinkLogo src={link.logo} mask={link.mask} />
                 {link.label}
                 <ExternalLink className="size-3 text-ink-3" aria-hidden />
               </a>
