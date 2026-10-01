@@ -69,6 +69,17 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - Time windows that share a forecast file (time-independent models) were served
   from one cache entry, so every window showed the first one viewed.
 - Results written while the dashboard runs are picked up without a restart.
+- A forecast's cached map ignored its `forecast_unit` and, when two models share a
+  file, its model.
+- An upgrade could not start offline: a failed dependency update now keeps the
+  installed packages.
+- Remote images written as `<url>` in about.md were treated as local files.
+- `mode="start"` fell back to the development server when the build failed; only
+  `"auto"` does.
+- External grids too large for a browser are skipped with a warning, and the
+  magnitude table keeps each bin with its own rate.
+- The 0.1° maps summed the whole forecast file for every time window; the sums are
+  now computed once per file.
 
 ## [1.1.0] - 2025
 

@@ -47,9 +47,11 @@ export async function loadAbout(loaded: LoadedManifest): Promise<AboutDocument |
   const assets: string[] = [];
   const text = await fs.readFile(file, 'utf-8');
   const markdown = text.replace(IMAGE, (match, alt: string, src: string, title = '') => {
-    // Remote images are left alone; local ones must stay inside the document's folder.
-    if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) return match;
-    const target = path.resolve(folder, decode(src));
+    // Remote images (also written as <url>) are left alone; local ones must stay inside
+    // the document's folder.
+    const link = decode(src);
+    if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(link)) return match;
+    const target = path.resolve(folder, link);
     const inside = target.startsWith(folder + path.sep) && IMAGE_FILE.test(target);
     const index = inside ? assets.push(target) - 1 : -1;
     return `![${alt}](/api/about/assets/${index}${title})`;

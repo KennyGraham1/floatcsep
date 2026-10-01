@@ -85,6 +85,9 @@ async function exists(file: string): Promise<boolean> {
 }
 
 /** The grid of a forecast evaluated outside floatCSEP (schemas.external_models). */
+const MAX_GRID_SIDE = 65535;
+const MAX_GRID_CELLS = 2 ** 24;
+
 function externalGrid(value: unknown): Model['external'] {
   const grid = (value as Raw | null)?.grid;
   if (!grid || typeof grid !== 'object') return null;
@@ -98,7 +101,15 @@ function externalGrid(value: unknown): Model['external'] {
     ny: n(grid.ny),
     order: String(grid.order ?? 'lon-major'),
   };
-  const valid = [spec.lon0, spec.lat0, spec.dh, spec.nx, spec.ny].every(Number.isFinite) && spec.order === 'lon-major';
+  // As in schemas.py: 16-bit column and row indices, and a size a browser can hold.
+  const side = (v: number) => Number.isInteger(v) && v > 0 && v <= MAX_GRID_SIDE;
+  const valid =
+    [spec.lon0, spec.lat0, spec.dh].every(Number.isFinite) &&
+    spec.dh > 0 &&
+    side(spec.nx) &&
+    side(spec.ny) &&
+    spec.nx * spec.ny <= MAX_GRID_CELLS &&
+    spec.order === 'lon-major';
   return valid ? { grid: spec } : null;
 }
 

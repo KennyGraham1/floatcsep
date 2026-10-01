@@ -38,7 +38,9 @@ NumPy array per model (expected events per forecast unit, cells × magnitude bin
 in longitude-major order). They are added to the models as `<MODEL>=<grid>`, and
 the browser receives the rate of every cell as binary float32 (26 MB for the
 6.48 million cells of a global 0.1° grid), scaled to each time window. Tutorial
-K's `native_grid.py` writes such a file for the models' native grid.
+K's `native_grid.py` writes such a file for the models' native grid. A grid can
+have up to 65,535 columns or rows and 16.8 million cells (a browser needs about
+40 bytes per cell); larger ones are skipped with a warning.
 
 ### About page
 

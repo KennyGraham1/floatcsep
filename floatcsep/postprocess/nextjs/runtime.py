@@ -205,6 +205,14 @@ def ensure_nextjs_dependencies(
             env=env,
         )
     except subprocess.CalledProcessError as exc:
+        if (node_modules / "next" / "package.json").is_file():
+            # E.g. offline: keep using the installed packages (the stamp is not written,
+            # so the update is tried again at the next start).
+            logger.warning(
+                "Could not update the dashboard dependencies (%s); using the installed ones.",
+                exc,
+            )
+            return
         logger.error("Failed to install dependencies: %s", exc)
         raise RuntimeError(
             "Could not install Next.js dependencies automatically. "

@@ -148,8 +148,10 @@ function ForecastsView() {
 
   const magnitudeBins = useMemo(() => {
     if (!forecast) return null;
-    const mags = forecast.magnitudes.filter((m): m is number => m !== null);
-    const expected = forecast.magnitude_rates.slice(0, mags.length);
+    // Bins without a magnitude are dropped together with their rates, keeping the pairs.
+    const kept = forecast.magnitudes.flatMap((m, i) => (m === null ? [] : [i]));
+    const mags = kept.map((i) => forecast.magnitudes[i] as number);
+    const expected = kept.map((i) => forecast.magnitude_rates[i] ?? 0);
     let counts: number[] | null = null;
     if (catalog && observed) {
       counts = mags.map(() => 0);

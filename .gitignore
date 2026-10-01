@@ -57,6 +57,7 @@ tutorials/case_d/models/
 tutorials/case_h/models/
 tutorials/case_j/models/
 tutorials/case_jken/models/
+tutorials/case_k/quadtree_paper.md
 
 # Tutorial K: prepare.py copies unpublished forecasts, figures and results from the global
 # experiment, and native_grid.py writes results next to them. Never commit these.

@@ -15,6 +15,77 @@ from floatcsep.utils.helpers import parse_csep_func
 log = logging.getLogger("floatLogger")
 
 
+# Tolerance, in tiles, for points computed to lie on a tile edge
+_TILE_EDGE = 1e-9
+
+
+def _quadtree_tiles(quadkeys) -> dict:
+    """
+    The cells of a quadtree grid by zoom level: their Web Mercator tiles, coded as
+    ``x * 2**level + y`` and sorted, and the index of each cell in the grid.
+    """
+    levels = {}
+    for index, key in enumerate(quadkeys):
+        key = str(key)
+        x = y = 0
+        for digit in key:  # each digit picks a quadrant: bit 0 is x, bit 1 is y
+            d = int(digit)
+            x, y = 2 * x + (d & 1), 2 * y + (d >> 1)
+        codes, cells = levels.setdefault(len(key), ([], []))
+        codes.append(x * 2 ** len(key) + y)
+        cells.append(index)
+    tiles = {}
+    for level, (codes, cells) in levels.items():
+        order = numpy.argsort(codes)
+        tiles[level] = (
+            numpy.asarray(codes, dtype=numpy.int64)[order],
+            numpy.asarray(cells)[order],
+        )
+    return tiles
+
+
+def inside_quadtree(region, lons, lats) -> numpy.ndarray:
+    """
+    Whether each point lies in a cell of a quadtree grid, by the test of pyCSEP's
+    ``QuadtreeGrid2D`` (``west <= lon < east`` and ``south <= lat < north``).
+
+    Rather than testing every cell, the candidate cells of a point are its Web Mercator
+    tiles at each zoom level of the grid (both tiles, where the point is on an edge), and
+    only those are tested. The result is the same, in O(points x levels).
+    """
+    lons = numpy.asarray(lons, dtype=float)
+    lats = numpy.asarray(lats, dtype=float)
+    bounds = numpy.asarray(region.bounds, dtype=float)
+    inside = numpy.zeros(lons.shape, dtype=bool)
+    with numpy.errstate(all="ignore"):
+        x_unit = (lons + 180.0) / 360.0
+        sin = numpy.sin(numpy.radians(lats))
+        y_unit = 0.5 - numpy.log((1.0 + sin) / (1.0 - sin)) / (4.0 * numpy.pi)
+    for level, (codes, cells) in _quadtree_tiles(region.quadkeys).items():
+        n = 2**level
+        for dx in (-_TILE_EDGE, _TILE_EDGE):
+            for dy in (-_TILE_EDGE, _TILE_EDGE):
+                with numpy.errstate(invalid="ignore"):
+                    x = numpy.floor(x_unit * n + dx)
+                    y = numpy.floor(y_unit * n + dy)
+                    valid = (x >= 0) & (x < n) & (y >= 0) & (y < n)
+                xi = numpy.where(valid, x, 0).astype(numpy.int64)
+                yi = numpy.where(valid, y, 0).astype(numpy.int64)
+                code = numpy.where(valid, xi * n + yi, -1)
+                pos = numpy.minimum(numpy.searchsorted(codes, code), codes.size - 1)
+                cell = cells[pos]
+                west, south, east, north = bounds[cell].T
+                inside |= (
+                    valid
+                    & (codes[pos] == code)
+                    & (west <= lons)
+                    & (lons < east)
+                    & (south <= lats)
+                    & (lats < north)
+                )
+    return inside
+
+
 def filter_to_region(catalog: CSEPCatalog, region) -> CSEPCatalog:
     """
     Keeps only the events of a catalog that fall inside the cells of a region.
@@ -27,14 +98,18 @@ def filter_to_region(catalog: CSEPCatalog, region) -> CSEPCatalog:
     catalog.region = region
     if catalog.event_count == 0:
         return catalog
-    west, south, east, north = numpy.asarray(region.bounds).T
-    inside = numpy.array(
-        [
-            numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
-            for lon, lat in zip(catalog.get_longitudes(), catalog.get_latitudes())
-        ],
-        dtype=bool,
-    )
+    lons, lats = catalog.get_longitudes(), catalog.get_latitudes()
+    if hasattr(region, "quadkeys"):
+        inside = inside_quadtree(region, lons, lats)
+    else:
+        west, south, east, north = numpy.asarray(region.bounds).T
+        inside = numpy.array(
+            [
+                numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
+                for lon, lat in zip(lons, lats)
+            ],
+            dtype=bool,
+        )
     catalog.catalog = catalog.catalog[inside]
     return catalog
 

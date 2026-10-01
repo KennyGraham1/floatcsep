@@ -34,11 +34,14 @@ export async function GET(request: NextRequest) {
 
     const file = resolveFromRoot(appRoot, relative);
     const region = manifest.region;
-    // The window is part of the key: time-independent models use one file for every
-    // window, scaled to its length. Catalog forecasts are binned onto the experiment
-    // grid, so it is part of the key too.
+    // The window and the forecast unit are part of the key: time-independent models use
+    // one file for every window, scaled by the window's length over the unit. So is the
+    // model, whose name is in the document, as two models can share a file. Catalog
+    // forecasts are binned onto the experiment grid, so it is part of the key too.
     const key = await sourceKey('forecast', file, {
+      model: model.name,
       window: manifest.time_windows[windowIndex],
+      unit: model.forecast_unit ?? null,
       catalog: model.is_catalog_forecast,
       nSims: model.func_kwargs?.n_sims ?? null,
       grid: model.is_catalog_forecast ? [region?.dh, region?.origins?.length, region?.bbox, manifest.magnitudes] : null,

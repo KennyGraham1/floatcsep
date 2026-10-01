@@ -274,9 +274,11 @@ def run_nextjs_app(
     if mode in ("auto", "start"):
         if _build_is_current(nextjs_dir) or _build_dashboard(nextjs_dir, runtime, env):
             mode = "start"
-        else:
+        elif mode == "auto":
             logger.warning("Falling back to the development server.")
             mode = "dev"
+        else:
+            raise RuntimeError("The dashboard's production build failed (see the log above).")
     if mode == "start":
         env["NEXT_DIST_DIR"] = PROD_DIST_DIR
 

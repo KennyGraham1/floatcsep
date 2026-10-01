@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -9,9 +10,36 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+logger = logging.getLogger(__name__)
+
 # Model entries carry floatCSEP internals (e.g. the file registry) that are not
 # experiment metadata and must not be dumped into the manifest.
 EXCLUDED_MODEL_KEYS = ("registry",)
+
+# The browser indexes the columns and rows of an external grid with 16-bit integers and
+# needs about 40 bytes per cell (the global 0.1-degree grid, 6.48 million cells, 270 MB).
+MAX_GRID_SIDE = 65535
+MAX_GRID_CELLS = 2**24
+
+
+def _grid_problem(grid: Any) -> Optional[str]:
+    """Why an external grid declaration cannot be mapped, or None if it can."""
+    if not isinstance(grid, dict):
+        return "no grid"
+    try:
+        dh, nx, ny = float(grid["dh"]), grid["nx"], grid["ny"]
+        float(grid["lon0"]), float(grid["lat0"])
+    except (KeyError, TypeError, ValueError):
+        return "lon0, lat0, dh, nx and ny are required"
+    if not (math.isfinite(dh) and dh > 0):
+        return "dh must be positive"
+    if not all(isinstance(v, int) and 0 < v <= MAX_GRID_SIDE for v in (nx, ny)):
+        return f"nx and ny must be whole numbers from 1 to {MAX_GRID_SIDE}"
+    if nx * ny > MAX_GRID_CELLS:
+        return f"{nx * ny:,} cells, more than the {MAX_GRID_CELLS:,} a browser can map"
+    if grid.get("order", "lon-major") != "lon-major":
+        return 'order must be "lon-major"'
+    return None
 
 
 def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str, Any]]:
@@ -32,13 +60,17 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
     if not declaration.is_file():
         return []
     spec = json.loads(declaration.read_text())
-    grid = spec["grid"]
+    grid = spec.get("grid")
+    problem = _grid_problem(grid)
+    if problem:
+        logger.warning(f"Ignoring {declaration}: {problem}")
+        return []
     models = []
     for name, file in spec.get("forecasts", {}).items():
         path = str((declaration.parent / file).resolve())
         models.append(
             {
-                "name": f"{name}={grid['name']}",
+                "name": f"{name}={grid.get('name', 'external')}",
                 "forecast_unit": spec.get("forecast_unit", 1),
                 "path": path,
                 "fmt": "npy",

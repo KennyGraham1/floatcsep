@@ -21,6 +21,9 @@ as little-endian float32 values, which the dashboard scales to each time window.
 """
 
 import argparse
+import calendar
+import datetime
+import hashlib
 import json
 import math
 import os
@@ -144,18 +147,38 @@ def _load_gridded(path: Path, fmt: Optional[str]):
     return np.asarray(rates, dtype=float), region, np.asarray(magnitudes, dtype=float)
 
 
+def _decimal_year(moment: datetime.datetime) -> float:
+    """
+    pyCSEP's csep.utils.time_utils.decimal_year, term by term, so that the scale is
+    identical, without importing pyCSEP, which takes seconds for every forecast shown.
+    """
+    days_in_year = 366.0 if calendar.isleap(moment.year) else 365.0
+    days_before = sum(calendar.monthrange(moment.year, m)[1] for m in range(1, moment.month))
+    return (
+        moment.year
+        + (
+            days_before
+            + (moment.day - 1)
+            + moment.hour / 24.0
+            + moment.minute / 1440.0
+            + (moment.second + moment.microsecond * 1e-6) / 86400.0
+        )
+        / days_in_year
+    )
+
+
 def _window_scale(window: str, forecast_unit: Any) -> float:
     """
     Scale floatCSEP applies to gridded forecasts: window length in decimal years
     over the model's forecast unit (1 year unless configured, see
-    GriddedForecastRepository._load_single_forecast).
+    GriddedForecastRepository._load_single_forecast). The window is parsed as
+    floatcsep.utils.helpers.str2timewindow does.
     """
-    from csep.utils.time_utils import decimal_year
-    from floatcsep.utils.helpers import str2timewindow
-
-    start, end = str2timewindow(window.replace(" to ", "_"))
+    start, end = (
+        datetime.datetime.fromisoformat(part) for part in window.replace(" to ", "_").split("_")
+    )
     unit = float(forecast_unit) if forecast_unit else 1.0
-    return (decimal_year(end) - decimal_year(start)) / unit
+    return (_decimal_year(end) - _decimal_year(start)) / unit
 
 
 def _forecast_source(manifest_path: str, model_index: int, window_index: int):
@@ -183,13 +206,46 @@ def _forecast_source(manifest_path: str, model_index: int, window_index: int):
     return manifest, model, window, rel_path, path
 
 
-def _load_external(model: Dict[str, Any], window: str, rel_path: str, path: Path):
+def _external_sums(path: Path, cache_dir: Optional[Path]):
+    """
+    An external forecast summed over the magnitude bins (per cell) and over the cells (per
+    bin), per forecast unit. Reading the whole array takes seconds, and the sums do not
+    depend on the time window, so they are kept in the dashboard's cache.
+    """
+    saved = None
+    if cache_dir is not None:
+        stat = path.stat()
+        identity = f"{path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+        saved = Path(cache_dir) / f"sums-{hashlib.sha1(identity.encode()).hexdigest()}.npz"
+        try:
+            with np.load(saved) as sums:
+                return sums["cells"], sums["magnitudes"]
+        except (OSError, KeyError, ValueError):
+            pass  # not saved yet, or unreadable: compute again
+    data = np.load(path, mmap_mode="r")  # (cells, magnitude bins)
+    cells = np.asarray(data.sum(axis=1), dtype=float)
+    magnitudes = np.asarray(data.sum(axis=0), dtype=float)
+    if saved is not None:
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        tmp = saved.with_name(f"{saved.stem}.{os.getpid()}.tmp.npz")
+        np.savez(tmp, cells=cells, magnitudes=magnitudes)
+        os.replace(tmp, saved)
+    return cells, magnitudes
+
+
+def _load_external(
+    model: Dict[str, Any],
+    window: str,
+    rel_path: str,
+    path: Path,
+    cache_dir: Optional[Path] = None,
+):
     """A forecast array on a regular grid of every cell (see schemas.external_models)."""
     grid = model["external"]["grid"]
-    data = np.load(path, mmap_mode="r")  # (cells, magnitude bins), per forecast unit
+    cells, magnitudes = _external_sums(path, cache_dir)
     scale = _window_scale(window, model.get("forecast_unit"))
-    cell_rates = np.asarray(data.sum(axis=1), dtype=float) * scale
-    magnitude_rates = np.asarray(data.sum(axis=0), dtype=float) * scale
+    cell_rates = cells * scale
+    magnitude_rates = magnitudes * scale
     positive = cell_rates[np.isfinite(cell_rates) & (cell_rates > 0)]
     log_rates = np.log10(positive) if positive.size else np.array([0.0, 1.0])
     return {
@@ -224,20 +280,25 @@ def write_rates(manifest_path: str, model_index: int, out_path: str) -> None:
     _, model, _, _, path = _forecast_source(manifest_path, model_index, 0)
     if not model.get("external"):
         raise ValueError(f"Model '{model.get('name')}' is not an external forecast")
-    data = np.load(path, mmap_mode="r")
-    rates = np.asarray(data.sum(axis=1), dtype="<f4")
+    cells, _ = _external_sums(path, Path(out_path).parent)
+    rates = cells.astype("<f4")
     tmp = f"{out_path}.{os.getpid()}.tmp"
     rates.tofile(tmp)
     os.replace(tmp, out_path)
 
 
-def load_forecast(manifest_path: str, model_index: int, window_index: int) -> Dict[str, Any]:
+def load_forecast(
+    manifest_path: str,
+    model_index: int,
+    window_index: int,
+    cache_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
     """Expected rates of one model and time window, as a sparse grid of cell rates."""
     manifest, model, window, rel_path, path = _forecast_source(
         manifest_path, model_index, window_index
     )
     if model.get("external"):
-        return _load_external(model, window, rel_path, path)
+        return _load_external(model, window, rel_path, path, cache_dir)
 
     is_catalog = model.get("forecast_class") == "CatalogForecastRepository"
     n_catalogs = None
@@ -349,7 +410,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "rates":
             write_rates(args.manifest, args.model, args.out)
         else:
-            _write_json(load_forecast(args.manifest, args.model, args.window), args.out)
+            document = load_forecast(
+                args.manifest, args.model, args.window, Path(args.out).parent
+            )
+            _write_json(document, args.out)
     except Exception as exc:  # reported to the dashboard as a JSON error
         traceback.print_exc(file=sys.stderr)
         print(json.dumps({"ok": False, "error": str(exc) or exc.__class__.__name__}))
