@@ -2,16 +2,22 @@
 Test the forecasts on the models' native 0.1-degree grid (FULL01) in every time
 window of Tutorial K, for custom_plots.py to show next to the quadtree grids.
 
-The global experiment keeps the nine static 0.1-degree forecasts (expected M7.45+
-events per year in 6.48 million cells and 16 magnitude bins) as .npy arrays. Run,
+The global experiment keeps its 0.1-degree forecasts (expected M7.45+ events per year
+in 6.48 million cells and 16 magnitude bins) as .npy arrays: the eight-year forecasts
+of the nine models, and the annual experiment's forecasts of PPE and EEPASfull for each
+year and of SUP for 2014. As in models.yml (see prepare.py), the whole period uses the
+eight-year forecasts, and each year the annual ones for the time-dependent models. Run,
 after ``floatcsep run config.yml`` (the test catalogues come from its results)::
 
-    python native_grid.py --forecasts /work/kennyg/eepas_spliced_shm_fullgrid_cache
+    python native_grid.py --forecasts /work/kennyg/eepas_spliced_shm_fullgrid_cache \
+        --annual-forecasts /work/kennyg/eepas_annual/native_cache
 
 then ``floatcsep plot config.yml`` to add the results to the figures. The arrays are
 read where they are, not copied. Written:
 
     imported/<window>/<test>_<MODEL>=FULL01.json   the results, as floatCSEP names them
+    imported/<window>/native_target_rates.json     each model's rates at the target events,
+                                                   for the T-test pooled over the years
     external_forecasts.json                        where the arrays are, for the dashboard's
                                                    forecast maps
 
@@ -40,6 +46,9 @@ from csep.utils.stats import poisson_joint_log_likelihood_ndarray
 
 from floatcsep.experiment import Experiment
 from floatcsep.utils.helpers import timewindow2str
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from prepare import NATIVE_WINDOW, TIME_VARYING  # noqa: E402  (the models' time dependence)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GRID = "FULL01"
@@ -207,7 +216,7 @@ def conditional_likelihood_test(forecast, catalog, observed, num_simulations=100
 
 
 def window_years(window):
-    """As floatCSEP scales time-independent forecasts: decimal years of the window."""
+    """As floatCSEP scales gridded forecasts, time-dependent ones too: decimal years."""
     from csep.utils.time_utils import decimal_year
 
     return decimal_year(window[1]) - decimal_year(window[0])
@@ -218,22 +227,22 @@ def main(argv=None):
     parser.add_argument(
         "--forecasts",
         required=True,
-        help="folder with <MODEL>_01deg_rates.npy, the per-year 0.1-degree forecasts",
+        help="folder with <MODEL>_01deg_rates.npy, the eight-year 0.1-degree forecasts",
+    )
+    parser.add_argument(
+        "--annual-forecasts",
+        required=True,
+        help="folder with <MODEL>_<YEAR>_01deg_rates.npy, the annual experiment's",
     )
     args = parser.parse_args(argv)
     logging.disable(logging.WARNING)
 
-    missing = [
-        m
-        for m in MODELS
-        if not os.path.isfile(os.path.join(args.forecasts, f"{m}_01deg_rates.npy"))
-    ]
-    if missing:
-        print(
-            f"No 0.1-degree forecast for {', '.join(missing)} in {args.forecasts}",
-            file=sys.stderr,
-        )
-        return 1
+    def array_path(model, window_str):
+        """The forecast of a model for a time window, per year (see prepare.py)."""
+        if model in TIME_VARYING and window_str != NATIVE_WINDOW:
+            year = TIME_VARYING[model] or int(window_str[:4])
+            return os.path.join(args.annual_forecasts, f"{model}_{year}_01deg_rates.npy")
+        return os.path.join(args.forecasts, f"{model}_01deg_rates.npy")
 
     self_check()
     os.chdir(HERE)
@@ -242,15 +251,23 @@ def main(argv=None):
     experiment.set_tasks()
     magnitudes = numpy.asarray(experiment.magnitudes, dtype=float)
     tests = {t.func.__name__: t for t in experiment.tests}
+    windows = [timewindow2str(w) for w in experiment.time_windows]
+    paths = {(m, w): array_path(m, w) for m in MODELS for w in windows}
+    missing = sorted({p for p in paths.values() if not os.path.isfile(p)})
+    if missing:
+        print("Missing 0.1-degree forecasts:\n  " + "\n  ".join(missing), file=sys.stderr)
+        return 1
 
     t0 = time.time()
     print("Building the 0.1-degree grid (6.48 million cells)...", flush=True)
     region = native_region(magnitudes)
-    print("Loading the forecasts...", flush=True)
-    rates = {
-        m: numpy.load(os.path.join(args.forecasts, f"{m}_01deg_rates.npy"), mmap_mode="r")
-        for m in MODELS
-    }
+    arrays = {}  # by file, memory-mapped
+
+    def rates(model, window_str):
+        path = paths[(model, window_str)]
+        if path not in arrays:
+            arrays[path] = numpy.load(path, mmap_mode="r")
+        return arrays[path]
 
     written = 0
     for window in experiment.time_windows:
@@ -274,7 +291,7 @@ def main(argv=None):
         forecasts = {}
         for model in MODELS:
             forecast = GriddedForecast(
-                data=numpy.asarray(rates[model]),
+                data=numpy.asarray(rates(model, window_str)),
                 region=region,
                 magnitudes=magnitudes,
                 name=f"{model}={GRID}",
@@ -309,6 +326,17 @@ def main(argv=None):
                     json.dump(result.to_dict(), f, indent=4, cls=_NumpyEncoder)
                 written += 1
 
+        # Each model's rates at the target events (in the catalogue's order) and its
+        # expected number of events, for the T-test pooled over several windows
+        target = {}
+        for model in MODELS:
+            event_rates, total = forecasts[model].target_event_rates(catalog)
+            target[model] = {
+                "rates": numpy.asarray(event_rates).tolist(),
+                "total": float(total),
+            }
+        with open(os.path.join(out_dir, "native_target_rates.json"), "w") as f:
+            json.dump({"n_events": int(catalog.event_count), "models": target}, f)
         print(
             f"{window_str}: {catalog.event_count} events, {time.time() - t0:.0f} s", flush=True
         )
@@ -328,8 +356,13 @@ def main(argv=None):
         },
         "magnitudes": magnitudes.tolist(),
         "forecast_unit": 1,
+        # One array for every window, or one per window for the time-dependent models
         "forecasts": {
-            m: os.path.abspath(os.path.join(args.forecasts, f"{m}_01deg_rates.npy"))
+            m: (
+                {w: os.path.abspath(paths[(m, w)]) for w in windows}
+                if m in TIME_VARYING
+                else os.path.abspath(paths[(m, windows[0])])
+            )
             for m in MODELS
         },
     }

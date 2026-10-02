@@ -8,9 +8,10 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * The rate of every cell of a forecast evaluated outside floatCSEP (?model=<i>),
- * per forecast unit, as little-endian float32: millions of cells are too many for
- * JSON. The forecast document of each time window gives the factor to apply.
+ * The rate of every cell of a forecast evaluated outside floatCSEP (?model=<i>, and
+ * &window=<j> for a model with a forecast per window), per forecast unit, as
+ * little-endian float32: millions of cells are too many for JSON. The forecast
+ * document of each time window gives the factor to apply.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,8 +22,12 @@ export async function GET(request: NextRequest) {
       throw new HttpError(400, 'Invalid "model" parameter');
     }
     const model = manifest.models[modelIndex];
-    const window = model.forecast_available.findIndex(Boolean);
-    if (!model.external || window < 0) {
+    const rawWindow = request.nextUrl.searchParams.get('window');
+    const window = rawWindow === null ? model.forecast_available.findIndex(Boolean) : Number(rawWindow);
+    if (!Number.isInteger(window) || window < -1 || window >= manifest.time_windows.length) {
+      throw new HttpError(400, 'Invalid "window" parameter');
+    }
+    if (!model.external || window < 0 || !model.forecast_available[window]) {
       throw new HttpError(404, `${model.name} has no cell-rate file`);
     }
 

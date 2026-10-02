@@ -36,11 +36,13 @@ grids), and the Next.js dashboard shows the quadtree forecasts, the test scores,
         $ python prepare.py --source /path/to/globalExperiment --grids N50L11
 
     To add the tests on the models' native 0.1° grid in every time window (about 10 minutes), point
-    ``native_grid.py`` to the global experiment's 0.1° forecast arrays and redraw the figures:
+    ``native_grid.py`` to the global experiment's 0.1° forecast arrays, eight-year and annual, and
+    redraw the figures:
 
     .. code-block:: console
 
-        $ python native_grid.py --forecasts /path/to/fullgrid_cache
+        $ python native_grid.py --forecasts /path/to/fullgrid_cache \
+              --annual-forecasts /path/to/annual/native_cache
         $ floatcsep plot config.yml
 
     The forecasts, test scores and figures can then be explored in the **Experiment Dashboard**:
@@ -70,7 +72,8 @@ After running ``prepare.py``, the experiment folder contains:
         ├── config.yml
         ├── custom_plots.py
         ├── imported/         # results on the native 0.1° grid, by time window
-        ├── models/           # 72 forecasts, <MODEL>=<GRID>.csv (copied by prepare.py)
+        ├── models/           # 72 forecasts (copied by prepare.py): <MODEL>=<GRID>.csv, or a
+        │                     #   folder with one forecast per window for PPE, EEPASfull and SUP
         ├── models.yml        # rewritten by prepare.py
         ├── native_grid.py
         ├── prepare.py
@@ -85,6 +88,9 @@ Preparing the inputs
 - The forecasts ``gefe-quadtree_results_2023-03/regen/m745_models/<MODEL>=<GRID>.csv``: expected
   numbers of M7.45+ earthquakes per year in each quadtree cell and magnitude bin (7.45 to 8.95 in
   bins of 0.1), in floatCSEP's quadtree CSV format (a ``tile`` column with the cell quadkeys).
+- The forecasts of the global experiment's annual experiment,
+  ``gefe-quadtree_results_2023-03/regen/annual_models/<year>/<MODEL>=<GRID>.csv``, for PPE,
+  EEPASfull and SUP.
 - The gCMT catalog ``eepasModel/run/gcmt_M595_1976_2022.dat``, converted to the pyCSEP CSV format.
 
 The models are:
@@ -92,16 +98,30 @@ The models are:
 ==================  ==============================================================================
 Model               Description
 ==================  ==============================================================================
-``GEAR1``           Global Earthquake Activity Rate model (published GEFE forecast; the benchmark)
-``KJSS``            Kagan–Jackson smoothed seismicity (published GEFE forecast)
-``SHIFT2F_GSRM``    SHIFT model on the GSRM strain rates (published GEFE forecast)
-``TEAM``            TEAM ensemble (published GEFE forecast)
-``WHEEL``           WHEEL ensemble (published GEFE forecast)
-``EEPASfull``       EEPAS mixed with PPE, (1 − μ) EEPAS + μ PPE
-``PPE``             Proximity to Past Earthquakes
-``SUP``             Spatially uniform baseline
-``GSSGSRM``         Hybrid of SUP and the GSRM strain rates
+``GEAR1``           Log-linear hybrid of smoothed seismicity and geodetic strain; the benchmark
+``KJSS``            Kagan–Jackson smoothed seismicity
+``SHIFT2F_GSRM``    Seismicity from the GSRM 2.1 strain rates
+``TEAM``            Tectonic model: SMERF2 combined with a scaled SHIFT2F_GSRM
+``WHEEL``           Log-linear hybrid of KJSS and TEAM
+``EEPASfull``       Every Earthquake a Precursor According to Scale, mixed with PPE; reissued yearly
+``PPE``             Proximity to Past Earthquakes; reissued yearly
+``SUP``             Spatially uniform Poisson baseline
+``GSSGSRM``         The SUP baseline modulated by the GSRM strain-rate alarm
 ==================  ==============================================================================
+
+The first five are the published GEFE forecasts, time-independent like GSSGSRM. PPE and EEPASfull
+are time-dependent: the global experiment's annual experiment reissues them every year from the
+catalogue before that year. Tutorial K follows its two studies:
+
+- The **whole period** uses the eight-year forecasts of every model, with PPE, EEPASfull and SUP
+  fitted on the spliced ISC-GEM and gCMT catalogue before 2014.
+- Each **year** uses the annual experiment's forecast for that year: PPE and EEPASfull reissued
+  from the catalogue before it, and SUP's one baseline (its 2014 forecast), all three with the
+  parameters fitted on the gCMT catalogue of 1994–2013. The six other models are the same.
+
+The two fits differ, so for these three models the whole period and the years are not the same
+forecasts: the T-test pooled over the years (``annual_pooled_ig.png``) is that of the annual
+experiment, not that of the eight-year forecasts.
 
 Every model is aggregated onto eight quadtree grids, named after how they were refined:
 
@@ -139,8 +159,10 @@ The native 0.1° grid
 The forecasts were made on a regular 0.1° grid before being aggregated onto the quadtree grids.
 ``native_grid.py`` tests them on that grid too, named ``FULL01``: 3,600 × 1,800 = 6.48 million
 cells of about 11 km at the equator, with the same 16 magnitude bins. It reads the global
-experiment's nine forecast arrays (``<MODEL>_01deg_rates.npy``, expected events per year) where
-they are, and runs the tests of ``tests.yml`` with their settings, plus the paired T-test against
+experiment's forecast arrays (expected events per year) where they are: the nine eight-year
+forecasts (``<MODEL>_01deg_rates.npy``) for the whole period and, as on the quadtree grids, the
+annual experiment's forecasts of PPE, EEPASfull and SUP (``<MODEL>_<YEAR>_01deg_rates.npy``) for
+each year. It runs the tests of ``tests.yml`` with their settings, plus the paired T-test against
 GEAR1 on the same grid, in every time window. The test catalogues are those of the floatCSEP run,
 so ``floatcsep run`` comes first. The results go to ``imported/<time window>/``, where
 ``custom_plots.py`` picks them up, and ``floatcsep plot config.yml`` redraws the figures with them.
@@ -156,8 +178,10 @@ exactly pyCSEP's numbers, and stops if it does not.
 Aggregated exactly onto the quadtree grids, the 0.1° arrays reproduce the quadtree forecasts to a
 relative 1e-12, and GSSGSRM's to 1e-5.
 
-``native_grid.py`` also writes ``external_forecasts.json``: where the forecast arrays are, so that
-the dashboard maps them too. The dashboard reads the arrays where they are and sends each browser
+``native_grid.py`` also writes ``imported/<time window>/native_target_rates.json``, each model's
+rates at the target events for the pooled T-test, and ``external_forecasts.json``: where the
+forecast arrays are, one per window for the time-dependent models, so that the dashboard maps them
+too. The dashboard reads the arrays where they are and sends each browser
 the rate of every cell, so the forecasts can be explored down to the 0.1° cells.
 
 
@@ -172,6 +196,7 @@ Configuration
    name: Global M7.45+ forecasts on quadtree grids
 
    time_config:
+     exp_class: td
      # Eight annual windows, then the whole eight-year testing period.
      time_windows:
        - [2014-01-01T00:00:00, 2015-01-01T00:00:00]
@@ -197,9 +222,14 @@ Configuration
 
 **Notes**
 
+- ``exp_class: td`` makes it a time-dependent experiment: in every window the forecasts are issued
+  from the data before it, PPE and EEPASfull reissued each year. With explicit ``time_windows``, the
+  class does not change the windows; floatCSEP also writes the input catalogs that time-dependent
+  models are given (not used here, as their forecasts are files).
 - ``time_windows`` lists the testing windows explicitly: eight one-year windows and the whole
   eight-year period. The forecasts are rates per year (``forecast_unit: 1`` in ``models.yml``), and
-  floatCSEP scales them to the length of each window.
+  floatCSEP scales them to the length of each window. The time-dependent models have one forecast
+  per window, which floatCSEP also scales by the window's length in years.
 - ``region_config`` has no ``region``. Each forecast is then tested on its own region, the quadtree
   grid read from its file, and the test catalog is filtered to the cells of that grid.
 - ``plot_forecasts: False`` skips the static maps of the 72 forecasts in every window; they are
@@ -216,15 +246,19 @@ Written by ``prepare.py``, with one entry per model and grid:
    - GEAR1=N10L11:
        path: models/GEAR1=N10L11.csv
        forecast_unit: 1
-       description: Global Earthquake Activity Rate model (published GEFE forecast, benchmark)
-   - KJSS=N10L11:
-       path: models/KJSS=N10L11.csv
-       forecast_unit: 1
-       description: Kagan-Jackson smoothed seismicity (published GEFE forecast)
+       description: "Log-linear hybrid of smoothed seismicity and geodetic strain; ..."
+   - EEPASfull=N10L11:
+       path: models/EEPASfull=N10L11
+       class: td
+       forecast_type: gridded
+       description: "Every Earthquake a Precursor According to Scale, mixed with PPE. ..."
    # ...
 
-The custom script and the dashboard read the ``<MODEL>=<GRID>`` names to group the forecasts by
-model and by grid.
+A time-dependent model (``class: td``) is a folder whose ``forecasts/`` hold one file per time
+window, ``<MODEL>=<GRID>_<start>_<end>.csv``; floatCSEP finds them there and runs nothing.
+``forecast_type: gridded`` tells it that they are gridded forecasts, not catalogs. The custom
+script and the dashboard read the ``<MODEL>=<GRID>`` names to group the forecasts by model and by
+grid; the dashboard shows the descriptions in its table of models.
 
 ``tests.yml``
 ^^^^^^^^^^^^^
@@ -286,8 +320,9 @@ done, and:
    ``annual_consistency.png``      Test outcomes by year, on grid N50L11
    ``annual_ig_heatmap.png``       Information gain against GEAR1 by year, on grid N50L11
    ``annual_counts.png``           Forecast and observed numbers of events by year
-   ``annual_*_native.png``         The yearly test outcomes and information gains on the native
-                                   grid (after ``native_grid.py``)
+   ``annual_pooled_ig.png``        T-test pooling the events of the eight annual windows
+   ``annual_*_native.png``         The yearly test outcomes, information gains and pooled T-test on
+                                   the native grid (after ``native_grid.py``)
    ``quadtree_grids.png``          Maps of the quadtree grids and of the native 0.1° grid
                                    (``cartopy``)
    ``grid_levels.png``             The grids compared: cells per zoom level, cells against N
@@ -303,7 +338,7 @@ What happens under the hood
 1. floatCSEP reads the nine time windows and the 72 models. Each forecast file has a ``tile``
    column, so it is read as a quadtree forecast on a :class:`csep.core.regions.QuadtreeGrid2D`.
 2. In each window, the yearly rates are scaled to the window length: by 1 for the annual windows
-   and by 8 for the whole period.
+   and by 8 for the whole period. The time-dependent models use their forecast for that window.
 3. The test catalog of each window is filtered to the magnitude range and to each forecast's
    grid, and the N-, M-, S- and CL-tests run: 72 forecasts × 9 windows × 4 tests = 2,592
    evaluations. floatCSEP keeps the events of M ≥ 7.45 and below ``mag_max`` (8.95), although the

@@ -156,6 +156,7 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
                 "forecast_class": model.repository.__class__.__name__,
                 # floatCSEP scales the forecasts of the two classes differently
                 "time_dependent": isinstance(model, TimeDependentModel),
+                "description": getattr(model, "description", None),
             }
         )
 

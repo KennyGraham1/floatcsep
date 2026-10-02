@@ -77,10 +77,13 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
         {"grid": {"name": "FULL01", "lon0": -180, "lat0": -90, "dh": 0.1,
                   "nx": 3600, "ny": 1800, "order": "lon-major"},
          "magnitudes": [...], "forecast_unit": 1,
-         "forecasts": {"GEAR1": "/path/GEAR1_01deg_rates.npy", ...}}
+         "forecasts": {"GEAR1": "/path/GEAR1_01deg_rates.npy",
+                       "PPE": {"2014-01-01_2015-01-01": "/path/PPE_2014.npy", ...}, ...}}
 
     Each .npy array holds the expected events per forecast_unit years of every cell
-    of the grid (in `order`) and magnitude bin. The models are named <MODEL>=<grid>.
+    of the grid (in `order`) and magnitude bin: one for every time window, or one per
+    window (named as floatCSEP names them) for a model whose forecast varies in time.
+    The models are named <MODEL>=<grid>.
     """
     declaration = Path(declaration)
     if not declaration.is_file():
@@ -91,8 +94,19 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
         logger.warning(f"Ignoring {declaration}: {problem}")
         return []
     models = []
+
+    def resolve(file: str) -> str:
+        return str((declaration.parent / file).resolve())
+
     for name, file in spec.get("forecasts", {}).items():
-        path = str((declaration.parent / file).resolve())
+        if isinstance(file, dict):  # a forecast per time window: "<start>_<end>" keys
+            by_window = {str(w).replace("_", " to "): resolve(f) for w, f in file.items()}
+            forecasts = {w: by_window[w] for w in time_windows if w in by_window}
+        else:
+            forecasts = {w: resolve(file) for w in time_windows}
+        if not forecasts:
+            continue
+        path = next(iter(forecasts.values()))
         models.append(
             {
                 "name": f"{name}={grid['name']}",
@@ -100,7 +114,7 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
                 "path": path,
                 "fmt": "npy",
                 "forecast_class": "ExternalGridForecast",
-                "forecasts": {window: path for window in time_windows},
+                "forecasts": forecasts,
                 "external": {"grid": grid, "magnitudes": spec.get("magnitudes")},
             }
         )

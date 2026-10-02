@@ -183,6 +183,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
         forecast_class: str(m.forecast_class),
         is_catalog_forecast: m.forecast_class === 'CatalogForecastRepository',
         time_dependent: m.time_dependent === true,
+        description: str(m.description),
         forecasts,
         forecast_available,
         external: externalGrid(m.external),

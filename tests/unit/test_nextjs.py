@@ -60,6 +60,40 @@ class TestExternalForecasts(unittest.TestCase):
         self.assertEqual(model["path"], str((self.dir / "a.npy").resolve()))
         self.assertEqual(model["external"]["grid"]["nx"], 4)
 
+    def test_a_forecast_per_time_window(self):
+        # A time-dependent model gives one array per window, named as floatCSEP names them
+        np.save(self.dir / "b.npy", 2 * self.rates)
+        declaration = self.declare()
+        spec = json.loads(declaration.read_text())
+        spec["forecasts"]["B"] = {
+            "2000-01-01_2001-01-01": "a.npy",
+            "2000-01-01_2002-01-01": "b.npy",
+            "1999-01-01_2000-01-01": "a.npy",  # not a window of the experiment
+        }
+        declaration.write_text(json.dumps(spec))
+        models = {m["name"]: m for m in external_models(declaration, WINDOWS)}
+        self.assertEqual(
+            models["B=G"]["forecasts"],
+            {
+                WINDOWS[0]: str((self.dir / "a.npy").resolve()),
+                WINDOWS[1]: str((self.dir / "b.npy").resolve()),
+            },
+        )
+        manifest = self.dir / "manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {"models": list(models.values()), "time_windows": WINDOWS, "app_root": "/"}
+            )
+        )
+        index = list(models).index("B=G")
+        cache = self.dir / "cache"
+        two_years = manifest_api.load_forecast(str(manifest), index, 1, cache)
+        self.assertAlmostEqual(two_years["total"], 2 * 2 * self.rates.sum())
+        manifest_api.write_rates(str(manifest), index, str(cache / "b.f32"), 1)
+        np.testing.assert_allclose(
+            np.fromfile(cache / "b.f32", dtype="<f4"), 2 * self.rates.sum(axis=1), rtol=1e-6
+        )
+
     def test_grids_are_normalised_as_the_dashboard_reads_them(self):
         (model,) = external_models(self.declare(nx=4.0, lon0=-180, name=7), WINDOWS)
         self.assertEqual(

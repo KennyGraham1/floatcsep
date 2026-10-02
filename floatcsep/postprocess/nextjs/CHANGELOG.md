@@ -8,6 +8,10 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - Redesigned interface: sidebar navigation, stat tiles, cards and tables,
   light/dark/system themes, responsive layout down to phone widths, floatCSEP
   branding and Noto Sans (bundled, works offline).
+- Models table: a brief description of each model (`description` in `models.yml`)
+  and a "Time-dependent" badge.
+- External forecasts can give one 0.1° array per time window, for time-dependent
+  models; the browser fetches the rates of each window's file.
 - The logos of the Panel dashboard: the floatCSEP logo, which opens the GitHub
   repository, the tab icon, and the Read the Docs, GitHub and CSEP logos by
   their links.
@@ -100,7 +104,7 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - A result written while the manifest was being read could stay hidden, and a new
   summary format could be served from the browser's cache.
 - Model names such as `ETAS_b=0.9` are no longer taken for model–grid pairs.
-- Only the last two 0.1° rate files viewed are kept in memory, and the grid is
+- Only the last three 0.1° rate files viewed are kept in memory, and the grid is
   built once rather than for every time window.
 
 ## [1.1.0] - 2025

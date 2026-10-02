@@ -37,21 +37,27 @@ export async function fetchJson<T>(url: string): Promise<T> {
 
 // The cell rates of dense forecasts, per model and file: the same for every time
 // window (each window's document gives its factor), so fetched once. Each is tens of
-// megabytes, so only the last few models viewed are kept.
+// megabytes, so only the last few viewed are kept: the current file and the files of the
+// neighbouring windows, prefetched (for a model with a forecast per window).
 const denseRates = new Map<string, Promise<Float32Array>>();
-const DENSE_RATES_KEPT = 2;
+const DENSE_RATES_KEPT = 3;
 
 /** A forecast document; for dense grids, with the rate of every cell attached. */
 async function fetchForecast(url: string): Promise<ForecastPayload> {
   const payload = await fetchJson<ForecastPayload>(url);
   if (payload.grid !== 'dense') return payload;
-  const model = new URL(url, 'http://dashboard').searchParams.get('model');
+  const params = new URL(url, 'http://dashboard').searchParams;
+  const model = params.get('model');
+  const window = params.get('window');
+  // By file: the same for every window of a time-independent model
   const key = `${model}:${payload.path}`;
   let rates = denseRates.get(key);
   if (rates) {
     denseRates.delete(key); // most recently used last
   } else {
-    rates = request(`/api/forecasts/rates?model=${model}`).then(async (r) => new Float32Array(await r.arrayBuffer()));
+    rates = request(`/api/forecasts/rates?model=${model}&window=${window}`).then(
+      async (r) => new Float32Array(await r.arrayBuffer()),
+    );
     rates.catch(() => denseRates.delete(key));
   }
   denseRates.set(key, rates);

@@ -35,7 +35,8 @@ grid (below) by its cell size. Tutorial K is such an experiment.
 Forecasts too large for floatCSEP's evaluation can still be mapped: an
 `external_forecasts.json` next to the configuration declares a regular grid and a
 NumPy array per model (expected events per forecast unit, cells × magnitude bins,
-in longitude-major order). They are added to the models as `<MODEL>=<grid>`, and
+in longitude-major order), or one per time window for a model whose forecast varies
+in time. They are added to the models as `<MODEL>=<grid>`, and
 the browser receives the rate of every cell as binary float32 (26 MB for the
 6.48 million cells of a global 0.1° grid), scaled to each time window. Tutorial
 K's `native_grid.py` writes such a file for the models' native grid. A grid can

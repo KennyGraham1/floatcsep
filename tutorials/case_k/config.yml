@@ -1,6 +1,9 @@
 name: Global M7.45+ forecasts on quadtree grids
 
 time_config:
+  # Time-dependent: every window has forecasts issued from the data before it, PPE and
+  # EEPASfull reissued each year (the other models are the same in every window).
+  exp_class: td
   # Eight annual windows, then the whole eight-year testing period.
   time_windows:
     - [2014-01-01T00:00:00, 2015-01-01T00:00:00]

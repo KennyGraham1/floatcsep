@@ -31,6 +31,8 @@ export interface Model {
   is_catalog_forecast: boolean;
   /** floatCSEP loads time-dependent gridded forecasts with a forecast unit of 1. */
   time_dependent: boolean;
+  /** A brief description, from the model's configuration. */
+  description: string | null;
   /** Forecast file per time window (same order as `time_windows`), or null. */
   forecasts: (string | null)[];
   /** Whether each forecast file exists on disk. */

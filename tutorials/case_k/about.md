@@ -78,17 +78,25 @@ pyCSEP every time it runs.
 
 ## Models
 
-| Group            | Model        | Method                                                                   |
-| ---------------- | ------------ | ------------------------------------------------------------------------ |
-| GEFE (published) | GEAR1        | Log-linear hybrid of smoothed seismicity and geodetic strain; benchmark   |
-| GEFE (published) | KJSS         | Kagan–Jackson smoothed seismicity                                        |
-| GEFE (published) | SHIFT2F_GSRM | Seismicity from the GSRM 2.1 strain rates                                |
-| GEFE (published) | TEAM         | Tectonic model: SMERF2 combined with a scaled SHIFT2F_GSRM               |
-| GEFE (published) | WHEEL        | Log-linear hybrid of KJSS and TEAM                                       |
-| EEPAS family     | SUP          | Spatially uniform Poisson baseline                                       |
-| EEPAS family     | PPE          | Proximity to Past Earthquakes                                            |
-| EEPAS family     | EEPASfull    | Every Earthquake a Precursor According to Scale, mixed with PPE          |
-| Hybrid           | GSSGSRM      | The SUP baseline modulated by the GSRM strain-rate alarm                 |
+| Group            | Model        | Method                                                          | In time          |
+| ---------------- | ------------ | --------------------------------------------------------------- | ---------------- |
+| GEFE (published) | GEAR1        | Log-linear hybrid of smoothed seismicity and geodetic strain; benchmark | Independent |
+| GEFE (published) | KJSS         | Kagan–Jackson smoothed seismicity                               | Independent      |
+| GEFE (published) | SHIFT2F_GSRM | Seismicity from the GSRM 2.1 strain rates                       | Independent      |
+| GEFE (published) | TEAM         | Tectonic model: SMERF2 combined with a scaled SHIFT2F_GSRM      | Independent      |
+| GEFE (published) | WHEEL        | Log-linear hybrid of KJSS and TEAM                              | Independent      |
+| EEPAS family     | SUP          | Spatially uniform Poisson baseline                              | One rate         |
+| EEPAS family     | PPE          | Proximity to Past Earthquakes                                   | Reissued yearly  |
+| EEPAS family     | EEPASfull    | Every Earthquake a Precursor According to Scale, mixed with PPE | Reissued yearly  |
+| Hybrid           | GSSGSRM      | The SUP baseline modulated by the GSRM strain-rate alarm        | Independent      |
+
+PPE and EEPASfull are time-dependent: they are reissued every year from the catalogue
+before that year. As in the global experiment, the whole period uses the eight-year
+forecasts of every model, while each year uses the forecasts of its annual experiment:
+PPE and EEPASfull reissued for that year, and SUP's one baseline. For these three models,
+the eight-year forecasts are fitted on the spliced ISC-GEM and gCMT catalogue before 2014,
+and the annual ones on the gCMT catalogue of 1994–2013, so the years and the whole period
+test different fits. The six other models are the same in every window.
 
 The forecasts give the expected number of M ≥ 7.45 earthquakes per year in 16 magnitude
 bins from 7.45 to 8.95 (the last bin is open-ended), at depths of 0–70 km. floatCSEP
@@ -96,7 +104,7 @@ keeps only the target events below M 8.95, so an event in the last bin would not
 tested; none occurred (the largest target is M 8.27). The EEPAS-family and GSSGSRM
 forecasts are fitted on data before 2014 only.
 
-![The nine forecasts on SN10L11: rate density on a common logarithmic scale.](about/rate_density_maps.png)
+![The nine eight-year forecasts on SN10L11: rate density on a common logarithmic scale.](about/rate_density_maps.png)
 
 ## Tests
 
@@ -115,7 +123,8 @@ correlated views of the same forecasts, not independent replications.
 
 ## In this dashboard
 
-- **Overview:** a map of every quadtree grid, and links to the native grid.
+- **Overview:** the models, with a brief description of each, a map of every quadtree
+  grid, and links to the native grid.
 - **Forecasts:** every model on every grid, the native 0.1° grid included, as expected
   events per cell or per 10⁴ km².
 - **Results, Charts:** the test scores as heatmaps, models × grids (the native 0.1°

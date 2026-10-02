@@ -308,6 +308,7 @@ class TestPanel(unittest.TestCase):
             self.assertEqual(man.catalog["path"], "results/main.csv")
             self.assertIsNone(man.about)
             self.assertEqual([m["time_dependent"] for m in man.models], [False, False])
+            self.assertEqual([m["description"] for m in man.models], [None, None])
 
             (root / "cats").mkdir()
             (root / "cats" / "main.csv").write_text("x")
@@ -319,6 +320,12 @@ class TestPanel(unittest.TestCase):
             self.assertEqual(man.catalog["path"], "cats/main.csv")
             self.assertEqual(man.about, "about.md")
             self.assertEqual([m["time_dependent"] for m in man.models], [True, True])
+
+            # A description in the model's configuration
+            m1.description = "Smoothed seismicity"
+            with patch("floatcsep.postprocess.panel.manifest.timewindow2str", new=fake_t2s):
+                man = build_manifest(exp, app_root=str(root))
+            self.assertEqual([m["description"] for m in man.models], ["Smoothed seismicity", None])
 
     def test_l(self):
         with tempfile.TemporaryDirectory() as td:
