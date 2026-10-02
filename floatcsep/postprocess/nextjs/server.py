@@ -1,5 +1,6 @@
 """Python server launcher for Next.js dashboard."""
 
+import hashlib
 import json
 import logging
 import os
@@ -189,6 +190,12 @@ def _library_versions() -> dict:
     return versions
 
 
+def manifest_file(cache_dir: Path, manifest: ManifestModel) -> Path:
+    """The manifest file of an experiment in the dashboard's cache, one per experiment."""
+    identity = f"{manifest.app_root}|{manifest.config_file}"
+    return Path(cache_dir) / f"manifest-{hashlib.sha1(identity.encode()).hexdigest()[:12]}.json"
+
+
 def run_nextjs_app(
     experiment: Any,
     port: int = 0,
@@ -237,23 +244,25 @@ def run_nextjs_app(
     if port == 0:
         port = find_free_port(address)
 
-    # Write manifest to cache for API access
+    # Write the manifest to the cache for the API: one file per experiment, so that
+    # dashboards of different experiments running at once do not overwrite each other's,
+    # written atomically, as a running dashboard re-reads it when it changes.
     cache_dir = nextjs_dir / ".cache"
-    manifest_path = cache_dir / "manifest.json"
+    manifest_path = manifest_file(cache_dir, manifest_model)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Writing manifest to {manifest_path}...")
     try:
-        with open(manifest_path, "w") as f:
+        tmp = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.tmp")
+        with open(tmp, "w") as f:
             # Serialize using Pydantic
             json.dump(
                 finite_json(manifest_model.model_dump(mode="json", by_alias=True)),
                 f,
                 allow_nan=False,
             )
-        logger.info(
-            f"Manifest written successfully ({manifest_path.stat().st_size} bytes)"
-        )
+        os.replace(tmp, manifest_path)
+        logger.info(f"Manifest written successfully ({manifest_path.stat().st_size} bytes)")
     except Exception as e:
         logger.error(f"Failed to write manifest: {e}")
         raise

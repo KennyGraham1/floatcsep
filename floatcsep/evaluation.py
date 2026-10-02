@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import weakref
 from typing import Dict, Callable, Union, Sequence, List, Any
 
 import numpy
@@ -15,17 +16,23 @@ from floatcsep.utils.helpers import parse_csep_func
 log = logging.getLogger("floatLogger")
 
 
-# Tolerance, in tiles, for points computed to lie on a tile edge
-_TILE_EDGE = 1e-9
+# Below this many point-cell pairs, testing every cell at once is faster than the tile lookup
+_BRUTE_FORCE_PAIRS = 4_000_000
+# Tile lookups of the quadtree grids used so far, by grid
+_TILES = weakref.WeakKeyDictionary()
 
 
-def _quadtree_tiles(quadkeys) -> dict:
+def _quadtree_tiles(region) -> dict:
     """
     The cells of a quadtree grid by zoom level: their Web Mercator tiles, coded as
     ``x * 2**level + y`` and sorted, and the index of each cell in the grid.
     """
+    try:
+        return _TILES[region]
+    except (KeyError, TypeError):
+        pass
     levels = {}
-    for index, key in enumerate(quadkeys):
+    for index, key in enumerate(region.quadkeys):
         key = str(key)
         x = y = 0
         for digit in key:  # each digit picks a quadrant: bit 0 is x, bit 1 is y
@@ -41,7 +48,24 @@ def _quadtree_tiles(quadkeys) -> dict:
             numpy.asarray(codes, dtype=numpy.int64)[order],
             numpy.asarray(cells)[order],
         )
+    try:
+        _TILES[region] = tiles
+    except TypeError:  # a grid that cannot be weakly referenced is not cached
+        pass
     return tiles
+
+
+def _inside_any_cell(bounds, lons, lats) -> numpy.ndarray:
+    """Whether each point lies within the bounds of any cell, testing them all."""
+    west, south, east, north = (b[None, :] for b in bounds.T)
+    inside = numpy.zeros(lons.shape, dtype=bool)
+    step = max(1, _BRUTE_FORCE_PAIRS // max(1, len(bounds)))  # bounds the memory used
+    for i in range(0, lons.size, step):
+        lon, lat = lons[i : i + step, None], lats[i : i + step, None]
+        inside[i : i + step] = (
+            (west <= lon) & (lon < east) & (south <= lat) & (lat < north)
+        ).any(axis=1)
+    return inside
 
 
 def inside_quadtree(region, lons, lats) -> numpy.ndarray:
@@ -49,32 +73,37 @@ def inside_quadtree(region, lons, lats) -> numpy.ndarray:
     Whether each point lies in a cell of a quadtree grid, by the test of pyCSEP's
     ``QuadtreeGrid2D`` (``west <= lon < east`` and ``south <= lat < north``).
 
-    Rather than testing every cell, the candidate cells of a point are its Web Mercator
-    tiles at each zoom level of the grid (both tiles, where the point is on an edge), and
-    only those are tested. The result is the same, in O(points x levels).
+    For many points, rather than testing every cell, the candidate cells of a point are
+    the Web Mercator tile computed for it at each zoom level of the grid and that tile's
+    neighbours, which covers any rounding of the computed tile. Only the candidates are
+    tested, with the same bounds test, so the result is the same, in O(points x levels).
     """
     lons = numpy.asarray(lons, dtype=float)
     lats = numpy.asarray(lats, dtype=float)
-    bounds = numpy.asarray(region.bounds, dtype=float)
+    bounds = numpy.asarray(region.bounds, dtype=float).reshape(-1, 4)
+    if lons.size * len(bounds) <= _BRUTE_FORCE_PAIRS:
+        return _inside_any_cell(bounds, lons, lats)
     inside = numpy.zeros(lons.shape, dtype=bool)
     with numpy.errstate(all="ignore"):
         x_unit = (lons + 180.0) / 360.0
         sin = numpy.sin(numpy.radians(lats))
         y_unit = 0.5 - numpy.log((1.0 + sin) / (1.0 - sin)) / (4.0 * numpy.pi)
-    for level, (codes, cells) in _quadtree_tiles(region.quadkeys).items():
+    for level, (codes, cells) in _quadtree_tiles(region).items():
         n = 2**level
-        for dx in (-_TILE_EDGE, _TILE_EDGE):
-            for dy in (-_TILE_EDGE, _TILE_EDGE):
+        with numpy.errstate(invalid="ignore"):
+            x_tile = numpy.floor(x_unit * n)
+            y_tile = numpy.floor(y_unit * n)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                x = x_tile + dx
+                y = y_tile + dy
                 with numpy.errstate(invalid="ignore"):
-                    x = numpy.floor(x_unit * n + dx)
-                    y = numpy.floor(y_unit * n + dy)
                     valid = (x >= 0) & (x < n) & (y >= 0) & (y < n)
                 xi = numpy.where(valid, x, 0).astype(numpy.int64)
                 yi = numpy.where(valid, y, 0).astype(numpy.int64)
                 code = numpy.where(valid, xi * n + yi, -1)
                 pos = numpy.minimum(numpy.searchsorted(codes, code), codes.size - 1)
-                cell = cells[pos]
-                west, south, east, north = bounds[cell].T
+                west, south, east, north = bounds[cells[pos]].T
                 inside |= (
                     valid
                     & (codes[pos] == code)
@@ -102,14 +131,9 @@ def filter_to_region(catalog: CSEPCatalog, region) -> CSEPCatalog:
     if hasattr(region, "quadkeys"):
         inside = inside_quadtree(region, lons, lats)
     else:
-        west, south, east, north = numpy.asarray(region.bounds).T
-        inside = numpy.array(
-            [
-                numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
-                for lon, lat in zip(lons, lats)
-            ],
-            dtype=bool,
-        )
+        bounds = numpy.asarray(region.bounds, dtype=float).reshape(-1, 4)
+        lons, lats = numpy.asarray(lons, dtype=float), numpy.asarray(lats, dtype=float)
+        inside = _inside_any_cell(bounds, lons, lats)
     catalog.catalog = catalog.catalog[inside]
     return catalog
 

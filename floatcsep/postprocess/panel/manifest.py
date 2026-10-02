@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from floatcsep.model import TimeDependentModel
 from floatcsep.utils.helpers import timewindow2str
 
 import datetime
@@ -153,6 +154,8 @@ def build_manifest(experiment: Any, app_root: Optional[str] = None) -> Manifest:
                 "registry": model_registry,
                 "forecasts": model_forecasts,
                 "forecast_class": model.repository.__class__.__name__,
+                # floatCSEP scales the forecasts of the two classes differently
+                "time_dependent": isinstance(model, TimeDependentModel),
             }
         )
 

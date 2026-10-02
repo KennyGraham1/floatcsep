@@ -45,6 +45,9 @@ tests/artifacts/models/zenodo_test/
 tutorials/case*/results/
 # Model environments that floatCSEP creates in a model's folder: <model>_<8-character hash>
 tutorials/**/*_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+# ... but not inputs named by a date, such as data_20240101/ (a hash is rarely one)
+!tutorials/**/*_19[0-9][0-9][01][0-9][0-3][0-9]/
+!tutorials/**/*_20[0-9][0-9][01][0-9][0-3][0-9]/
 # Input catalogues that floatCSEP writes for source-code models
 tutorials/**/input/catalog.csv
 # Forecasts written by the pymock models (case_f's ETAS forecasts are inputs)

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import numpy
 from csep.core.catalogs import CSEPCatalog
@@ -8,7 +9,6 @@ from floatcsep.evaluation import Evaluation, filter_to_region, inside_quadtree
 
 
 class TestEvaluation(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
         def mock_eval():
@@ -60,7 +60,6 @@ class TestEvaluation(unittest.TestCase):
 
 
 class TestFilterToRegion(unittest.TestCase):
-
     @staticmethod
     def catalog(lonlat):
         return CSEPCatalog(
@@ -77,10 +76,26 @@ class TestFilterToRegion(unittest.TestCase):
         numpy.testing.assert_array_equal(filtered.get_longitudes(), [-90, 170])
         numpy.testing.assert_array_equal(filtered.get_latitudes(), [45, 80])
 
+    def assert_matches_every_cell(self, region, lons, lats):
+        """inside_quadtree, both by tile lookup and by testing all cells, against pyCSEP's
+        test of every cell's bounds, one point at a time."""
+        bounds = numpy.asarray(region.bounds)
+        west, south, east, north = bounds.T
+        expected = numpy.array(
+            [
+                numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
+                for lon, lat in zip(lons, lats)
+            ]
+        )
+        with patch("floatcsep.evaluation._BRUTE_FORCE_PAIRS", 0):  # the tile lookup
+            numpy.testing.assert_array_equal(inside_quadtree(region, lons, lats), expected)
+        with patch("floatcsep.evaluation._BRUTE_FORCE_PAIRS", 10**12):  # all cells at once
+            numpy.testing.assert_array_equal(inside_quadtree(region, lons, lats), expected)
+        self.assertTrue(expected.any() and not expected.all())
+
     def test_quadtree_matches_testing_every_cell(self):
-        # The tile lookup must agree with pyCSEP's test of every cell's bounds, also for
-        # points on cell edges (both lon and lat), beyond the Mercator latitudes, and
-        # outside a grid that covers part of the globe only.
+        # Also for points on cell edges (both lon and lat), beyond the Mercator latitudes,
+        # and outside a grid that covers part of the globe only.
         rng = numpy.random.default_rng(7)
         seeds = CSEPCatalog(
             data=[
@@ -114,15 +129,34 @@ class TestFilterToRegion(unittest.TestCase):
                     [0.0, 10.0, 10.0, 0.0, 90.0],
                 ]
             )
-            west, south, east, north = bounds.T
-            expected = numpy.array(
-                [
-                    numpy.any((west <= lon) & (lon < east) & (south <= lat) & (lat < north))
-                    for lon, lat in zip(lons, lats)
-                ]
+            self.assert_matches_every_cell(region, lons, lats)
+
+    def test_quadtree_high_zoom_edges(self):
+        # At zoom 20 and beyond, the computed tile of a point on an edge can be off by one,
+        # most at high latitudes: the neighbouring tiles must be tested too.
+        import mercantile
+
+        rng = numpy.random.default_rng(11)
+        for zoom in (20, 22, 24):
+            keys = set()
+            for lat in (0.3, 45.2, 72.5, 84.9):
+                for lon in (-179.9, 10.3, 142.4):
+                    tile = mercantile.tile(lon, lat, zoom)
+                    for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+                        keys.add(mercantile.quadkey(tile.x + dx, tile.y + dy, zoom))
+            region = QuadtreeGrid2D.from_quadkeys(sorted(keys))
+            bounds = numpy.asarray(region.bounds)
+            span = bounds[:, 2:] - bounds[:, :2]
+            lons = numpy.concatenate(
+                [bounds[:, 0], bounds[:, 0], bounds[:, 2], bounds[:, 0] + span[:, 0] / 2]
+                + [bounds[:, 0] + span[:, 0] * rng.uniform(-1, 2, len(bounds))]
             )
-            numpy.testing.assert_array_equal(inside_quadtree(region, lons, lats), expected)
-            self.assertTrue(expected.any() and not expected.all())
+            lats = numpy.concatenate(
+                [bounds[:, 1], bounds[:, 3], bounds[:, 1], bounds[:, 3]]
+                + [bounds[:, 1] + span[:, 1] * rng.uniform(-1, 2, len(bounds))]
+            )
+            with self.subTest(zoom=zoom):
+                self.assert_matches_every_cell(region, lons, lats)
 
     def test_quadtree_empty_catalog(self):
         region = QuadtreeGrid2D.from_quadkeys(["0"], magnitudes=numpy.array([5.0]))

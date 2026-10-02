@@ -17,9 +17,19 @@ function field(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+const NUMBER = /^[-+]?((\d+\.?\d*|\.\d+)(e[-+]?\d+)?|inf(inity)?)$/i;
+
+/**
+ * Text that a spreadsheet would run as a formula (=, +, -, @, tab or carriage return
+ * first) is prefixed with an apostrophe; numbers, such as -0.12 or -inf, are left alone.
+ */
+export function spreadsheetSafe(text: string): string {
+  return /^[=+\-@\t\r]/.test(text) && !NUMBER.test(text) ? `'${text}` : text;
+}
+
 /** Rows as CSV (RFC 4180), with a byte-order mark so spreadsheets read it as UTF-8. */
 export function toCsv(header: string[], rows: string[][]): string {
-  return `﻿${[header, ...rows].map((row) => row.map(field).join(',')).join('\r\n')}\r\n`;
+  return `\uFEFF${[header, ...rows].map((row) => row.map(field).join(',')).join('\r\n')}\r\n`;
 }
 
 /** A file name from a title: "Poisson S-test, N50L11" -> "poisson-s-test-n50l11". */

@@ -21,8 +21,15 @@ let cached: { key: string; folders: string; value: LoadedManifest } | null = nul
  * Modification times of the folders whose files the manifest lists (results and
  * figures): results written while the dashboard runs are then picked up.
  */
-async function folderSignature({ manifest, appRoot }: LoadedManifest): Promise<string> {
-  const windows = manifest.time_windows.map((tw) => path.join(appRoot, tw.replace(/\s+to\s+/, '_')));
+/** The results folder of a manifest, as normalizeManifest resolves it. */
+function rootOf(raw: Raw, manifestPath: string): string {
+  return path.resolve(str(raw.app_root) ?? process.env.APP_ROOT ?? path.dirname(manifestPath));
+}
+
+const windowsOf = (raw: Raw): string[] => (Array.isArray(raw.time_windows) ? raw.time_windows.map(String) : []);
+
+async function folderSignature(appRoot: string, timeWindows: string[]): Promise<string> {
+  const windows = timeWindows.map((tw) => path.join(appRoot, tw.replace(/\s+to\s+/, '_')));
   const folders = [
     path.join(appRoot, 'figures'),
     ...windows.flatMap((w) => [path.join(w, 'evaluations'), path.join(w, 'figures')]),
@@ -57,7 +64,12 @@ export async function loadManifest(): Promise<LoadedManifest> {
   }
 
   const key = `${manifestPath}:${stat.mtimeMs}:${stat.size}`;
-  if (cached?.key === key && cached.folders === (await folderSignature(cached.value))) return cached.value;
+  if (
+    cached?.key === key &&
+    cached.folders === (await folderSignature(cached.value.appRoot, cached.value.manifest.time_windows))
+  ) {
+    return cached.value;
+  }
 
   let raw: Raw;
   try {
@@ -66,8 +78,11 @@ export async function loadManifest(): Promise<LoadedManifest> {
     throw new HttpError(500, 'The experiment manifest could not be read', String(error));
   }
 
+  // The signature is taken before the folders are listed: a file written while they are
+  // listed then changes the signature, and the next request lists them again.
+  const folders = await folderSignature(rootOf(raw, manifestPath), windowsOf(raw));
   const value = await normalizeManifest(raw, manifestPath);
-  cached = { key, folders: await folderSignature(value), value };
+  cached = { key, folders, value };
   return value;
 }
 
@@ -110,7 +125,10 @@ function externalGrid(value: unknown): Model['external'] {
     side(spec.ny) &&
     spec.nx * spec.ny <= MAX_GRID_CELLS &&
     spec.order === 'lon-major';
-  return valid ? { grid: spec } : null;
+  const magnitudes = Array.isArray((value as Raw).magnitudes)
+    ? (value as Raw).magnitudes.filter((m: unknown) => typeof m === 'number' && Number.isFinite(m))
+    : [];
+  return valid ? { grid: spec, magnitudes } : null;
 }
 
 const str = (value: unknown): string | null =>
@@ -141,8 +159,8 @@ function plotFunctionNames(value: unknown): string[] {
 }
 
 async function normalizeManifest(raw: Raw, manifestPath: string): Promise<LoadedManifest> {
-  const appRoot = path.resolve(str(raw.app_root) ?? process.env.APP_ROOT ?? path.dirname(manifestPath));
-  const timeWindows: string[] = Array.isArray(raw.time_windows) ? raw.time_windows.map(String) : [];
+  const appRoot = rootOf(raw, manifestPath);
+  const timeWindows = windowsOf(raw);
   const windowIndex = new Map(timeWindows.map((tw, i) => [tw, i]));
   const isFile = (relative: string) => exists(resolveFromRoot(appRoot, relative));
 
@@ -164,6 +182,7 @@ async function normalizeManifest(raw: Raw, manifestPath: string): Promise<Loaded
         fmt: str(m.fmt),
         forecast_class: str(m.forecast_class),
         is_catalog_forecast: m.forecast_class === 'CatalogForecastRepository',
+        time_dependent: m.time_dependent === true,
         forecasts,
         forecast_available,
         external: externalGrid(m.external),

@@ -12,8 +12,6 @@ then ``floatcsep plot config.yml`` to add the results to the figures. The arrays
 read where they are, not copied. Written:
 
     imported/<window>/<test>_<MODEL>=FULL01.json   the results, as floatCSEP names them
-    imported/<window>/native_target_rates.json     each model's rates at the target events,
-                                                   for the T-test pooled over the years
     external_forecasts.json                        where the arrays are, for the dashboard's
                                                    forecast maps
 
@@ -311,17 +309,6 @@ def main(argv=None):
                     json.dump(result.to_dict(), f, indent=4, cls=_NumpyEncoder)
                 written += 1
 
-        # Each model's rates at the target events (in the catalogue's order) and its
-        # expected number of events, for the T-test pooled over several windows
-        target = {}
-        for model in MODELS:
-            event_rates, total = forecasts[model].target_event_rates(catalog)
-            target[model] = {
-                "rates": numpy.asarray(event_rates).tolist(),
-                "total": float(total),
-            }
-        with open(os.path.join(out_dir, "native_target_rates.json"), "w") as f:
-            json.dump({"n_events": int(catalog.event_count), "models": target}, f)
         print(
             f"{window_str}: {catalog.event_count} events, {time.time() - t0:.0f} s", flush=True
         )

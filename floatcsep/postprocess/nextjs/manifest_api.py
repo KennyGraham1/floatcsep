@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 # Bump when the JSON layout changes, so cached documents are regenerated.
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 
 
 def _write_json(payload: Dict[str, Any], out_path: str) -> None:
@@ -167,6 +167,15 @@ def _decimal_year(moment: datetime.datetime) -> float:
     )
 
 
+def _forecast_unit(model: Dict[str, Any]) -> Any:
+    """
+    The forecast unit floatCSEP applies to a model's gridded forecasts: the configured
+    one for time-independent models, while time-dependent models are always loaded with
+    a unit of 1 year (TimeDependentModel.get_forecast passes none).
+    """
+    return None if model.get("time_dependent") else model.get("forecast_unit")
+
+
 def _window_scale(window: str, forecast_unit: Any) -> float:
     """
     Scale floatCSEP applies to gridded forecasts: window length in decimal years
@@ -206,7 +215,33 @@ def _forecast_source(manifest_path: str, model_index: int, window_index: int):
     return manifest, model, window, rel_path, path
 
 
-def _external_sums(path: Path, cache_dir: Optional[Path]):
+def _external_array(model: Dict[str, Any], path: Path) -> np.ndarray:
+    """
+    An external forecast, memory-mapped, after checking it against its declaration:
+    one row per cell of the grid and, if magnitudes are declared, one column per bin.
+    """
+    grid = model["external"]["grid"]
+    data = np.load(path, mmap_mode="r")
+    cells = int(grid["nx"]) * int(grid["ny"])
+    bins = len(model["external"].get("magnitudes") or [])
+    if data.ndim != 2 or data.shape[0] != cells or (bins and data.shape[1] != bins):
+        expected = f"({cells}, {bins})" if bins else f"({cells}, bins)"
+        raise ValueError(
+            f"{path.name} has shape {data.shape}, but its grid and magnitudes in "
+            f"external_forecasts.json give {expected}"
+        )
+    return data
+
+
+def _sum_external(data: np.ndarray):
+    """The rates of every cell (summed over magnitude bins) and of every bin."""
+    return (
+        np.asarray(data.sum(axis=1), dtype=float),
+        np.asarray(data.sum(axis=0), dtype=float),
+    )
+
+
+def _external_sums(data: np.ndarray, path: Path, cache_dir: Optional[Path]):
     """
     An external forecast summed over the magnitude bins (per cell) and over the cells (per
     bin), per forecast unit. Reading the whole array takes seconds, and the sums do not
@@ -220,11 +255,14 @@ def _external_sums(path: Path, cache_dir: Optional[Path]):
         try:
             with np.load(saved) as sums:
                 return sums["cells"], sums["magnitudes"]
-        except (OSError, KeyError, ValueError):
-            pass  # not saved yet, or unreadable: compute again
-    data = np.load(path, mmap_mode="r")  # (cells, magnitude bins)
-    cells = np.asarray(data.sum(axis=1), dtype=float)
-    magnitudes = np.asarray(data.sum(axis=0), dtype=float)
+        except FileNotFoundError:
+            pass  # not saved yet
+        except Exception:  # unreadable (e.g. truncated): drop it and compute again
+            try:
+                saved.unlink()
+            except OSError:
+                pass
+    cells, magnitudes = _sum_external(data)
     if saved is not None:
         saved.parent.mkdir(parents=True, exist_ok=True)
         tmp = saved.with_name(f"{saved.stem}.{os.getpid()}.tmp.npz")
@@ -242,8 +280,8 @@ def _load_external(
 ):
     """A forecast array on a regular grid of every cell (see schemas.external_models)."""
     grid = model["external"]["grid"]
-    cells, magnitudes = _external_sums(path, cache_dir)
-    scale = _window_scale(window, model.get("forecast_unit"))
+    cells, magnitudes = _external_sums(_external_array(model, path), path, cache_dir)
+    scale = _window_scale(window, _forecast_unit(model))
     cell_rates = cells * scale
     magnitude_rates = magnitudes * scale
     positive = cell_rates[np.isfinite(cell_rates) & (cell_rates > 0)]
@@ -275,12 +313,14 @@ def _load_external(
     }
 
 
-def write_rates(manifest_path: str, model_index: int, out_path: str) -> None:
+def write_rates(
+    manifest_path: str, model_index: int, out_path: str, window_index: int = 0
+) -> None:
     """The rate of every cell of an external forecast, per forecast unit, as float32."""
-    _, model, _, _, path = _forecast_source(manifest_path, model_index, 0)
+    _, model, _, _, path = _forecast_source(manifest_path, model_index, window_index)
     if not model.get("external"):
         raise ValueError(f"Model '{model.get('name')}' is not an external forecast")
-    cells, _ = _external_sums(path, Path(out_path).parent)
+    cells, _ = _external_sums(_external_array(model, path), path, Path(out_path).parent)
     rates = cells.astype("<f4")
     tmp = f"{out_path}.{os.getpid()}.tmp"
     rates.tofile(tmp)
@@ -322,7 +362,7 @@ def load_forecast(
     else:
         rates, region, magnitudes = _load_gridded(path, model.get("fmt"))
         # Match what the experiment evaluates: rates for this window's length.
-        rates = rates * _window_scale(window, model.get("forecast_unit"))
+        rates = rates * _window_scale(window, _forecast_unit(model))
 
     if rates.ndim == 1:
         rates = rates[:, None]
@@ -401,6 +441,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     rates = sub.add_parser("rates", help="Write the cell rates of an external forecast")
     rates.add_argument("--manifest", required=True)
     rates.add_argument("--model", type=int, required=True)
+    rates.add_argument("--window", type=int, default=0)
     rates.add_argument("--out", required=True)
 
     args = parser.parse_args(argv)
@@ -408,7 +449,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.command == "catalog":
             _write_json(load_catalog(args.path), args.out)
         elif args.command == "rates":
-            write_rates(args.manifest, args.model, args.out)
+            write_rates(args.manifest, args.model, args.out, args.window)
         else:
             document = load_forecast(
                 args.manifest, args.model, args.window, Path(args.out).parent

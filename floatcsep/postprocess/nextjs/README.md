@@ -21,8 +21,8 @@ UTC throughout.
 
 ### Multi-grid experiments
 
-When every model is named `<MODEL>=<GRID>` (for example `GEAR1=N50L11`) and
-there are at least two grids, the dashboard treats the experiment as the same
+When every model is named `<MODEL>=<GRID>` (for example `GEAR1=N50L11`), with
+at least two models and two grids whose names contain a letter, the dashboard treats the experiment as the same
 models on several grids: the Forecasts page selects a model and a grid, and the
 Results page adds heatmaps of models × grids. Results saved for grids without
 forecasts in the experiment (e.g. computed elsewhere, as `<test>_<MODEL>=<GRID>.json`)
@@ -70,18 +70,19 @@ floatcsep view config.yml --ui nextjs
 
 `floatcsep view` then:
 
-1. builds the experiment manifest and writes it to `.cache/manifest.json`;
+1. builds the experiment manifest and writes it to `.cache/manifest-<id>.json`,
+   one file per experiment, so several dashboards can run at once;
 2. finds Node.js ≥ 18.18 on `PATH`, or downloads a private Node.js LTS runtime
    into `.cache/node-runtime`;
 3. runs `npm install` when `package.json` / `package-lock.json` changed since the
    last install (tracked by `node_modules/.floatcsep-install-stamp`);
 4. builds the dashboard into `.next-prod/` when its sources changed (the first
-   launch takes a few minutes), falling back to the development server if the
-   build fails;
+   launch takes a few minutes); in `"auto"` mode it falls back to the development
+   server if the build fails;
 5. starts the server on `localhost` only and opens the browser.
 
 `run_nextjs_app(experiment, mode=...)` accepts `"auto"` (default, as above),
-`"start"` (production) or `"dev"` (hot reload).
+`"start"` (production, an error if the build fails) or `"dev"` (hot reload).
 
 ## Development
 
@@ -90,8 +91,8 @@ cd floatcsep/postprocess/nextjs
 npm install
 
 # A manifest to work with: run `floatcsep view <config> --ui nextjs` once,
-# which writes .cache/manifest.json, then:
-export MANIFEST_PATH="$PWD/.cache/manifest.json"
+# which writes .cache/manifest-<id>.json (the path is in its log), then:
+export MANIFEST_PATH="$PWD/.cache/manifest-<id>.json"
 export FLOATCSEP_PYTHON="$(which python)"   # the environment with floatCSEP
 
 npm run dev          # http://localhost:3000, hot reload
@@ -115,7 +116,7 @@ npm run build        # production build
 
 ```
 floatcsep view config.yml --ui nextjs
-  └─ server.py: manifest (.cache/manifest.json) → npm install/build → next start
+  └─ server.py: manifest (.cache/manifest-<id>.json) → npm install/build → next start
        Browser ──► /api/manifest            normalized manifest (existing files only)
                ──► /api/catalog             catalog as columns   ┐ manifest_api.py via the
                ──► /api/forecasts?model&window  cell rates        ┤ floatCSEP interpreter

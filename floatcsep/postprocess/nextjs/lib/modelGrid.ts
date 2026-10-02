@@ -29,7 +29,9 @@ export function modelGrid(models: { name: string }[]): ModelGrid | null {
     if (!grids.includes(grid!)) grids.push(grid!);
     index.set(`${model}\u0000${grid}`, i);
   });
-  if (grids.length < 2) return null;
+  // At least two models on two grids, and grids named like N50L11 or FULL01: a value
+  // such as the 0.9 of ETAS_b=0.9 is part of a model's name, not a grid.
+  if (grids.length < 2 || names.length < 2 || !grids.every((g) => /[A-Za-z]/.test(g))) return null;
   return { models: names, grids, indexOf: (model, grid) => index.get(`${model}\u0000${grid}`) ?? -1 };
 }
 
@@ -76,8 +78,15 @@ function sharedSuffix(names: string[]): string {
  */
 export function shortGridNames(grids: string[], sizes: Map<string, number>): string[] {
   const suffix = sharedSuffix(grids.filter((g) => !sizes.has(g)));
+  // Two declared grids of one cell size keep their names, to tell them apart
+  const sizeCount = new Map<number, number>();
+  for (const g of grids) {
+    const dh = sizes.get(g);
+    if (dh !== undefined) sizeCount.set(dh, (sizeCount.get(dh) ?? 0) + 1);
+  }
   return grids.map((g) => {
     const dh = sizes.get(g);
-    return dh === undefined ? g.slice(0, g.length - suffix.length) : `${dh}°`;
+    if (dh === undefined) return g.slice(0, g.length - suffix.length);
+    return sizeCount.get(dh) === 1 ? `${dh}°` : g;
   });
 }

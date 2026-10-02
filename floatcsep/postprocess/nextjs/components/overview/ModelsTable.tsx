@@ -5,6 +5,13 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import type { Manifest, Model } from '@/lib/types';
 import { doiUrl, gitWebUrl, zenodoUrl } from '@/lib/utils';
 
+/** Where a model comes from, as plain text (for the CSV export). */
+function sourceText(model: Model): string {
+  if (model.giturl) return model.git_hash ? `${model.giturl} @ ${model.git_hash}` : model.giturl;
+  if (model.zenodo_id) return `Zenodo ${String(model.zenodo_id)}`;
+  return 'Local files';
+}
+
 function Source({ model }: { model: Model }) {
   if (model.giturl) {
     const web = gitWebUrl(model.giturl);
@@ -59,6 +66,7 @@ export function ModelsTable({ manifest }: { manifest: Manifest }) {
       key: 'source',
       header: 'Source',
       render: (m) => <Source model={m} />,
+      csv: sourceText,
       className: 'max-w-[18rem]',
     },
     {

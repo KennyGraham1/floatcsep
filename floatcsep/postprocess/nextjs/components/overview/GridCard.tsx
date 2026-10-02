@@ -57,7 +57,8 @@ export function GridCard({ manifest, className }: { manifest: Manifest; classNam
     if (fixedGrid) return null;
     const candidates = manifest.models
       .map((model, index) => ({ model, index }))
-      .filter(({ model }) => !dimension || splitModelName(model.name).grid === gridName);
+      // Forecasts of every cell of a declared grid are too large for this map (see below)
+      .filter(({ model }) => !model.external && (!dimension || splitModelName(model.name).grid === gridName));
     for (const { model, index } of candidates) {
       const window = model.forecast_available.findIndex(Boolean);
       if (window >= 0) return { model: index, window };

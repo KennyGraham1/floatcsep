@@ -210,7 +210,9 @@ export async function evaluationSummaries(
 
   let changed = false;
   const summaries: EvaluationSummary[] = [];
-  const signature = crypto.createHash('sha1');
+  // The ETag covers the summary format and what each file is (window, test, model), as
+  // well as the files themselves: either can change while the files do not.
+  const signature = crypto.createHash('sha1').update(`${CACHE_VERSION};${JSON.stringify(files)};`);
   // Parse in small batches: the files can add up to hundreds of megabytes.
   const BATCH = 16;
   for (let start = 0; start < files.length; start += BATCH) {

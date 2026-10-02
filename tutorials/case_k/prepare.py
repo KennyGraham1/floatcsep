@@ -68,9 +68,17 @@ ABOUT_FIGURES = {
 CATALOG = Path("eepasModel", "run", "gcmt_M595_1976_2022.dat")
 
 
-def convert_gcmt(source: Path, target: Path) -> int:
-    """gCMT table (yr mo dy hr mn sec lat lon depth Mw) -> pyCSEP ASCII catalogue."""
-    rows = 0
+# The depth range of the experiment (config.yml). floatCSEP filters the test catalogues
+# by time, magnitude and region, but not by depth, so the catalogue is limited here.
+DEPTH_RANGE = (0.0, 70.0)
+
+
+def convert_gcmt(source: Path, target: Path) -> tuple:
+    """
+    gCMT table (yr mo dy hr mn sec lat lon depth Mw) -> pyCSEP ASCII catalogue, keeping
+    the events in DEPTH_RANGE. Returns the number of events and the smallest magnitude.
+    """
+    rows, smallest = 0, float("inf")
     with open(source) as f_in, open(target, "w", newline="") as f_out:
         writer = csv.writer(f_out)
         writer.writerow(["lon", "lat", "mag", "time_string", "depth", "catalog_id", "event_id"])
@@ -81,6 +89,8 @@ def convert_gcmt(source: Path, target: Path) -> int:
             year, month, day, hour, minute = (int(v) for v in fields[:5])
             seconds = float(fields[5])
             lat, lon, depth, mag = (float(v) for v in fields[6:10])
+            if not DEPTH_RANGE[0] <= depth <= DEPTH_RANGE[1]:
+                continue
             time = datetime.datetime(year, month, day, hour, minute) + datetime.timedelta(
                 seconds=seconds
             )
@@ -89,7 +99,8 @@ def convert_gcmt(source: Path, target: Path) -> int:
                 [lon, lat, mag, time.strftime("%Y-%m-%dT%H:%M:%S.%f"), depth, -1, event_id]
             )
             rows += 1
-    return rows
+            smallest = min(smallest, mag)
+    return rows, smallest
 
 
 def write_models_yml(grids) -> None:
@@ -180,10 +191,11 @@ def main(argv=None) -> int:
         shutil.copyfile(source / FORECASTS / name, models_dir / name)
     write_models_yml(args.grids)
 
-    events = convert_gcmt(source / CATALOG, HERE / "catalog.csv")
+    events, smallest = convert_gcmt(source / CATALOG, HERE / "catalog.csv")
     print(
         f"Copied {len(MODELS)} models on {len(args.grids)} grid(s) "
-        f"({', '.join(args.grids)}) and {events} gCMT events (M5.95+)."
+        f"({', '.join(args.grids)}) and {events} gCMT events "
+        f"(Mw {smallest:g} and above, {DEPTH_RANGE[0]:g}-{DEPTH_RANGE[1]:g} km)."
     )
     figures = copy_about_figures(source)
     print(f"Copied {figures} of the {len(ABOUT_FIGURES)} figures of about.md.")

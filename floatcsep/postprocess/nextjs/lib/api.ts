@@ -36,8 +36,10 @@ export async function fetchJson<T>(url: string): Promise<T> {
 }
 
 // The cell rates of dense forecasts, per model and file: the same for every time
-// window (each window's document gives its factor), so fetched once.
+// window (each window's document gives its factor), so fetched once. Each is tens of
+// megabytes, so only the last few models viewed are kept.
 const denseRates = new Map<string, Promise<Float32Array>>();
+const DENSE_RATES_KEPT = 2;
 
 /** A forecast document; for dense grids, with the rate of every cell attached. */
 async function fetchForecast(url: string): Promise<ForecastPayload> {
@@ -46,12 +48,23 @@ async function fetchForecast(url: string): Promise<ForecastPayload> {
   const model = new URL(url, 'http://dashboard').searchParams.get('model');
   const key = `${model}:${payload.path}`;
   let rates = denseRates.get(key);
-  if (!rates) {
+  if (rates) {
+    denseRates.delete(key); // most recently used last
+  } else {
     rates = request(`/api/forecasts/rates?model=${model}`).then(async (r) => new Float32Array(await r.arrayBuffer()));
-    denseRates.set(key, rates);
     rates.catch(() => denseRates.delete(key));
   }
-  return { ...payload, rateData: await rates };
+  denseRates.set(key, rates);
+  while (denseRates.size > DENSE_RATES_KEPT) denseRates.delete(denseRates.keys().next().value!);
+
+  const rateData = await rates;
+  const cells = (payload.nx ?? 0) * (payload.ny ?? 0);
+  if (rateData.length !== cells) {
+    throw new Error(
+      `The forecast has ${rateData.length.toLocaleString('en-US')} cell rates for a grid of ${cells.toLocaleString('en-US')} cells`,
+    );
+  }
+  return { ...payload, rateData };
 }
 
 // Catalogs and forecasts only change when the experiment is re-run, and loading

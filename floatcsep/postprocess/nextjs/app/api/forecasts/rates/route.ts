@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     const out = await cachedPythonJob(
       key,
-      ['rates', '--manifest', manifestPath, '--model', String(modelIndex)],
+      ['rates', '--manifest', manifestPath, '--model', String(modelIndex), '--window', String(window)],
       '.f32',
     );
     return new NextResponse(await fs.readFile(out), {

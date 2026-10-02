@@ -44,8 +44,11 @@ The names of the grids encode the refinement rule:
 
 ![Grids around Japan. Three quadtree grids, with their cells shaded by zoom level: N10L11 is finer than N50L11, and SN10L11 adds cells where GPS stations are dense. In N50L11, the cell holding the 2011 Tohoku epicentre (L9) is outlined with two of the tiles it was split from (L7, L5): each digit of a quadkey selects a quadrant, so a child's key extends its parent's. Last, the models' native 0.1° grid, a regular lattice finer than any quadtree cell.](results/figures/quadtree_japan.png)
 
-As Web-Mercator grids, the tiles end at latitude ±85.05°: the forecasts and the tests
-are defined on that domain, and all the target earthquakes fall inside every grid.
+As Web-Mercator grids, the tiles end at latitude ±85.05°, so on the quadtree grids the
+forecasts and the tests are defined on that domain. The native 0.1° grid covers the whole
+globe, so its N-test also counts the rate of the polar caps: 0.1 events over the eight
+years for SUP, far less for the other models. All the target earthquakes fall inside
+every grid.
 
 ## From 0.1° forecasts to quadtree cells
 
@@ -67,9 +70,11 @@ depend on the size of their cells.
 
 The tests and their settings are the same as on the quadtree grids. pyCSEP's S- and
 CL-tests, however, clear and rescan the whole forecast in each of the 10,000
-simulations, 104 million bins for the CL-test, which takes hours per forecast on this
-grid. `native_grid.py` draws the same random numbers and sums the same terms over the
-sampled bins only, which gives the same results as pyCSEP within rounding, in seconds.
+simulations, 104 million bins for the CL-test: on this grid, that takes about five
+minutes per forecast for the S-test and nearly two hours for the CL-test.
+`native_grid.py` draws the same random numbers and sums the same terms over the sampled
+bins only, which gives the same results as pyCSEP, in seconds; it checks this against
+pyCSEP every time it runs.
 
 ## Models
 
@@ -86,8 +91,10 @@ sampled bins only, which gives the same results as pyCSEP within rounding, in se
 | Hybrid           | GSSGSRM      | The SUP baseline modulated by the GSRM strain-rate alarm                 |
 
 The forecasts give the expected number of M ≥ 7.45 earthquakes per year in 16 magnitude
-bins from 7.45 to 8.95 (the last bin is open-ended), at depths of 0–70 km. The
-EEPAS-family and GSSGSRM forecasts are fitted on data before 2014 only.
+bins from 7.45 to 8.95 (the last bin is open-ended), at depths of 0–70 km. floatCSEP
+keeps only the target events below M 8.95, so an event in the last bin would not be
+tested; none occurred (the largest target is M 8.27). The EEPAS-family and GSSGSRM
+forecasts are fitted on data before 2014 only.
 
 ![The nine forecasts on SN10L11: rate density on a common logarithmic scale.](about/rate_density_maps.png)
 

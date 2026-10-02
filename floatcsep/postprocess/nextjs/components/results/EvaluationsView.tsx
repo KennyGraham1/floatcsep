@@ -267,12 +267,18 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
     colsLabel: string[],
     colHeader: string,
     caption: string,
+    colsCsv: string[] = colsLabel,
   ) => (
     <DataTable
       caption={caption}
       columns={[
         { key: 'model', header: 'Model', render: (c: HeatCell) => rowsLabel[c.row] },
-        { key: 'col', header: colHeader, render: (c: HeatCell) => colsLabel[c.col] },
+        {
+          key: 'col',
+          header: colHeader,
+          render: (c: HeatCell) => colsLabel[c.col],
+          csv: (c: HeatCell) => colsCsv[c.col],
+        },
         {
           key: 'v',
           header: comparative ? 'Information gain' : scoreName,
@@ -280,7 +286,8 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
           numeric: true,
           sortValue: (c: HeatCell) => c.value ?? -Infinity,
           render: (c: HeatCell) => c.label,
-          csv: (c: HeatCell) => c.value,
+          // An information gain without a value is -inf, as the label shows
+          csv: (c: HeatCell) => c.value ?? (comparative ? '-inf' : null),
         },
         {
           key: 'verdict',
@@ -295,7 +302,9 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                   : 'Not different'
               : c.passed === false
                 ? 'Rejected'
-                : 'Not rejected',
+                : c.passed === true
+                  ? 'Not rejected'
+                  : '—',
         },
       ]}
       rows={cells}
@@ -359,6 +368,7 @@ export function EvaluationsView({ manifest }: { manifest: Manifest }) {
                 gridColumns,
                 'Grid',
                 `${test} by model and grid, ${windowName(window)}`,
+                grids?.grids,
               )}
               footer={heatLegend(gridCells)}
             >

@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { downloadText, fileSlug, textOf, toCsv } from '@/lib/csv';
+import { downloadText, fileSlug, spreadsheetSafe, textOf, toCsv } from '@/lib/csv';
 import { formatInt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
@@ -66,11 +66,12 @@ export function DataTable<T>({
   const visible = sorted.slice(current * pageSize, (current + 1) * pageSize);
 
   const downloadCsv = () => {
-    const header = columns.map((c) => c.header);
+    const header = columns.map((c) => spreadsheetSafe(c.header));
     const body = sorted.map((row) =>
       columns.map((c) => {
         const value = c.csv ? c.csv(row) : textOf(c.render(row));
-        return value === null || value === undefined ? '' : String(value);
+        if (value === null || value === undefined) return '';
+        return typeof value === 'number' ? String(value) : spreadsheetSafe(value);
       }),
     );
     downloadText(`${fileSlug(caption)}.csv`, toCsv(header, body));

@@ -188,17 +188,32 @@ export interface ForecastCells {
   areas: Float64Array;
 }
 
-export function forecastCells(forecast: ForecastPayload): ForecastCells {
-  if (forecast.grid === 'dense') {
-    const grid = denseGrid(forecast.lon0!, forecast.lat0!, forecast.dh!, forecast.nx!, forecast.ny!);
-    const data = forecast.rateData;
-    const scale = forecast.rate_scale ?? 1;
-    const rates = new Float64Array(grid.n);
-    if (data && data.length === grid.n) for (let k = 0; k < grid.n; k++) rates[k] = data[k] * scale;
+// The last dense grid and its cell areas: millions of cells, the same for every time window
+let lastDense: { key: string; grid: RegularGrid; areas: Float64Array } | null = null;
+
+function denseCells(lon0: number, lat0: number, dh: number, nx: number, ny: number) {
+  const key = `${lon0}:${lat0}:${dh}:${nx}:${ny}`;
+  if (lastDense?.key !== key) {
+    const grid = denseGrid(lon0, lat0, dh, nx, ny);
     // Cells k < ny are the first column, one per row; every row shares its area.
     const rowAreas = Float64Array.from({ length: grid.ny }, (_, row) => cellArea(grid, row));
     const areas = new Float64Array(grid.n);
     for (let k = 0; k < grid.n; k++) areas[k] = rowAreas[k % grid.ny];
+    lastDense = { key, grid, areas };
+  }
+  return lastDense;
+}
+
+export function forecastCells(forecast: ForecastPayload): ForecastCells {
+  if (forecast.grid === 'dense') {
+    const { grid, areas } = denseCells(forecast.lon0!, forecast.lat0!, forecast.dh!, forecast.nx!, forecast.ny!);
+    const data = forecast.rateData;
+    if (!data || data.length !== grid.n) {
+      throw new Error(`The forecast has ${data?.length ?? 0} cell rates for a grid of ${grid.n} cells`);
+    }
+    const scale = forecast.rate_scale ?? 1;
+    const rates = new Float64Array(grid.n);
+    for (let k = 0; k < grid.n; k++) rates[k] = data[k] * scale;
     return { grid, rates, areas };
   }
   const grid =

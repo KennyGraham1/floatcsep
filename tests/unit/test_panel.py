@@ -303,6 +303,23 @@ class TestPanel(unittest.TestCase):
             self.assertIn(tw1s, man.models[0]["forecasts"])
             self.assertIn(tw1s, man.models[1]["forecasts"])
 
+            # Before a run copies it, the catalog is read where the configuration points;
+            # until then, from the results folder. No about.md, no About page.
+            self.assertEqual(man.catalog["path"], "results/main.csv")
+            self.assertIsNone(man.about)
+            self.assertEqual([m["time_dependent"] for m in man.models], [False, False])
+
+            (root / "cats").mkdir()
+            (root / "cats" / "main.csv").write_text("x")
+            (root / "about.md").write_text("# About")
+            with patch("floatcsep.postprocess.panel.manifest.timewindow2str", new=fake_t2s), patch(
+                "floatcsep.postprocess.panel.manifest.TimeDependentModel", new=_Model
+            ):
+                man = build_manifest(exp, app_root=str(root))
+            self.assertEqual(man.catalog["path"], "cats/main.csv")
+            self.assertEqual(man.about, "about.md")
+            self.assertEqual([m["time_dependent"] for m in man.models], [True, True])
+
     def test_l(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

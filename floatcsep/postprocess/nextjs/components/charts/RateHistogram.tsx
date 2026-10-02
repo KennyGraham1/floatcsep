@@ -28,6 +28,7 @@ export default function RateHistogram({ logRates, domain, range, stops, bins = 2
     const width = (hi - lo) / bins || 1;
     const counts = new Array<number>(bins).fill(0);
     for (let i = 0; i < logRates.length; i++) {
+      if (!Number.isFinite(logRates[i])) continue; // zero rates: no cell drawn, no bar
       const k = Math.min(bins - 1, Math.max(0, Math.floor((logRates[i] - lo) / width)));
       counts[k]++;
     }

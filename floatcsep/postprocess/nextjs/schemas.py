@@ -5,7 +5,7 @@ import json
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -22,24 +22,50 @@ MAX_GRID_SIDE = 65535
 MAX_GRID_CELLS = 2**24
 
 
-def _grid_problem(grid: Any) -> Optional[str]:
-    """Why an external grid declaration cannot be mapped, or None if it can."""
+def _number(value: Any) -> bool:
+    """A finite JSON number (booleans and strings are not)."""
+    return (
+        isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    )
+
+
+def _checked_grid(spec: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    The grid of an external_forecasts.json, normalised as the dashboard reads it (numbers,
+    and whole numbers of columns and rows), or why it cannot be mapped.
+    """
+    grid = spec.get("grid") if isinstance(spec, dict) else None
     if not isinstance(grid, dict):
-        return "no grid"
-    try:
-        dh, nx, ny = float(grid["dh"]), grid["nx"], grid["ny"]
-        float(grid["lon0"]), float(grid["lat0"])
-    except (KeyError, TypeError, ValueError):
-        return "lon0, lat0, dh, nx and ny are required"
-    if not (math.isfinite(dh) and dh > 0):
-        return "dh must be positive"
-    if not all(isinstance(v, int) and 0 < v <= MAX_GRID_SIDE for v in (nx, ny)):
-        return f"nx and ny must be whole numbers from 1 to {MAX_GRID_SIDE}"
+        return None, "no grid"
+    values = [grid.get(key) for key in ("lon0", "lat0", "dh", "nx", "ny")]
+    if not all(_number(v) for v in values):
+        return None, "lon0, lat0, dh, nx and ny must be finite numbers"
+    lon0, lat0, dh, nx, ny = values
+    if dh <= 0:
+        return None, "dh must be positive"
+    if not all(float(v).is_integer() and 0 < v <= MAX_GRID_SIDE for v in (nx, ny)):
+        return None, f"nx and ny must be whole numbers from 1 to {MAX_GRID_SIDE}"
+    nx, ny = int(nx), int(ny)
     if nx * ny > MAX_GRID_CELLS:
-        return f"{nx * ny:,} cells, more than the {MAX_GRID_CELLS:,} a browser can map"
-    if grid.get("order", "lon-major") != "lon-major":
-        return 'order must be "lon-major"'
-    return None
+        return None, f"{nx * ny:,} cells, more than the {MAX_GRID_CELLS:,} a browser can map"
+    order = grid.get("order", "lon-major")
+    if order != "lon-major":
+        return None, 'order must be "lon-major"'
+    magnitudes = spec.get("magnitudes")
+    if magnitudes is not None and not (
+        isinstance(magnitudes, list) and all(_number(m) for m in magnitudes)
+    ):
+        return None, "magnitudes must be a list of numbers"
+    name = str(grid.get("name", "external"))
+    return {
+        "name": name,
+        "lon0": float(lon0),
+        "lat0": float(lat0),
+        "dh": float(dh),
+        "nx": nx,
+        "ny": ny,
+        "order": order,
+    }, None
 
 
 def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str, Any]]:
@@ -60,8 +86,7 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
     if not declaration.is_file():
         return []
     spec = json.loads(declaration.read_text())
-    grid = spec.get("grid")
-    problem = _grid_problem(grid)
+    grid, problem = _checked_grid(spec)
     if problem:
         logger.warning(f"Ignoring {declaration}: {problem}")
         return []
@@ -70,7 +95,7 @@ def external_models(declaration: Path, time_windows: List[str]) -> List[Dict[str
         path = str((declaration.parent / file).resolve())
         models.append(
             {
-                "name": f"{name}={grid.get('name', 'external')}",
+                "name": f"{name}={grid['name']}",
                 "forecast_unit": spec.get("forecast_unit", 1),
                 "path": path,
                 "fmt": "npy",

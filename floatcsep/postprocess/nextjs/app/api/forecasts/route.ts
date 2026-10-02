@@ -42,6 +42,9 @@ export async function GET(request: NextRequest) {
       model: model.name,
       window: manifest.time_windows[windowIndex],
       unit: model.forecast_unit ?? null,
+      timeDependent: model.time_dependent,
+      // A forecast of every cell of a declared grid: its placement and magnitude bins
+      external: model.external,
       catalog: model.is_catalog_forecast,
       nSims: model.func_kwargs?.n_sims ?? null,
       grid: model.is_catalog_forecast ? [region?.dh, region?.origins?.length, region?.bbox, manifest.magnitudes] : null,

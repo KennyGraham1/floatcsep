@@ -16,18 +16,20 @@ Written into the results directory:
     figures/annual_consistency.png  N/M/S/CL outcomes by year (primary grid)
     figures/annual_ig_heatmap.png   information gain vs GEAR1 by year (primary grid)
     figures/annual_counts.png       forecast vs observed events by year (primary grid)
-    figures/annual_pooled_ig.png    T-test pooled over the years (primary grid)
-    figures/annual_*_native.png     outcomes, information gain and pooled T-test by year,
-                                    on the native 0.1° grid (after native_grid.py)
+    figures/annual_*_native.png     outcomes and information gain by year, on the native
+                                    0.1° grid (after native_grid.py)
     figures/quadtree_grids.png      the quadtree grids, and the native 0.1° grid (after
                                     native_grid.py)
     figures/grid_levels.png         the grids compared: cells per zoom level, cells against N
     figures/quadtree_japan.png      three grids and the native 0.1° lattice around Japan
 
-Results on the models' native 0.1-degree grid (FULL01, 6.48 million cells),
-computed by the global experiment for the whole period with the same forecasts
-and tests, are copied by prepare.py into imported/. They are stored next to
-floatCSEP's own results and shown as a ninth grid in the whole-period figures.
+Results on the models' native 0.1-degree grid (FULL01, 6.48 million cells), with
+the same forecasts and tests, are computed for every time window by native_grid.py
+(prepare.py copies the global experiment's, for the whole period, until then) into
+imported/. They are stored next to floatCSEP's own results and shown as a ninth grid.
+
+The forecasts are static, so the T-test over the whole period already pools the
+events of every year: no separate pooled test is drawn.
 """
 
 import json
@@ -254,50 +256,6 @@ def import_native_results(layout):
     log.info(f"Imported {copied} results on the native 0.1-degree grid")
 
 
-def native_target_rates(layout, window):
-    """The rates at the target events on the native grid, saved by native_grid.py."""
-    path = layout.experiment.registry.abs(
-        "imported", timewindow2str(window), "native_target_rates.json"
-    )
-    if not os.path.isfile(path):
-        return None
-    with open(path) as f:
-        return json.load(f)["models"]
-
-
-def pooled_ttest(layout, model, grid, windows):
-    """T-test of model vs GEAR1 on one grid, pooling the target events of `windows`."""
-    diffs, count_model, count_ref = [], 0.0, 0.0
-    for window in windows:
-        if grid == NATIVE:
-            saved = native_target_rates(layout, window)
-            if not saved or model not in saved or REF not in saved:
-                return None
-            rates, n_model = np.asarray(saved[model]["rates"]), saved[model]["total"]
-            rates_ref, n_ref = np.asarray(saved[REF]["rates"]), saved[REF]["total"]
-        else:
-            window_str = timewindow2str(window)
-            forecast = layout.models[(model, grid)].get_forecast(window_str)
-            reference = layout.models[(REF, grid)].get_forecast(window_str)
-            catalog = layout.experiment.catalog_repo.get_test_cat(window_str)
-            filter_to_region(catalog, forecast.region)
-            catalog.region = forecast.region
-            rates, n_model = forecast.target_event_rates(catalog)
-            rates_ref, n_ref = reference.target_event_rates(catalog)
-        diffs.extend(np.log(rates) - np.log(rates_ref))
-        count_model += n_model
-        count_ref += n_ref
-    n = len(diffs)
-    if n == 0:
-        return None
-    diffs = np.asarray(diffs)
-    ig = (diffs.sum() - (count_model - count_ref)) / n
-    if n < 2:
-        return {"n": n, "ig": float(ig), "lower": None, "upper": None}
-    half = stats.t.ppf(1 - ALPHA / 2, n - 1) * np.std(diffs, ddof=1) / np.sqrt(n)
-    return {"n": n, "ig": float(ig), "lower": float(ig - half), "upper": float(ig + half)}
-
-
 # ------------------------------------------------------------ test verdicts
 
 
@@ -505,11 +463,20 @@ def facets(layout, key, out_dir):
         ax.grid(axis="x", color="#eef2f5", lw=0.8)
     for ax in axes.ravel()[len(grids) :]:
         ax.set_visible(False)
+    # The N-test's distribution is Poisson: its mean and 95% interval. The others are
+    # simulated and one-sided: their median, and the 5th percentile to the maximum.
+    poisson = key == "N"
+    centre = "Poisson mean" if poisson else "simulated median"
+    spread = (
+        "95% Poisson interval"
+        if poisson
+        else "95% simulated interval"
+        if cfg["two_sided"]
+        else "5th percentile to maximum"
+    )
     legend = [
-        Line2D(
-            [], [], marker="s", color="#34495e", lw=0, markersize=8, label="simulated median"
-        ),
-        Line2D([], [], color="#566573", lw=2.2, label="95% simulated interval"),
+        Line2D([], [], marker="s", color="#34495e", lw=0, markersize=8, label=centre),
+        Line2D([], [], color="#566573", lw=2.2, label=spread),
         Line2D(
             [],
             [],
@@ -545,9 +512,7 @@ def facets(layout, key, out_dir):
         fontsize=15,
         color=INK,
     )
-    fig.supxlabel(
-        f"normalized {cfg['xlabel']}  (value − simulated median)", fontsize=11.5, y=0.06
-    )
+    fig.supxlabel(f"normalized {cfg['xlabel']}  (value − {centre})", fontsize=11.5, y=0.06)
     fig.tight_layout(rect=(0.01, 0.08, 0.99, 0.97))
     fig.savefig(os.path.join(out_dir, f"{key}_facets.png"), dpi=170, bbox_inches="tight")
     plt.close(fig)
@@ -565,9 +530,11 @@ def t_ranked(layout, out_dir):
                 data[(m, g)] = r
     if not data:
         return
+    # Ranked by the mean over the quadtree grids, as in the global experiment
     mean_ig = {
         m: np.mean(
-            [data[(m, g)]["observed_statistic"] for g in grids if (m, g) in data] or [np.nan]
+            [data[(m, g)]["observed_statistic"] for g in layout.grids if (m, g) in data]
+            or [np.nan]
         )
         for m in models
     }
@@ -707,7 +674,8 @@ def t_ranked(layout, out_dir):
     ax.set_title(
         f"Paired T-test against GEAR1, $M \\geq 7.45$, {period_label(layout.full)}\n"
         f"{len(layout.grids)} quadtree grids for each model"
-        + (" and the native 0.1° grid" if NATIVE in grids else ""),
+        + (" and the native 0.1° grid" if NATIVE in grids else "")
+        + f"; mean over the {len(layout.grids)} quadtree grids",
         loc="left",
         fontsize=9.5,
         color=INK,
@@ -874,79 +842,6 @@ def annual_counts(layout, out_dir):
     fig.tight_layout(rect=(0.012, 0, 1, 0.96))
     fig.savefig(os.path.join(out_dir, "annual_counts.png"), dpi=170)
     plt.close(fig)
-
-
-def annual_pooled_ig(layout, out_dir, grid=None, suffix=""):
-    grid = grid or layout.primary
-    if grid != NATIVE and (REF, grid) not in layout.models:
-        return
-    rows = []
-    for m in layout.model_names:
-        if m == REF or (grid != NATIVE and (m, grid) not in layout.models):
-            continue
-        r = pooled_ttest(layout, m, grid, layout.annual)
-        if r:
-            rows.append((r["ig"], m, r))
-    if not rows:
-        return
-    rows.sort()
-    fig, ax = plt.subplots(figsize=(7.2, 0.42 * len(rows) + 1.9))
-    ax.axvline(0, color=MUTED, lw=1.2, zorder=1)
-    for i, (ig, _, r) in enumerate(rows):
-        sig = r["lower"] is not None and not (r["lower"] <= 0 <= r["upper"])
-        col = (BLUE if ig > 0 else RED) if sig else MUTED
-        if r["lower"] is not None:
-            ax.plot(
-                [r["lower"], r["upper"]],
-                [i, i],
-                color=col,
-                lw=2,
-                solid_capstyle="round",
-                zorder=2,
-            )
-        ax.plot(
-            [ig],
-            [i],
-            "o",
-            ms=8,
-            color=col,
-            zorder=3,
-            markerfacecolor=col if sig else "white",
-            markeredgewidth=1.5,
-        )
-        ax.annotate(
-            f"{ig:+.2f}",
-            (ig, i),
-            textcoords="offset points",
-            xytext=(8 if abs(ig) < 0.1 else 0, 10),
-            ha="left" if abs(ig) < 0.1 else "center",
-            fontsize=8,
-            color=INK,
-        )
-    ax.set_yticks(np.arange(len(rows)), [m for _, m, _ in rows])
-    ax.set_xlabel(f"Information gain per earthquake against {REF}")
-    ax.set_title(
-        f"Pooled information gain against {REF}\n"
-        f"{len(layout.annual)} annual forecasts, N = {rows[0][2]['n']} events, "
-        f"grid {grid_label(grid)}",
-        loc="left",
-        fontsize=10,
-    )
-    ax.grid(axis="x", zorder=0)
-    ax.set_axisbelow(True)
-    fig.text(
-        0.01,
-        0.005,
-        "Filled: 95% interval excludes zero.  Open, grey: interval includes zero.",
-        fontsize=8,
-        color=INK2,
-    )
-    fig.tight_layout(rect=(0, 0.035, 1, 1))
-    fig.savefig(os.path.join(out_dir, f"annual_pooled_ig{suffix}.png"), dpi=170)
-    plt.close(fig)
-
-
-# ----------------------------------------------------------- the grids
 
 
 def quadtree_grids(layout, out_dir):
@@ -1358,9 +1253,7 @@ def main(experiment):
             ):  # native_grid.py has run
                 annual_consistency(layout, out_dir, NATIVE, "_native")
                 annual_ig_heatmap(layout, out_dir, NATIVE, "_native")
-                annual_pooled_ig(layout, out_dir, NATIVE, "_native")
             annual_counts(layout, out_dir)
-            annual_pooled_ig(layout, out_dir)
         quadtree_grids(layout, out_dir)
         grid_levels(layout, out_dir)
         quadtree_japan(layout, out_dir)

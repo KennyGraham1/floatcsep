@@ -29,12 +29,14 @@ export interface Model {
   fmt: string | null;
   forecast_class: string | null;
   is_catalog_forecast: boolean;
+  /** floatCSEP loads time-dependent gridded forecasts with a forecast unit of 1. */
+  time_dependent: boolean;
   /** Forecast file per time window (same order as `time_windows`), or null. */
   forecasts: (string | null)[];
   /** Whether each forecast file exists on disk. */
   forecast_available: boolean[];
   /** A forecast evaluated outside floatCSEP, on a regular grid of every cell. */
-  external: { grid: ExternalGrid } | null;
+  external: { grid: ExternalGrid; magnitudes: number[] } | null;
 }
 
 export interface ExternalGrid {

@@ -80,6 +80,28 @@ All notable changes to the floatCSEP Next.js Dashboard.
   magnitude table keeps each bin with its own rate.
 - The 0.1° maps summed the whole forecast file for every time window; the sums are
   now computed once per file.
+- A corrected `external_forecasts.json` kept the cached map placement; the grid
+  declaration is now part of the cache key.
+- Dashboards of different experiments running at once shared one manifest file;
+  each experiment now has its own, written atomically.
+- A rate file that does not match its declaration is reported as an error instead
+  of a blank map, and a damaged saved sum is computed again.
+- Python and the dashboard read external grid declarations the same way.
+- Time-dependent gridded forecasts are scaled as floatCSEP scales them (a forecast
+  unit of 1 year, whatever the configuration says).
+- Cells of a 0.1° forecast with a zero rate are left transparent, as on other grids,
+  and kept out of the histogram.
+- CSV: the Source column was empty, information gains of −∞ were blank, two grids of
+  one cell size shared a name, and missing verdicts read "Not rejected"; text that a
+  spreadsheet would run as a formula is now quoted.
+- About page: images in code are left alone; file names with brackets, `'title'` and
+  `(title)`, and reference-style images work; images must lie inside the folder
+  once symbolic links are resolved.
+- A result written while the manifest was being read could stay hidden, and a new
+  summary format could be served from the browser's cache.
+- Model names such as `ETAS_b=0.9` are no longer taken for model–grid pairs.
+- Only the last two 0.1° rate files viewed are kept in memory, and the grid is
+  built once rather than for every time window.
 
 ## [1.1.0] - 2025
 

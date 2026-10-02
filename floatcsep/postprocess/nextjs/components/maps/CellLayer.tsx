@@ -27,6 +27,8 @@ interface TileStyle {
   grid: CellGrid;
   /** Colour-table index (0–255) of each cell. */
   shade: Uint8Array;
+  /** Cells without a value to draw (e.g. a zero rate, log10 = -Infinity), or null if none. */
+  hidden: Uint8Array | null;
   table: Uint8ClampedArray;
   css: string[];
 }
@@ -40,12 +42,18 @@ function buildStyle(
   const [lo, hi] = domain;
   const span = hi - lo || 1;
   const shade = new Uint8Array(grid.n);
+  let hidden: Uint8Array | null = null;
   for (let k = 0; k < grid.n; k++) {
+    if (!Number.isFinite(values[k])) {
+      // Left transparent, as the cells that sparse grids leave out
+      (hidden ??= new Uint8Array(grid.n))[k] = 1;
+      continue;
+    }
     const t = (values[k] - lo) / span;
-    shade[k] = Math.round(Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0)) * 255);
+    shade[k] = Math.round(Math.min(1, Math.max(0, t)) * 255);
   }
   const css = Array.from({ length: 256 }, (_, i) => `rgb(${table[i * 3]},${table[i * 3 + 1]},${table[i * 3 + 2]})`);
-  return { grid, shade, table, css };
+  return { grid, shade, hidden, table, css };
 }
 
 /** Quadtree cells are Web Mercator tiles: fill each cell's exact pixel square. */
@@ -58,6 +66,7 @@ function drawQuadtreeTile(ctx: CanvasRenderingContext2D, z: number, x: number, y
     if (level > z) break;
     const k = grid.index.get(key.slice(0, level));
     if (k !== undefined) {
+      if (s.hidden?.[k]) return;
       ctx.fillStyle = s.css[s.shade[k]];
       ctx.fillRect(0, 0, TILE, TILE);
       return;
@@ -76,6 +85,7 @@ function drawQuadtreeTile(ctx: CanvasRenderingContext2D, z: number, x: number, y
       dx = dx * 2 + (digit & 1);
       dy = dy * 2 + (digit >> 1);
     }
+    if (s.hidden?.[grid.order[i]]) continue;
     const size = TILE / 2 ** (quadkey.length - z);
     const px = Math.floor(dx * size);
     const py = Math.floor(dy * size);
@@ -113,7 +123,7 @@ function drawRegularTile(ctx: CanvasRenderingContext2D, z: number, x: number, y:
       const col = columns[px];
       if (col < 0) continue;
       const k = grid.lookup[base + col];
-      if (k < 0) continue;
+      if (k < 0 || s.hidden?.[k]) continue;
       const c = s.shade[k] * 3;
       const o = (py * TILE + px) * 4;
       data[o] = s.table[c];

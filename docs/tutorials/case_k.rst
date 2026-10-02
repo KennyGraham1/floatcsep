@@ -66,7 +66,7 @@ After running ``prepare.py``, the experiment folder contains:
     case_k
         ├── about.md          # the dashboard's About page
         ├── about/            # its figures (copied by prepare.py)
-        ├── catalog.csv       # gCMT catalog, M5.95+, 1976-2022 (written by prepare.py)
+        ├── catalog.csv       # gCMT catalog, Mw 5.65+, 0-70 km, 1976-2022 (written by prepare.py)
         ├── config.yml
         ├── custom_plots.py
         ├── imported/         # results on the native 0.1° grid, by time window
@@ -146,19 +146,19 @@ so ``floatcsep run`` comes first. The results go to ``imported/<time window>/``,
 ``custom_plots.py`` picks them up, and ``floatcsep plot config.yml`` redraws the figures with them.
 
 pyCSEP's S- and CL-tests clear and rescan the whole forecast in each of the 10,000 simulations
-(104 million bins for the CL-test), which takes hours per forecast on this grid. ``native_grid.py``
-draws the same random numbers and sums the same terms over the sampled bins only. Its results
-agree with pyCSEP's within rounding, and with those of the global experiment. Because this relies
-on pyCSEP's internals, the script first checks, on a small random forecast, that it still gives
+(104 million bins for the CL-test): on this grid, about five minutes per forecast for the S-test
+and nearly two hours for the CL-test. ``native_grid.py`` draws the same random numbers and sums
+the same terms over the sampled bins only. Its results are pyCSEP's (the simulated distributions
+are identical), and agree with those of the global experiment to 1e-13. Because this relies on
+pyCSEP's internals, the script first checks, on a small random forecast, that it still gives
 exactly pyCSEP's numbers, and stops if it does not.
 
-``native_grid.py`` also writes:
+Aggregated exactly onto the quadtree grids, the 0.1° arrays reproduce the quadtree forecasts to a
+relative 1e-12, and GSSGSRM's to 1e-5.
 
-- ``imported/<time window>/native_target_rates.json``: each model's rates at the target events,
-  for the T-test pooled over the years (``annual_pooled_ig_native.png``);
-- ``external_forecasts.json``: where the forecast arrays are, so that the dashboard maps them too.
-  The dashboard reads the arrays where they are and sends each browser the rate of every cell, so
-  the forecasts can be explored down to the 0.1° cells.
+``native_grid.py`` also writes ``external_forecasts.json``: where the forecast arrays are, so that
+the dashboard maps them too. The dashboard reads the arrays where they are and sends each browser
+the rate of every cell, so the forecasts can be explored down to the 0.1° cells.
 
 
 Configuration
@@ -281,13 +281,13 @@ done, and:
                                    cells are hatched and outlined
    ``{N,M,S,CL}_facets.png``       Simulated 95% intervals and observed statistics, one panel per
                                    grid
-   ``T_ranked.png``                Information gain against GEAR1, per model and grid
+   ``T_ranked.png``                Information gain against GEAR1, per model and grid; models
+                                   ranked by their mean over the quadtree grids
    ``annual_consistency.png``      Test outcomes by year, on grid N50L11
    ``annual_ig_heatmap.png``       Information gain against GEAR1 by year, on grid N50L11
    ``annual_counts.png``           Forecast and observed numbers of events by year
-   ``annual_pooled_ig.png``        T-test pooling the events of the eight annual windows
-   ``annual_*_native.png``         The yearly test outcomes, information gains and pooled T-test on
-                                   the native grid (after ``native_grid.py``)
+   ``annual_*_native.png``         The yearly test outcomes and information gains on the native
+                                   grid (after ``native_grid.py``)
    ``quadtree_grids.png``          Maps of the quadtree grids and of the native 0.1° grid
                                    (``cartopy``)
    ``grid_levels.png``             The grids compared: cells per zoom level, cells against N
@@ -304,9 +304,12 @@ What happens under the hood
    column, so it is read as a quadtree forecast on a :class:`csep.core.regions.QuadtreeGrid2D`.
 2. In each window, the yearly rates are scaled to the window length: by 1 for the annual windows
    and by 8 for the whole period.
-3. The test catalog of each window (M ≥ 7.45, depths of 0–70 km) is filtered to each forecast's
+3. The test catalog of each window is filtered to the magnitude range and to each forecast's
    grid, and the N-, M-, S- and CL-tests run: 72 forecasts × 9 windows × 4 tests = 2,592
-   evaluations.
+   evaluations. floatCSEP keeps the events of M ≥ 7.45 and below ``mag_max`` (8.95), although the
+   last magnitude bin is open-ended, so an M ≥ 8.95 event would not be tested; none occurred, the
+   largest target is M 8.27. It does not filter by depth: ``prepare.py`` keeps the events at
+   0–70 km when it writes ``catalog.csv``.
 4. The consistency plots of each test and window are drawn, then ``custom_plots.main`` runs.
 
 
