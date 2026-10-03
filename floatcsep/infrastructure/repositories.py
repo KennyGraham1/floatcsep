@@ -185,9 +185,11 @@ class CatalogRepository:
         log.debug(f"[Catalogs] Filtering input catalog and saving to models' input directory")
         for model in models:
             input_cat_name = model.registry.get_input_catalog_key(tstring)
+            # Time windows are UTC, as the catalog's origin times: a naive datetime's own
+            # timestamp() would read them in the computer's time zone
             sub_cat = self.catalog.filter(
                 [
-                    f"origin_time < {start.timestamp() * 1000}",
+                    f"origin_time < {csep.utils.time_utils.datetime_to_utc_epoch(start)}",
                     f"magnitude >= {self.mag_min}",
                     f"magnitude < {self.mag_max}",
                 ],
@@ -213,10 +215,11 @@ class CatalogRepository:
             f"{self.registry.rel(test_cat_name)}"
         )
         start, end = str2timewindow(tstring)
+        # In UTC, as the catalog's origin times (see set_input_cats)
         sub_cat = self.catalog.filter(
             [
-                f"origin_time < {end.timestamp() * 1000}",
-                f"origin_time >= {start.timestamp() * 1000}",
+                f"origin_time < {csep.utils.time_utils.datetime_to_utc_epoch(end)}",
+                f"origin_time >= {csep.utils.time_utils.datetime_to_utc_epoch(start)}",
                 f"magnitude >= {self.mag_min}",
                 f"magnitude < {self.mag_max}",
             ],

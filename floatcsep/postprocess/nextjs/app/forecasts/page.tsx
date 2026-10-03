@@ -30,7 +30,7 @@ import { eventsInWindow, regionMask } from '@/lib/catalog';
 import { PALETTE_NAMES, paletteStops, rampGradient, type PaletteName } from '@/lib/colors';
 import { useLoadedManifest } from '@/lib/contexts/ManifestContext';
 import { formatInt, formatLatLon, formatRate, formatSci, magnitudeBinLabel, magnitudeDecimals } from '@/lib/format';
-import { cellBounds, forecastCells } from '@/lib/grid';
+import { cellAt, cellBounds, forecastCells } from '@/lib/grid';
 import { gridLabel, modelGrid, regularGridSizes, splitModelName } from '@/lib/modelGrid';
 import { formatDate, formatDuration, parseTimeWindows } from '@/lib/time';
 import { clamp, cn } from '@/lib/utils';
@@ -39,6 +39,12 @@ const ForecastMap = dynamic(() => import('@/components/maps/ForecastMap'), {
   ssr: false,
   loading: () => <Skeleton className="h-full min-h-[536px] w-full rounded-lg" />,
 });
+
+/** The magnitudes tested, as floatCSEP filters them: "M 7.45–8.95" (the upper one excluded). */
+function magnitudeRange(min: number, max: number): string {
+  const decimals = magnitudeDecimals(Number.isFinite(max) ? [min, max] : [min]);
+  return Number.isFinite(max) ? `M ${min.toFixed(decimals)}–${max.toFixed(decimals)}` : `M ≥ ${min.toFixed(decimals)}`;
+}
 
 export default function ForecastsPage() {
   return (
@@ -129,10 +135,17 @@ function ForecastsView() {
   const { catalog } = useObservedCatalog(manifest);
   const mask = useMemo(() => regionMask(manifest.region), [manifest.region]);
   const minMagnitude = manifest.mag_min ?? manifest.magnitudes[0] ?? -Infinity;
-  const observed = useMemo(
-    () => (catalog && window ? eventsInWindow(catalog, window, minMagnitude, mask) : null),
-    [catalog, window, minMagnitude, mask],
-  );
+  const maxMagnitude = manifest.mag_max ?? Infinity;
+  // The events the forecast is tested against, selected as floatCSEP selects them: in the
+  // window, from mag_min up to (not including) mag_max, in the experiment's region, and in
+  // the forecast's own cells (floatcsep.evaluation.Evaluation.get_catalog), which can be
+  // fewer than the region's.
+  const observed = useMemo(() => {
+    if (!catalog || !window || !cells) return null;
+    return eventsInWindow(catalog, window, minMagnitude, mask).filter(
+      (i) => catalog.mag[i] < maxMagnitude - 1e-9 && cellAt(cells.grid, catalog.lon[i], catalog.lat[i]) >= 0,
+    );
+  }, [catalog, window, minMagnitude, maxMagnitude, mask, cells]);
 
   const peak = useMemo(() => {
     if (!cells || cells.rates.length === 0) return null;
@@ -240,7 +253,7 @@ function ForecastsView() {
             value={observed ? formatInt(observed.length) : '—'}
             caption={
               observed
-                ? `M ≥ ${minMagnitude.toFixed(magnitudeDecimals([minMagnitude]))} in the region`
+                ? `${magnitudeRange(minMagnitude, maxMagnitude)}, in the forecast's cells`
                 : manifest.catalog.available
                   ? 'loading catalog…'
                   : 'no catalog'
@@ -382,7 +395,7 @@ function ForecastsView() {
             {magnitudeBins && magnitudeBins.mags.length > 0 && (
               <ChartCard
                 title="Magnitude distribution"
-                description="Expected vs observed events per magnitude bin"
+                description="Expected vs observed events per bin, on a log scale: bins without observed events have no point. The last bin is open-ended."
                 table={
                   <DataTable
                     caption="Expected and observed events per magnitude bin"
@@ -409,6 +422,7 @@ function ForecastsView() {
                               align: 'right' as const,
                               numeric: true,
                               render: (k: number) => formatInt(magnitudeBins.counts![k]),
+                              csv: (k: number) => magnitudeBins.counts![k],
                             },
                           ]
                         : []),

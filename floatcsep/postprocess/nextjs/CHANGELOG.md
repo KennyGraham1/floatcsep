@@ -106,6 +106,16 @@ All notable changes to the floatCSEP Next.js Dashboard.
 - Model names such as `ETAS_b=0.9` are no longer taken for model–grid pairs.
 - Only the last three 0.1° rate files viewed are kept in memory, and the grid is
   built once rather than for every time window.
+- Observed events on the Forecasts page (count, map and magnitude chart) were all the
+  events of the experiment's region; they are now those floatCSEP tests the forecast
+  against: in its own cells, which can be fewer than the region's, and below `mag_max`.
+  Forecast documents now list every cell, those with a zero rate included.
+- An event on a cell edge, or at the equator on a quadtree grid, could be put in the
+  neighbouring cell; cells are now found by pyCSEP's rules.
+- Catalogue magnitudes were rounded to three decimals, which could move an event
+  across a magnitude-bin edge.
+- Magnitude chart: the open-ended last bin is labelled (e.g. ≥8.95), the log scale's
+  hidden zero counts are explained, and its table exports plain numbers.
 
 ## [1.1.0] - 2025
 

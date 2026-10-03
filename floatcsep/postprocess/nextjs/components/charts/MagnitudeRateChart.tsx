@@ -22,6 +22,12 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
     const [expColor, obsColor] = theme.series;
     const decimals = magnitudeDecimals(magnitudes);
     const positive = (v: number) => (v > 0 ? v : null);
+    const n = magnitudes.length;
+    // Bins are labelled by their lower edge; the last one is open-ended (all larger
+    // magnitudes), which is why its expected count can rise. Labels are thinned from the
+    // last bin backwards, so that it is always labelled.
+    const labels = magnitudes.map((m, k) => (k === n - 1 && n > 1 ? `≥${m.toFixed(decimals)}` : m.toFixed(decimals)));
+    const step = Math.max(1, Math.ceil(n / 8));
     const legend = [{ name: 'Expected', icon: 'path://M0,4 L14,4 L14,6 L0,6 Z', itemStyle: { color: expColor } }];
     if (observed) legend.push({ name: 'Observed', icon: 'circle', itemStyle: { color: obsColor } });
     return {
@@ -30,11 +36,15 @@ export default function MagnitudeRateChart({ magnitudes, expected, observed, hei
       legend: { top: 0, left: 4, itemGap: 18, textStyle: { color: theme.chrome.ink2, fontSize: 12 }, data: legend },
       xAxis: {
         type: 'category',
-        data: magnitudes.map((m) => m.toFixed(decimals)),
+        data: labels,
         name: 'Magnitude bin',
         nameLocation: 'middle',
         nameGap: 26,
-        ...theme.axis({ splitLine: { show: false }, axisTick: { alignWithLabel: true } }),
+        ...theme.axis({
+          splitLine: { show: false },
+          axisTick: { alignWithLabel: true, lineStyle: { color: theme.chrome.axis } },
+          axisLabel: { color: theme.chrome.muted, fontSize: 11, interval: (k: number) => (n - 1 - k) % step === 0 },
+        }),
       },
       yAxis: {
         type: 'log',

@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 # Bump when the JSON layout changes, so cached documents are regenerated.
-FORMAT_VERSION = 5
+FORMAT_VERSION = 7
 
 
 def _write_json(payload: Dict[str, Any], out_path: str) -> None:
@@ -101,7 +101,8 @@ def load_catalog(path: str) -> Dict[str, Any]:
         "count": count,
         "lon": _rounded(catalog.get_longitudes(), 5),
         "lat": _rounded(catalog.get_latitudes(), 5),
-        "mag": _rounded(catalog.get_magnitudes(), 3),
+        # Not rounded further: events on a bin edge must be binned as floatCSEP bins them
+        "mag": _rounded(catalog.get_magnitudes(), 6),
         "depth": _rounded(catalog.get_depths(), 3),
         "time": [int(t) for t in catalog.get_epoch_times()],
         "id": [_decode(i) for i in catalog.get_event_ids()],
@@ -371,12 +372,16 @@ def load_forecast(
     active = np.isfinite(cell_rates) & (cell_rates > 0)
     log_rates = np.log10(cell_rates[active]) if active.any() else np.array([0.0, 1.0])
 
+    # Every cell of the forecast, those with a zero rate included (drawn transparent): the
+    # dashboard counts the observed events in the forecast's cells, as floatCSEP's tests do.
     if hasattr(region, "quadkeys"):
         # Multi-resolution quadtree: cells are Web Mercator tiles.
-        quadkeys = np.asarray(region.quadkeys).astype(str)
-        grid = {"grid": "quadtree", "quadkeys": quadkeys[active].tolist()}
+        grid = {
+            "grid": "quadtree",
+            "quadkeys": np.asarray(region.quadkeys).astype(str).tolist(),
+        }
     else:
-        grid = _regular_grid(region, active)
+        grid = _regular_grid(region)
 
     return {
         "version": FORMAT_VERSION,
@@ -387,7 +392,7 @@ def load_forecast(
         "path": rel_path,
         "n_cells": int(len(cell_rates)),
         "n_active": int(active.sum()),
-        "rate": _significant(cell_rates[active]),
+        "rate": _significant(np.where(np.isfinite(cell_rates), cell_rates, 0.0)),
         "total": float(np.nansum(cell_rates)),
         "vmin": float(log_rates.min()),
         "vmax": float(log_rates.max()),
@@ -397,7 +402,7 @@ def load_forecast(
     }
 
 
-def _regular_grid(region, active: np.ndarray) -> Dict[str, Any]:
+def _regular_grid(region) -> Dict[str, Any]:
     """Integer cell positions of a CartesianGrid2D, from its lower-left corner."""
     origins = np.asarray(region.origins(), dtype=float)
     dh = float(region.dh)
@@ -419,8 +424,8 @@ def _regular_grid(region, active: np.ndarray) -> Dict[str, Any]:
         "lat0": lat0,
         "nx": int(ix.max()) + 1,
         "ny": int(iy.max()) + 1,
-        "ix": ix[active].tolist(),
-        "iy": iy[active].tolist(),
+        "ix": ix.tolist(),
+        "iy": iy.tolist(),
     }
 
 

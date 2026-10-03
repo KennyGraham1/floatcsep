@@ -9,7 +9,8 @@
 import type { ForecastPayload, Region } from './types';
 
 const EARTH_RADIUS_KM = 6371.0088;
-const MAX_LAT = 85.05112878;
+// The latitude where Web Mercator tiles end, exactly as pyCSEP (mercantile) computes it
+const MAX_LAT = (Math.atan(Math.sinh(Math.PI)) * 180) / Math.PI;
 const RAD = Math.PI / 180;
 
 export interface RegularGrid {
@@ -50,17 +51,6 @@ export function tileToLon(x: number, z: number): number {
 export function tileToLat(y: number, z: number): number {
   const n = Math.PI * (1 - (2 * y) / 2 ** z);
   return Math.atan(Math.sinh(n)) / RAD;
-}
-
-export function lonToTile(lon: number, z: number): number {
-  const wrapped = ((((lon + 180) % 360) + 360) % 360) - 180;
-  return Math.min(2 ** z - 1, Math.floor(((wrapped + 180) / 360) * 2 ** z));
-}
-
-export function latToTile(lat: number, z: number): number {
-  const phi = Math.min(MAX_LAT, Math.max(-MAX_LAT, lat)) * RAD;
-  const y = ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * 2 ** z;
-  return Math.min(2 ** z - 1, Math.max(0, Math.floor(y)));
 }
 
 /** Bing quadkey of tile (x, y) at zoom z. */
@@ -282,20 +272,32 @@ export function viewExtent(extent: [number, number, number, number]): [number, n
 }
 
 /** Index of the cell containing (lon, lat), or -1. */
+const TILE_EDGE = 1e-9;
+
 export function cellAt(grid: CellGrid, lon: number, lat: number): number {
+  // A point on a cell edge belongs to the cell east or north of it, as in pyCSEP
+  // (west <= lon < east, south <= lat < north).
   if (grid.type === 'regular') {
     let x = lon;
     while (x < grid.lon0) x += 360;
     while (x >= grid.lon0 + 360) x -= 360;
-    const col = Math.floor((x - grid.lon0) / grid.dh);
-    const row = Math.floor((lat - grid.lat0) / grid.dh);
+    const col = Math.floor((x - grid.lon0) / grid.dh + 1e-9);
+    const row = Math.floor((lat - grid.lat0) / grid.dh + 1e-9);
     if (col < 0 || col >= grid.nx || row < 0 || row >= grid.ny) return -1;
     return grid.lookup[row * grid.nx + col];
   }
-  if (Math.abs(lat) > MAX_LAT) return -1;
+  if (lat >= MAX_LAT || lat < -MAX_LAT) return -1;
   const deepest = grid.levels[grid.levels.length - 1];
   const x = ((((lon + 180) % 360) + 360) % 360) - 180;
-  const key = tileToQuadkey(lonToTile(x, deepest), latToTile(lat, deepest), deepest);
+  // Tile rows count from the north, so a point on a row's edge, which belongs to the
+  // row north of it, is ceil - 1 rows down rather than floor (the equator, for one). The
+  // tolerance, in tiles, absorbs the rounding of edges computed from latitudes.
+  const tiles = 2 ** deepest;
+  const phi = lat * RAD;
+  const y = ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * tiles;
+  const row = Math.min(tiles - 1, Math.max(0, Math.ceil(y - TILE_EDGE) - 1));
+  const column = Math.min(tiles - 1, Math.floor(((x + 180) / 360) * tiles + TILE_EDGE));
+  const key = tileToQuadkey(column, row, deepest);
   for (const level of grid.levels) {
     const k = grid.index.get(key.slice(0, level));
     if (k !== undefined) return k;

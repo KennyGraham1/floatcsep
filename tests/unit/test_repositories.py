@@ -1,10 +1,15 @@
 import datetime
+import os
+import tempfile
+import time
 import unittest
 from unittest.mock import MagicMock, patch, PropertyMock, mock_open
 
+from csep.core.catalogs import CSEPCatalog
 from csep.core.forecasts import GriddedForecast
+from csep.utils.time_utils import datetime_to_utc_epoch
 
-from floatcsep.utils.file_io import GriddedForecastParsers
+from floatcsep.utils.file_io import CatalogParser, GriddedForecastParsers
 from floatcsep.infrastructure.registries import ModelFileRegistry
 from floatcsep.infrastructure.repositories import (
     CatalogForecastRepository,
@@ -212,6 +217,60 @@ class TestCatalogRepository(unittest.TestCase):
 
         self.assertEqual(self.catalog_repo.cat_path, "catalog_path")
         self.assertEqual(self.catalog_repo._catalog, "csep catalog")
+
+
+class TestCatalogWindowsAreUtc(unittest.TestCase):
+    """Time windows are UTC, as catalog origin times, whatever the computer's time zone."""
+
+    # Around the UTC day 2016-11-13 (New Zealand is 13 hours ahead in November)
+    TIMES = {
+        "a": datetime.datetime(2016, 11, 12, 20, 0),  # the day before (2016-11-13 in New Zealand)
+        "b": datetime.datetime(2016, 11, 13, 5, 0),
+        "c": datetime.datetime(2016, 11, 13, 11, 2),  # 2016-11-14 in New Zealand
+        "d": datetime.datetime(2016, 11, 13, 23, 59),
+        "e": datetime.datetime(2016, 11, 14, 0, 0),  # the next day: the window's end is excluded
+    }
+
+    def setUp(self):
+        if not hasattr(time, "tzset"):
+            self.skipTest("time zones cannot be changed on this platform")
+        self.tz = os.environ.get("TZ")
+        os.environ["TZ"] = "Pacific/Auckland"
+        time.tzset()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = CatalogRepository(MagicMock())
+        self.repo.region_config = {"mag_min": 3.0, "mag_max": 8.0, "region": None}
+        self.repo._catalog = CSEPCatalog(
+            data=[
+                (name, datetime_to_utc_epoch(t), -42.0, 173.0, 10.0, 5.0)
+                for name, t in self.TIMES.items()
+            ]
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        if self.tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = self.tz
+        time.tzset()
+
+    def events(self, path, fmt="json"):
+        return sorted(getattr(CatalogParser, fmt)(path).get_event_ids().astype(str))
+
+    def test_test_catalog(self):
+        path = os.path.join(self.tmp.name, "test.json")
+        self.repo.registry.get_test_catalog_key.return_value = path
+        self.repo.set_test_cats("2016-11-13_2016-11-14")
+        self.assertEqual(self.events(path), ["b", "c", "d"])
+
+    def test_input_catalog(self):
+        # The events before the window, as a time-dependent model is given them
+        path = os.path.join(self.tmp.name, "input.json")
+        model = MagicMock()
+        model.registry.get_input_catalog_key.return_value = path
+        self.repo.set_input_cats("2016-11-13_2016-11-14", [model])
+        self.assertEqual(self.events(path, "ascii"), ["a"])
 
 
 if __name__ == "__main__":

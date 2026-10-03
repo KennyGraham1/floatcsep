@@ -5,7 +5,7 @@ import path from 'path';
 import { HttpError } from './http';
 
 /** Bump together with FORMAT_VERSION in manifest_api.py. */
-const DATA_VERSION = 5;
+const DATA_VERSION = 7;
 
 const SCRIPT = path.join(process.cwd(), 'manifest_api.py');
 
