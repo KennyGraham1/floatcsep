@@ -113,15 +113,22 @@ The first five are the published GEFE forecasts, time-independent like GSSGSRM. 
 are time-dependent: the global experiment's annual experiment reissues them every year from the
 catalogue before that year. Tutorial K follows its two studies:
 
-- The **whole period** uses the eight-year forecasts of every model, with PPE, EEPASfull and SUP
-  fitted on the spliced ISC-GEM and gCMT catalogue before 2014.
+- The **whole period** uses the eight-year forecasts of every model. Their EEPAS family shares
+  one background: PPE smoothed over the M ≥ 5.45 earthquakes since 1918 (ISC-GEM and gCMT) and
+  fitted on 1994–2013, EEPASfull refitted with that PPE as its background (μ = 0.41), and SUP
+  fitted on the M ≥ 7.45 earthquakes of 1994–2013. The global experiment fills the PPE and
+  EEPASfull slots from these sources (``PPE_WU1918P545`` and ``EEPASfull_WU1918P545R``), which
+  ``m745_models/<SLOT>_source.json`` records.
 - Each **year** uses the annual experiment's forecast for that year: PPE and EEPASfull reissued
-  from the catalogue before it, and SUP's one baseline (its 2014 forecast), all three with the
-  parameters fitted on the gCMT catalogue of 1994–2013. The six other models are the same.
+  from the catalogue before it, and SUP's one baseline (its 2014 forecast). They keep the
+  parameters of the whole period; only the catalogue grows from year to year. The six other
+  models are the same.
 
-The two fits differ, so for these three models the whole period and the years are not the same
-forecasts: the T-test pooled over the years (``annual_pooled_ig.png``) is that of the annual
-experiment, not that of the eight-year forecasts.
+The fit is the same, but for PPE and EEPASfull the forecasts are not: the eight-year forecasts
+are issued once, at the start of 2014, and the yearly ones every year. The T-test pooled over the
+years (``annual_pooled_ig.png``) is that of the annual experiment, not that of the eight-year
+forecasts, but over 2014–2021 only: the annual experiment also tests 2022, so its pooled test
+has one more event (31 instead of 30).
 
 Every model is aggregated onto eight quadtree grids, named after how they were refined:
 
@@ -159,11 +166,12 @@ The native 0.1° grid
 The forecasts were made on a regular 0.1° grid before being aggregated onto the quadtree grids.
 ``native_grid.py`` tests them on that grid too, named ``FULL01``: 3,600 × 1,800 = 6.48 million
 cells of about 11 km at the equator, with the same 16 magnitude bins. It reads the global
-experiment's forecast arrays (expected events per year) where they are: the nine eight-year
-forecasts (``<MODEL>_01deg_rates.npy``) for the whole period and, as on the quadtree grids, the
-annual experiment's forecasts of PPE, EEPASfull and SUP (``<MODEL>_<YEAR>_01deg_rates.npy``) for
-each year. It runs the tests of ``tests.yml`` with their settings, plus the paired T-test against
-GEAR1 on the same grid, in every time window. The test catalogues are those of the floatCSEP run,
+experiment's forecast arrays (expected events per year) where they are: for the whole period, the
+nine eight-year forecasts (``<SOURCE>_01deg_rates.npy``, named after the model filling each slot,
+which ``prepare.py`` writes to ``models/sources.json``); for each year, as on the quadtree grids,
+the annual experiment's forecasts of PPE, EEPASfull and SUP (``<MODEL>_<YEAR>_01deg_rates.npy``).
+It runs the tests of ``tests.yml`` with their settings, plus the paired T-test against GEAR1 on
+the same grid, in every time window. The test catalogues are those of the floatCSEP run,
 so ``floatcsep run`` comes first. The results go to ``imported/<time window>/``, where
 ``custom_plots.py`` picks them up, and ``floatcsep plot config.yml`` redraws the figures with them.
 

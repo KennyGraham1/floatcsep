@@ -93,10 +93,15 @@ pyCSEP every time it runs.
 PPE and EEPASfull are time-dependent: they are reissued every year from the catalogue
 before that year. As in the global experiment, the whole period uses the eight-year
 forecasts of every model, while each year uses the forecasts of its annual experiment:
-PPE and EEPASfull reissued for that year, and SUP's one baseline. For these three models,
-the eight-year forecasts are fitted on the spliced ISC-GEM and gCMT catalogue before 2014,
-and the annual ones on the gCMT catalogue of 1994–2013, so the years and the whole period
-test different fits. The six other models are the same in every window.
+PPE and EEPASfull reissued for that year, and SUP's one baseline. The six other models
+are the same in every window.
+
+The EEPAS family shares one background and one set of parameters, fitted on 1994–2013.
+PPE is smoothed over the M ≥ 5.45 earthquakes since 1918 (ISC-GEM and gCMT), EEPASfull
+is refitted with that PPE as its background (μ = 0.41), and SUP is fitted on the
+M ≥ 7.45 earthquakes of 1994–2013. The annual forecasts keep these parameters and only
+add each year's earthquakes to the catalogue, so the years and the whole period test the
+same fit, issued at different times.
 
 The forecasts give the expected number of M ≥ 7.45 earthquakes per year in 16 magnitude
 bins from 7.45 to 8.95 (the last bin is open-ended), at depths of 0–70 km. floatCSEP

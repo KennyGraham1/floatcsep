@@ -16,11 +16,11 @@ to match. The source directory is only read.
 
 PPE, EEPASfull and SUP are set up as time-dependent models, a folder with one forecast
 per time window. The whole period uses the eight-year forecast of the global
-experiment (fitted on the spliced catalogue). Each year uses the forecast of its annual
-experiment for that year, which reissues PPE and EEPASfull every year from the
-catalogue before it, and keeps one SUP baseline (its 2014 forecast), all three with the
-parameters fitted on the gCMT catalogue of 1994-2013. The other six models are
-time-independent: one forecast, scaled to each window.
+experiment. Each year uses the forecast of its annual experiment for that year, which
+reissues PPE and EEPASfull every year from the catalogue before it, and keeps one SUP
+baseline (its 2014 forecast). Both use the same parameters, fitted on 1994-2013; only
+the catalogue grows from year to year. The other six models are time-independent: one
+forecast, scaled to each window.
 
 The global experiment also tested the models on their native 0.1-degree grid
 (FULL01, 6.48 million cells) over the whole period, with the same forecasts and
@@ -34,6 +34,7 @@ built, the aggregation, the forecasts) are copied into ``about/``.
 import argparse
 import csv
 import datetime
+import filecmp
 import json
 import shutil
 import sys
@@ -52,9 +53,12 @@ MODELS = {
     "TEAM": "Tectonic model: SMERF2 combined with a scaled SHIFT2F_GSRM. Published GEFE "
     "forecast, time-independent",
     "WHEEL": "Log-linear hybrid of KJSS and TEAM. Published GEFE forecast, time-independent",
-    "EEPASfull": "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted "
-    "before 2014; reissued every year",
-    "PPE": "Proximity to Past Earthquakes. Fitted before 2014; reissued every year",
+    "EEPASfull": "Every Earthquake a Precursor According to Scale, mixed with PPE. "
+    "Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with "
+    "the same parameters, in the annual windows",
+    "PPE": "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 "
+    "(ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, "
+    "in the annual windows",
     "SUP": "Spatially uniform Poisson baseline. Fitted before 2014; one rate for every year",
     "GSSGSRM": "The SUP baseline modulated by the GSRM strain-rate alarm. Fitted before "
     "2014, time-independent",
@@ -147,6 +151,23 @@ def write_models_yml(grids) -> None:
     (HERE / "models.yml").write_text("\n".join(lines) + "\n")
 
 
+def write_sources(source: Path) -> dict:
+    """
+    The global experiment can fill a model's slot from another source, recorded in
+    m745_models/<SLOT>_source.json (e.g. PPE from PPE_WU1918P545). The slot keeps its name
+    in the forecasts, but its 0.1-degree array is named after the source: models/sources.json
+    tells native_grid.py which to read.
+    """
+    sources = {}
+    for path in sorted((source / FORECASTS).glob("*_source.json")):
+        spec = json.loads(path.read_text())
+        if spec.get("slot") in MODELS and spec.get("source_model"):
+            sources[spec["slot"]] = spec["source_model"]
+    (HERE / "models").mkdir(exist_ok=True)
+    (HERE / "models" / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")
+    return sources
+
+
 def copy_native_results(source: Path) -> int:
     """Copies the global experiment's whole-period results on the native 0.1-degree grid.
 
@@ -216,24 +237,45 @@ def main(argv=None) -> int:
 
     models_dir = HERE / "models"
     models_dir.mkdir(exist_ok=True)
+    updated = []
+
+    def copy(src: Path, dst: Path) -> None:
+        """Copies a forecast unless an identical one is there: an unchanged file keeps its
+        time, so that only the results of changed forecasts need to be computed again."""
+        if not (dst.is_file() and filecmp.cmp(src, dst, shallow=False)):
+            shutil.copyfile(src, dst)
+            updated.append(dst.name)
+
     for model, grid in wanted:
         name = f"{model}={grid}"
         if model not in TIME_VARYING:
-            shutil.copyfile(source / FORECASTS / f"{name}.csv", models_dir / f"{name}.csv")
+            copy(source / FORECASTS / f"{name}.csv", models_dir / f"{name}.csv")
             continue
         # One forecast per time window, named as floatCSEP looks for them
         forecasts = models_dir / name / "forecasts"
         forecasts.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            source / FORECASTS / f"{name}.csv", forecasts / f"{name}_{NATIVE_WINDOW}.csv"
-        )
+        copy(source / FORECASTS / f"{name}.csv", forecasts / f"{name}_{NATIVE_WINDOW}.csv")
         for year in YEARS:
             annual = (
                 source / ANNUAL_FORECASTS / str(TIME_VARYING[model] or year) / f"{name}.csv"
             )
-            shutil.copyfile(annual, forecasts / f"{name}_{year}-01-01_{year + 1}-01-01.csv")
+            copy(annual, forecasts / f"{name}_{year}-01-01_{year + 1}-01-01.csv")
         (models_dir / f"{name}.csv").unlink(missing_ok=True)  # from an earlier setup
+    print(
+        f"{len(updated)} forecast files new or changed"
+        + (
+            f": {', '.join(updated[:6])}" + (" ..." if len(updated) > 6 else "")
+            if updated
+            else ""
+        )
+    )
     write_models_yml(args.grids)
+    sources = write_sources(source)
+    if sources:
+        print(
+            "Models in a slot from another source: "
+            + ", ".join(f"{k} = {v}" for k, v in sources.items())
+        )
 
     events, smallest = convert_gcmt(source / CATALOG, HERE / "catalog.csv")
     print(

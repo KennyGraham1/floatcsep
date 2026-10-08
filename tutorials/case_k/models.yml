@@ -26,12 +26,12 @@
     path: models/EEPASfull=N10L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=N10L11:
     path: models/PPE=N10L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=N10L11:
     path: models/SUP=N10L11
     class: td
@@ -66,12 +66,12 @@
     path: models/EEPASfull=N25L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=N25L11:
     path: models/PPE=N25L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=N25L11:
     path: models/SUP=N25L11
     class: td
@@ -106,12 +106,12 @@
     path: models/EEPASfull=N50L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=N50L11:
     path: models/PPE=N50L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=N50L11:
     path: models/SUP=N50L11
     class: td
@@ -146,12 +146,12 @@
     path: models/EEPASfull=N100L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=N100L11:
     path: models/PPE=N100L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=N100L11:
     path: models/SUP=N100L11
     class: td
@@ -186,12 +186,12 @@
     path: models/EEPASfull=SN10L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=SN10L11:
     path: models/PPE=SN10L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=SN10L11:
     path: models/SUP=SN10L11
     class: td
@@ -226,12 +226,12 @@
     path: models/EEPASfull=SN25L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=SN25L11:
     path: models/PPE=SN25L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=SN25L11:
     path: models/SUP=SN25L11
     class: td
@@ -266,12 +266,12 @@
     path: models/EEPASfull=SN50L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=SN50L11:
     path: models/PPE=SN50L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=SN50L11:
     path: models/SUP=SN50L11
     class: td
@@ -306,12 +306,12 @@
     path: models/EEPASfull=SN100L11
     class: td
     forecast_type: gridded
-    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Fitted before 2014; reissued every year"
+    description: "Every Earthquake a Precursor According to Scale, mixed with PPE. Refitted with the M>=5.45 PPE as its background (mu 0.41); reissued every year, with the same parameters, in the annual windows"
 - PPE=SN100L11:
     path: models/PPE=SN100L11
     class: td
     forecast_type: gridded
-    description: "Proximity to Past Earthquakes. Fitted before 2014; reissued every year"
+    description: "Proximity to Past Earthquakes. Smoothed over M>=5.45 sources since 1918 (ISC-GEM and gCMT), fitted 1994-2013; reissued every year, with the same parameters, in the annual windows"
 - SUP=SN100L11:
     path: models/SUP=SN100L11
     class: td

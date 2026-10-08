@@ -237,12 +237,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
     logging.disable(logging.WARNING)
 
+    # A slot filled from another source has its 0.1-degree array named after the source
+    # (models/sources.json, written by prepare.py)
+    sources_file = os.path.join(HERE, "models", "sources.json")
+    sources = json.load(open(sources_file)) if os.path.isfile(sources_file) else {}
+
     def array_path(model, window_str):
         """The forecast of a model for a time window, per year (see prepare.py)."""
         if model in TIME_VARYING and window_str != NATIVE_WINDOW:
             year = TIME_VARYING[model] or int(window_str[:4])
             return os.path.join(args.annual_forecasts, f"{model}_{year}_01deg_rates.npy")
-        return os.path.join(args.forecasts, f"{model}_01deg_rates.npy")
+        return os.path.join(args.forecasts, f"{sources.get(model, model)}_01deg_rates.npy")
 
     self_check()
     os.chdir(HERE)
