@@ -130,7 +130,9 @@ def plot(config: str, **kwargs) -> None:
     log.debug("")
 
 
-def view(config: str, ui: str = "panel", **kwargs) -> None:
+def view(
+    config: str, ui: str = "panel", address: str = "localhost", port: int = 0, **kwargs
+) -> None:
     """
     Launch an interactive data viewer for an existing experiment.
 
@@ -143,6 +145,7 @@ def view(config: str, ui: str = "panel", **kwargs) -> None:
 
         floatcsep view <config>
         floatcsep view <config> --ui nextjs
+        floatcsep view <config> --ui nextjs --address 0.0.0.0 --port 8080
 
     Args
     ----
@@ -150,6 +153,11 @@ def view(config: str, ui: str = "panel", **kwargs) -> None:
         Path to the experiment configuration file (YAML format).
     ui : str, optional
         UI framework to use ('panel' or 'nextjs'). Default: 'panel'
+    address : str, optional
+        Address the server listens on. Default: 'localhost', only this machine. Use
+        '0.0.0.0' to serve the dashboard to other machines.
+    port : int, optional
+        Port the server listens on. Default: 0, a free port.
     **kwargs :
         Additional configuration parameters forwarded to `Experiment.from_yml`.
 
@@ -172,9 +180,12 @@ def view(config: str, ui: str = "panel", **kwargs) -> None:
 
     if ui == "nextjs":
         from floatcsep.postprocess.nextjs import run_nextjs_app
-        run_nextjs_app(experiment=exp)
+        run_nextjs_app(experiment=exp, address=address, port=port)
     else:
-        run_app(experiment=exp, **kwargs)
+        if address not in ("localhost", "127.0.0.1", "::1"):
+            # Bokeh only accepts the browser's websocket from localhost by default
+            kwargs.setdefault("websocket_origin", "*")
+        run_app(experiment=exp, address=address, port=port, **kwargs)
 
 
 def reproduce(config: str, **kwargs) -> None:
@@ -264,7 +275,20 @@ def floatcsep() -> None:
         choices=["panel", "nextjs"],
         help="UI framework for view command (panel or nextjs). Default: panel",
     )
+    parser.add_argument(
+        "--address",
+        type=str,
+        help="Address the view command's server listens on. Default: localhost; "
+        "0.0.0.0 serves the dashboard to other machines",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        help="Port the view command's server listens on. Default: a free port",
+    )
     args = parser.parse_args()
+    if args.func != "view" and ("address" in args or "port" in args):
+        parser.error("--address and --port are options of the view command")
 
     if hasattr(args, "debug") and args.debug:
         set_console_log_level("DEBUG")

@@ -119,6 +119,63 @@ class TestMainModule(unittest.TestCase):
         mock_comp_instance.compare_results.assert_called_once()
         mock_reproducibility_report.assert_called_once_with(exp_comparison=mock_comp_instance)
 
+    @patch("floatcsep.postprocess.nextjs.run_nextjs_app")
+    @patch("floatcsep.commands.main.Experiment")
+    def test_view_nextjs(self, mock_experiment, mock_run_nextjs_app):
+        mock_exp_instance = MagicMock()
+        mock_experiment.from_yml.return_value = mock_exp_instance
+
+        main_module.view(config="dummy_config", ui="nextjs", address="0.0.0.0", port=8080)
+
+        mock_experiment.from_yml.assert_called_once_with(config_yml="dummy_config")
+        mock_exp_instance.stage_models.assert_called_once()
+        mock_exp_instance.set_tree.assert_called_once()
+        mock_run_nextjs_app.assert_called_once_with(
+            experiment=mock_exp_instance, address="0.0.0.0", port=8080
+        )
+
+    @patch("floatcsep.commands.main.run_app")
+    @patch("floatcsep.commands.main.Experiment")
+    def test_view_panel(self, mock_experiment, mock_run_app):
+        mock_exp_instance = MagicMock()
+        mock_experiment.from_yml.return_value = mock_exp_instance
+
+        # By default, only this machine
+        main_module.view(config="dummy_config")
+        mock_run_app.assert_called_once_with(
+            experiment=mock_exp_instance, address="localhost", port=0
+        )
+
+        # Served to other machines, whose browsers' websockets Bokeh must accept
+        mock_run_app.reset_mock()
+        main_module.view(config="dummy_config", address="0.0.0.0", port=8080)
+        mock_run_app.assert_called_once_with(
+            experiment=mock_exp_instance, address="0.0.0.0", port=8080, websocket_origin="*"
+        )
+
+    @patch("floatcsep.commands.main.view")
+    def test_cli_view_address_port(self, mock_view):
+        argv = ["floatcsep", "view", "config.yml", "--ui", "nextjs"]
+        with patch("sys.argv", argv + ["--address", "0.0.0.0", "--port", "8080"]):
+            main_module.floatcsep()
+        kwargs = mock_view.call_args.kwargs
+        self.assertEqual(kwargs["address"], "0.0.0.0")
+        self.assertEqual(kwargs["port"], 8080)
+
+        # Not given: left to view's defaults
+        mock_view.reset_mock()
+        with patch("sys.argv", argv):
+            main_module.floatcsep()
+        self.assertNotIn("address", mock_view.call_args.kwargs)
+        self.assertNotIn("port", mock_view.call_args.kwargs)
+
+    @patch("floatcsep.commands.main.run")
+    def test_cli_address_port_only_for_view(self, mock_run):
+        with patch("sys.argv", ["floatcsep", "run", "config.yml", "--port", "8080"]):
+            with self.assertRaises(SystemExit):
+                main_module.floatcsep()
+        mock_run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
