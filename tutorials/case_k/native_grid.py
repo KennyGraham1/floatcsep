@@ -30,7 +30,6 @@ global experiment's fast_poisson.py).
 """
 
 import argparse
-import itertools
 import json
 import logging
 import os
@@ -40,8 +39,9 @@ import time
 import numpy
 from csep.core import poisson_evaluations
 from csep.core.forecasts import GriddedForecast
-from csep.core.regions import CartesianGrid2D, compute_vertices
+from csep.core.regions import CartesianGrid2D, compute_vertex
 from csep.models import EvaluationResult, Polygon
+from csep.utils.calc import bin1d_vec, cleaner_range
 from csep.utils.stats import poisson_joint_log_likelihood_ndarray
 
 from floatcsep.experiment import Experiment
@@ -81,14 +81,69 @@ class _NumpyEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
+class _Cells:
+    """The cells' polygons, made only when asked for (see NativeGrid)."""
+
+    def __init__(self, origins, dh):
+        self.origins = origins
+        self.dh = dh
+
+    def __len__(self):
+        return len(self.origins)
+
+    def __getitem__(self, i):
+        return Polygon(compute_vertex(tuple(self.origins[i]), self.dh))
+
+    def __iter__(self):
+        return (self[i] for i in range(len(self)))
+
+
+class NativeGrid(CartesianGrid2D):
+    """A CartesianGrid2D that keeps its cells as an array of origins.
+
+    pyCSEP's Polygon holds a matplotlib Path, about 900 bytes a cell, so the 6.48
+    million cells of the 0.1-degree grid took 6 GB. Here the grid, its index map and
+    bounds are the same arrays pyCSEP builds, computed from the origins at once.
+    """
+
+    def __init__(self, origins, dh, name, magnitudes=None):
+        self._origins = origins
+        super().__init__(_Cells(origins, dh), dh, name=name, magnitudes=magnitudes)
+
+    def origins(self):
+        return self._origins
+
+    def midpoints(self):
+        # As Polygon.centroid: the vertices summed in order, then divided by 4
+        tol = numpy.finfo(float).eps
+        x, y = self._origins[:, 0], self._origins[:, 1]
+        x1, y1 = x + self.dh - tol, y + self.dh - tol
+        return numpy.column_stack((((x + x) + x1 + x1) / 4, ((y + y1) + y1 + y) / 4))
+
+    def _build_bitmask_vec(self):
+        """As CartesianGrid2D._build_bitmask_vec, vectorised."""
+        origins = self._origins
+        xs = cleaner_range(origins[:, 0].min(), origins[:, 0].max(), self.dh)
+        ys = cleaner_range(origins[:, 1].min(), origins[:, 1].max(), self.dh)
+        midpoints = self.midpoints()
+        idx = bin1d_vec(midpoints[:, 0], xs)
+        idy = bin1d_vec(midpoints[:, 1], ys)
+        a = numpy.ones([len(ys), len(xs), 2])
+        a[:, :, 1] = numpy.nan
+        a[idy, idx, 1] = numpy.arange(len(origins))
+        valid = (idx >= 0) & (idy >= 0)
+        if self.poly_mask is not None:
+            valid &= numpy.asarray(self.poly_mask) == 1
+        a[idy[valid], idx[valid], 0] = 0
+        return a, xs, ys
+
+
 def native_region(magnitudes):
     """The global 0.1-degree grid, in the cell order of the arrays (longitude-major)."""
     lons = numpy.arange(-180.0, 180, DH)
     lats = numpy.arange(-90, 90, DH)
-    polygons = [Polygon(b) for b in compute_vertices(itertools.product(lons, lats), DH)]
-    region = CartesianGrid2D(polygons, DH, name=GRID)
-    region.magnitudes = magnitudes
-    return region
+    origins = numpy.column_stack((numpy.repeat(lons, len(lats)), numpy.tile(lats, len(lons))))
+    return NativeGrid(origins, DH, name=GRID, magnitudes=magnitudes)
 
 
 def likelihood_test(
