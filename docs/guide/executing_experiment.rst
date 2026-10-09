@@ -123,9 +123,17 @@ This starts a local server and opens a browser at ``http://localhost:<port>`` wh
 - Read about the experiment: an ``about.md`` placed next to the configuration file is shown in the *About* page, with the images it links to
 - Download any table as CSV
 
+By default the server only listens on ``localhost``, at a free port. ``--address`` and ``--port`` set them, for example to serve the dashboard to other machines from a server:
+
+.. code-block:: console
+
+    $ floatcsep view <config.yml> --ui nextjs --address 0.0.0.0 --port 8080
+
+The dashboard is then at ``http://<server>:8080`` for anyone who can reach that port, without a login: open the port in the firewall only to those who should see the results.
+
 .. note::
 
-    The ``--ui nextjs`` option (recommended) uses a modern Next.js-based interface. Node.js 18.18 or newer is required (a Node.js LTS runtime is downloaded automatically if none is found). The first launch installs the dashboard dependencies and builds it, which takes a few minutes; later launches start in seconds. The server only listens on ``localhost``. The ``--ui panel`` option uses the Panel-based dashboard.
+    The ``--ui nextjs`` option (recommended) uses a modern Next.js-based interface. Node.js 18.18 or newer is required (a Node.js LTS runtime is downloaded automatically if none is found). The first launch installs the dashboard dependencies and builds it, which takes a few minutes; later launches start in seconds. The ``--ui panel`` option uses the Panel-based dashboard.
 
 
 Reproducing Results: ``floatcsep reproduce``

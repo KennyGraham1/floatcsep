@@ -80,7 +80,9 @@ floatcsep view config.yml --ui nextjs
 4. builds the dashboard into `.next-prod/` when its sources changed (the first
    launch takes a few minutes); in `"auto"` mode it falls back to the development
    server if the build fails;
-5. starts the server on `localhost` only and opens the browser.
+5. starts the server, on `localhost` only unless `--address` says otherwise (e.g.
+   `--address 0.0.0.0 --port 8080` to serve it to other machines), and opens the
+   browser.
 
 `run_nextjs_app(experiment, mode=...)` accepts `"auto"` (default, as above),
 `"start"` (production, an error if the build fails) or `"dev"` (hot reload).
